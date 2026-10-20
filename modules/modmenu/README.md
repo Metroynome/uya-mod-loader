@@ -5,8 +5,8 @@ It does not require a server connection or Horizon patch. Enable both the menu
 and your consumer in `hostfs/uya/module.txt`, then build and deploy:
 
 ```text
-modmenu       3
-menu-example  3
+modmenu       campaign,local
+menu-example  campaign,local
 ```
 
 In front-end menus, press **L3 + R3** to open or close. During gameplay this
@@ -196,3 +196,19 @@ including split-screen players. NTSC-U/PAL online levels 40-49 and Local Play
 levels 50-55 have separately verified overlay references. Remote players are
 untouched and longer retail input locks are preserved. The timer expires
 naturally after capture ends.
+
+## Local Play and online tab filtering
+
+`setTabContexts(tab, mask)` uses the same `UYA_CONTEXT_*` flags as the loader.
+It is independent of the existing screen filter `setTabVisibility`:
+
+```c
+menu->setTabContexts(tab, UYA_CONTEXT_CAMPAIGN | UYA_CONTEXT_LOCAL);
+menu->setTabVisibility(tab, MODMENU_SHOW_MAIN_MENU);
+```
+
+This example shows the tab in campaign boot and Local Play menus, but never in
+online menus or gameplay. Omit the screen restriction to show it in gameplay
+as well. Existing tabs default to all contexts. Hiding a tab does not disable
+the mod: use configuration or `restrictContexts` to restrict execution, and
+remove registered tabs in your mod's deactivation callback (see menu-example).

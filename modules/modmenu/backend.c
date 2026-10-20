@@ -14,6 +14,7 @@ static const struct MenuRenderer *active;
 static volatile unsigned char *pad;
 static int levelId;
 static unsigned int inputHook,inputOriginal;
+static void (*pauseOpen)(void);
 /* Campaign: intercept each fresh poll before retail code builds gameplay input. Keep a
  * private physical sample for menu navigation; the game receives neutral input.
  * The raw callback ABI is shared by librac3 and libuya's PAD structure. */
@@ -267,6 +268,7 @@ static void campaignPause(void (*openMenu)(void))
  * overlays. The retail callback closes the pause screen before opening us. */
 void menuBackendPause(unsigned int mode,void (*openMenu)(void))
 {
+    pauseOpen=openMenu;
     if(mode==UYA_MODE_CAMPAIGN) { campaignPause(openMenu);return; }
 #if UYA_MODULE_REGION != 3
     unsigned int i,j;
@@ -294,6 +296,46 @@ void menuBackendPause(unsigned int mode,void (*openMenu)(void))
 #else
     (void)mode;(void)openMenu;
 #endif
+}
+
+/* Undo only still-owned pause entries before this module stops updating. */
+void menuBackendDeactivate(void)
+{
+    unsigned int i,changed=0;
+    menuBackendRelease();
+#if UYA_MODULE_REGION != 3
+    for(i=0;i<sizeof(pauseEntries)/sizeof(pauseEntries[0]);++i) {
+        const struct PauseEntry *p=&pauseEntries[i];
+        unsigned int jump=0x08000000U|((unsigned int)pauseOpen>>2);
+        if(PAUSE_WORD(p->callback+0x54)==jump && PAUSE_WORD(p->callback+0x58)==0x27bd0010 &&
+           hash((void *)p->callback,84)==p->callbackHash) {
+            PAUSE_WORD(p->callback+0x54)=0x03e00008;
+            if(PAUSE_WORD(p->entry)==0x1115 && PAUSE_WORD(p->entry+8)==p->callback)
+                PAUSE_WORD(p->entry)=0x2cc;
+            changed=1;
+        }
+    }
+    if(changed && PAUSE_WORD(0x1264e0)==0x24030064) { MENU_FLUSH(0);MENU_FLUSH(2); }
+#endif
+    if(campaignActive) {
+        static const unsigned int hi[3]={0x78,0xb8,0xd4},lo[3]={0x80,0xc0,0xdc},count[3]={9,9,8};
+        unsigned int setup=campaignActive->setup+CAMPAIGN_SHIFT;changed=0;
+        for(i=0;i<3;++i) {
+            unsigned int owned=(unsigned int)campaignTables[i],original=campaignSources[i];
+            if(PAUSE_WORD(setup+hi[i])!=(0x3c020000|((owned+0x8000)>>16)) ||
+               PAUSE_WORD(setup+lo[i])!=(0x24420000|(owned&65535))) continue;
+            PAUSE_WORD(setup+hi[i])=0x3c020000|((original+0x8000)>>16);
+            PAUSE_WORD(setup+lo[i])=0x24420000|(original&65535);
+            PAUSE_WORD(setup+lo[i]+4)=0x24030000|count[i];
+            if(i==2 && PAUSE_WORD(setup+0xa4)==(0x3c020000|((owned+0x8000)>>16)))
+                PAUSE_WORD(setup+0xa4)=PAUSE_WORD(setup+hi[i]);
+            changed=1;
+        }
+        if(changed && PAUSE_WORD(0x11f0a0)==0x24030064) {
+            ((void (*)(int))0x11f0a0)(0);((void (*)(int))0x11f0a0)(2);
+        }
+    }
+    campaignActive=0;campaignOpen=0;pauseOpen=0;
 }
 
 /* Measure the same font and scale used by menuBackendText. */

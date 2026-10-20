@@ -4,7 +4,7 @@
 #include "backend.h"
 #include "version.h"
 
-struct Tab { int handle; unsigned int modes, contexts; char key[32], label[32];
+struct Tab { int handle; unsigned int modes, contexts, executionContexts; char key[32], label[32];
     int count, cursor; ModMenuListLabel listLabel, listInfo; ModMenuListSelect listSelect; void *context; };
 struct Item { int handle, tab, enabled; char label[48]; ModMenuItem definition; };
 static struct Tab tabs[MODMENU_MAX_TABS];
@@ -31,7 +31,8 @@ static int visible(int tab)
     unsigned int context=loader->mode==UYA_MODE_MULTIPLAYER?
         (level==39?MODMENU_SHOW_MAIN_MENU:MODMENU_SHOW_MULTIPLAYER):
         (level<0?MODMENU_SHOW_MAIN_MENU:MODMENU_SHOW_CAMPAIGN);
-    return i>=0 && (tabs[i].modes & loader->mode) && (tabs[i].contexts & context);
+    return i>=0 && (tabs[i].modes & loader->mode) && (tabs[i].contexts & context) &&
+        (tabs[i].executionContexts & loader->context);
 }
 static int setTabVisibility(int tab,unsigned int contexts)
 {
@@ -39,6 +40,12 @@ static int setTabVisibility(int tab,unsigned int contexts)
     if(i<0 || (contexts & ~MODMENU_SHOW_EVERYWHERE)) return -1;
     tabs[i].contexts=contexts; tabs[i].modes=UYA_MODE_BOTH;
     return 0;
+}
+static int setTabContexts(int tab,unsigned int contexts)
+{
+    int i=tabIndex(tab);
+    if(i<0 || (contexts & ~UYA_CONTEXT_ALL)) return -1;
+    tabs[i].executionContexts=contexts;return 0;
 }
 static int addTab(const char *key,const char *label,unsigned int modes)
 {
@@ -49,7 +56,7 @@ static int addTab(const char *key,const char *label,unsigned int modes)
         if(!tabs[i].handle && freeSlot<0) freeSlot=i;
     }
     if(freeSlot<0 || nextHandle==0x7fffffff) return -1;
-    tabs[freeSlot].handle=nextHandle++; tabs[freeSlot].modes=modes; tabs[freeSlot].contexts=MODMENU_SHOW_EVERYWHERE;
+    tabs[freeSlot].handle=nextHandle++; tabs[freeSlot].modes=modes; tabs[freeSlot].contexts=MODMENU_SHOW_EVERYWHERE; tabs[freeSlot].executionContexts=UYA_CONTEXT_ALL;
     copyText(tabs[freeSlot].key,k,32); copyText(tabs[freeSlot].label,l,32);
     return tabs[freeSlot].handle;
 }
@@ -106,7 +113,7 @@ static int setListInfo(int tab,ModMenuListLabel info)
     int i=tabIndex(tab); if(i<0) return -1;
     tabs[i].listInfo=info; return 0;
 }
-static const ModMenuApi menuApi={MODMENU_API_VERSION,sizeof(ModMenuApi),addTab,addItem,removeTab,setItemEnabled,isOpen,closeMenu,getActiveTab,focusTab,setList,setListInfo,setTabVisibility};
+static const ModMenuApi menuApi={MODMENU_API_VERSION,sizeof(ModMenuApi),addTab,addItem,removeTab,setItemEnabled,isOpen,closeMenu,getActiveTab,focusTab,setList,setListInfo,setTabVisibility,setTabContexts};
 
 static void selectTab(int direction)
 {
@@ -300,11 +307,17 @@ static void draw(void)
     menuBackendText(.12f,.81f,0x8069cbf2,"\x14 \x15 TAB     \x10 SELECT     \x12 BACK");
 
 }
+static void deactivate(void)
+{
+    closeMenu();menuBackendDeactivate();closingButtons=previousButtons=0;
+    lastLevel=-999;
+}
 int moduleInit(const ModuleApi *api)
 {
 
-    if(api->version!=UYA_MODULE_VERSION) return -1;
+    if(api->version<UYA_API_VERSION || api->size<sizeof(*api)) return -1;
     loader=api;
+    loader->setLifecycle(0,deactivate);
     homeTab=addTab("modmenu.home","Mod Menu",UYA_MODE_BOTH);
     if(homeTab<0) return -1;
     if(loader->publishService(MODMENU_SERVICE_ID,MODMENU_API_VERSION,&menuApi)<0) return -1;

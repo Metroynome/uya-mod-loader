@@ -8,7 +8,7 @@
 void platformApi(ModuleApi *api, unsigned int mode)
 {
     int sp = mode == UYA_MODE_CAMPAIGN;
-    api->version = UYA_MODULE_VERSION;
+    api->version = UYA_API_VERSION;
     api->region = UYA_MODULE_REGION;
     api->mode = mode;
     api->print = (void *)(sp ? 0x00121760 : 0x00128c70);
@@ -33,7 +33,7 @@ int platformReady(unsigned int mode)
 }
 
 /* Campaign level -1 is the initial main menu and may run campaign modules.
- * Level 0 is a pre-load state; other negative IDs are not recognized.
+ * Level 0 is Veldin; other negative IDs are not recognized.
  * The lobby is 0x27; higher IDs (including local MP variants) are multiplayer.
  * Only read the global belonging to the verified resident SDK layout. */
 unsigned int platformMode(unsigned int layout)
@@ -62,9 +62,33 @@ unsigned int platformMode(unsigned int layout)
      * Do not apply this exception to the multiplayer pre-load layout. */
     if (layout == UYA_MODE_CAMPAIGN && level == -1)
         return UYA_MODE_CAMPAIGN;
-    if (level <= 0)
+    if (level < 0)
         return 0;
     mode = level < 0x27 ? UYA_MODE_CAMPAIGN : UYA_MODE_MULTIPLAYER;
     /* A new level ID can appear before the replacement core is ready. */
     return mode == layout ? mode : 0;
+}
+
+/* NetInfo.state reaches NETREGISTERED (5) at post-DNAS profile selection,
+ * before the lobby connection exists. onlyLocalPlayers remains authoritative
+ * for offline matches, including custom maps using online overlay IDs. */
+unsigned int platformContext(unsigned int mode)
+{
+#if UYA_MODULE_REGION != 3
+#if UYA_MODULE_REGION == 2
+    const unsigned int net=0x1a5cc0;
+#else
+    const unsigned int net=0x1a5e40;
+#endif
+    unsigned int state;
+#endif
+    if(mode==UYA_MODE_CAMPAIGN) return UYA_CONTEXT_CAMPAIGN;
+#if UYA_MODULE_REGION != 3
+    if(mode!=UYA_MODE_MULTIPLAYER) return 0;
+    if(*(volatile unsigned int *)(net+0x180)) return UYA_CONTEXT_LOCAL;
+    state=*(volatile unsigned int *)(net+0x130);
+    return state>=5 && state<=12?UYA_CONTEXT_ONLINE:UYA_CONTEXT_LOCAL;
+#else
+    return 0;
+#endif
 }

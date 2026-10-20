@@ -4,6 +4,7 @@ int menuBackendReady(unsigned int mode);
 unsigned int menuBackendButtons(unsigned int mode);
 void menuBackendCapture(unsigned int mode);
 void menuBackendRelease(void);
+void menuBackendDeactivate(void);
 void menuBackendBox(float x,float y,float width,float height,unsigned int color);
 void menuBackendText(float x,float y,unsigned int color,const char *text);
 float menuBackendWidth(const char *text);

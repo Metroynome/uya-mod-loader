@@ -320,30 +320,33 @@ int mapHooksReady(void)
         if(WORD(hooks[i].address)!=JAL(hooks[i].replacement)) return 0;
     return 1;
 }
+void mapDisableHooks(void)
+{
+    unsigned int i,changed=0,level;
+    if(!mapMultiplayerReady() || busy) return;
+    /* Restore only instructions still owned by this module. A competing
+     * patch must never be replaced with our saved retail instructions. */
+    for(i=0;i<sizeof(hooks)/sizeof(hooks[0]);++i)
+        if(WORD(hooks[i].address)==JAL(hooks[i].replacement)) {
+            WORD(hooks[i].address)=hooks[i].original; changed=1;
+        }
+    if(WORD(NAME_HOOK)==(0x08000000U|((unsigned int)hookedName>>2)) &&
+       WORD(NAME_HOOK+4)==0x27bd0050) { WORD(NAME_HOOK)=0x03e00008; changed=1; }
+    level=WORD(LEVEL_ID);
+    if(level>=40 && level<=55) {
+        unsigned int address=level<50?radarHooks[level-40]:localRadarHooks[level-50];
+        if(WORD(address)==JAL(hookedRadar) && WORD(address+4)==0x26070040) {
+            WORD(address)=JAL(CD_READ); changed=1;
+        }
+    }
+    mapSelection=-1; mapClearLoad(); savedSettings=0;
+    if(changed) { mapApi->flushCache(0); mapApi->flushCache(2); }
+}
 void mapInstallHooks(void)
 {
     unsigned int i,changed=0,level;
     if(!mapMultiplayerReady() || busy) return;
-    if(mapOnlineDisabled()) {
-        /* Restore only instructions still owned by this module. A competing
-         * patch must never be replaced with our saved retail instructions. */
-        for(i=0;i<sizeof(hooks)/sizeof(hooks[0]);++i)
-            if(WORD(hooks[i].address)==JAL(hooks[i].replacement)) {
-                WORD(hooks[i].address)=hooks[i].original; changed=1;
-            }
-        if(WORD(NAME_HOOK)==(0x08000000U|((unsigned int)hookedName>>2)) &&
-           WORD(NAME_HOOK+4)==0x27bd0050) { WORD(NAME_HOOK)=0x03e00008; changed=1; }
-        level=WORD(LEVEL_ID);
-        if(level>=40 && level<=55) {
-            unsigned int address=level<50?radarHooks[level-40]:localRadarHooks[level-50];
-            if(WORD(address)==JAL(hookedRadar) && WORD(address+4)==0x26070040) {
-                WORD(address)=JAL(CD_READ); changed=1;
-            }
-        }
-        mapSelection=-1; mapClearLoad(); savedSettings=0;
-        if(changed) { mapApi->flushCache(0); mapApi->flushCache(2); }
-        return;
-    }
+    if(mapOnlineDisabled()) { mapDisableHooks(); return; }
     if(WORD(LEVEL_ID)!=39) savedSettings=0;
     /* Tail-hook the transition name builder, preserving its stack delay slot. */
     if(WORD(NAME_HOOK)==0x03e00008 && WORD(NAME_HOOK+4)==0x27bd0050 &&

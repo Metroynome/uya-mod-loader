@@ -74,7 +74,9 @@ def new_module(name, library):
         if lib == "libuya":
             include += '#include <libuya/uya.h>\n'
         source = '#include "module.h"\n' + include + f'''
-/* This pointer is updated by the loader on mode transitions. */
+/* This pointer is updated by the loader on mode/context transitions.
+ * No Mod Menu dependency. API 3 exposes loader->context and optional
+ * setLifecycle(activate, deactivate) / restrictContexts(mask). */
 static const ModuleApi *loader;
 int moduleInit(const ModuleApi *api)
 {{
@@ -98,7 +100,7 @@ void moduleUpdate(void)
         (folder / sources[0]).write_text(source)
     with (ROOT / "hostfs/uya/module.txt").open("a") as f:
         for output, lib, mode, sources in items:
-            f.write(f"{output} 0 // set to {MODES[mode]} for {mode}\n")
+            f.write(f"{output} disabled // choose campaign, local, online, or a supported combination ({mode})\n")
     print(f"Created {folder}; set its mode in hostfs/uya/module.txt, then rebuild.")
 
 

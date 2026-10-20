@@ -13,14 +13,15 @@
 #endif
 #define MODULE_END 0x000fe000U
 #define MODULE_LIMIT 8
-#define LOADER_MAGIC 0x554d4c34U
+#define LOADER_MAGIC 0x554d4c35U
 
 struct LoadedModule {
     unsigned int address, size;
     char filename[112];
     ModuleUpdate update;
     ModuleInit init;
-    unsigned int modes, initialized;
+    unsigned int modes, initialized, contexts, policy, active;
+    ModuleLifecycle activate, deactivate;
 };
 
 struct ModuleService {
@@ -47,6 +48,24 @@ typedef char LoaderStateMustFit[(sizeof(struct LoaderState) <= 0x2000) ? 1 : -1]
 #define fileRead api.read
 #define fileClose api.close
 
+/* Named list values carry a tag so legacy numeric modes retain their ABI. */
+#define NAMED_CONTEXTS 0x100U
+static unsigned int modeContexts(unsigned int mode)
+{ return (mode&1?UYA_CONTEXT_CAMPAIGN:0)|(mode&2?(UYA_CONTEXT_LOCAL|UYA_CONTEXT_ONLINE):0); }
+static int moduleAllowed(const struct LoadedModule *m)
+{ return (m->modes & STATE->mode) && (m->contexts & m->policy & api.context); }
+static int setLifecycle(ModuleLifecycle activate,ModuleLifecycle deactivate)
+{
+    struct LoadedModule *m;
+    if(!STATE->currentModule) return -1;
+    m=&STATE->modules[STATE->currentModule-1];m->activate=activate;m->deactivate=deactivate;
+    return 0;
+}
+static int restrictContexts(unsigned int contexts)
+{
+    if(!STATE->currentModule || (contexts & ~UYA_CONTEXT_ALL)) return -1;
+    STATE->modules[STATE->currentModule-1].policy=contexts;return 0;
+}
 /* Modules can export APIs without hard-coded addresses or load-order coupling.
  * Services are visible only while their owner's mode is active. */
 static int publishService(unsigned int id, unsigned int version, const void *table)
@@ -76,7 +95,7 @@ static const void *findService(unsigned int id, unsigned int version)
     for (i=0; i<8; ++i) {
         struct ModuleService *s=&STATE->services[i];
         if (s->id==id && s->version==version && s->owner &&
-            (STATE->modules[s->owner-1].modes & STATE->mode)) return s->table;
+            moduleAllowed(&STATE->modules[s->owner-1])) return s->table;
     }
     return 0;
 }
@@ -249,8 +268,9 @@ static void loadModule(const char *name, unsigned int modes)
     struct LoadedModule *module;
     int fd, valid;
 
-    if (!modes || (modes & ~3U))
-        return; /* Disabled entries never open a file or reserve memory. */
+    unsigned int contexts=(modes & NAMED_CONTEXTS)?(modes & ~NAMED_CONTEXTS):modeContexts(modes);
+    if(modes & NAMED_CONTEXTS) modes=(contexts&1?1:0)|(contexts&6?2:0);
+    if (!modes || (modes & ~3U) || (contexts & ~UYA_CONTEXT_ALL)) return; /* Disabled entries never open a file or reserve memory. */
     valid = resolveModuleName(name, filename);
     if (!valid) return; /* Explicit entries for other regions are not errors. */
     if (valid < 0) {
@@ -302,6 +322,7 @@ static void loadModule(const char *name, unsigned int modes)
     module->size = header.memorySize;
     module->update = 0;
     module->modes = modes;
+    module->contexts=contexts; module->policy=UYA_CONTEXT_ALL;
     module->initialized = 0;
     module->init = header.initOffset == UYA_MODULE_NO_ENTRY ? 0 :
         (ModuleInit)(header.address + header.initOffset);
@@ -316,7 +337,7 @@ static int isSpace(char c)
     return c == ' ' || c == '\t' || c == '\r';
 }
 
-/* Grammar: name[.region][.bin] <one digit 0..3> [// comment].
+/* Grammar: name[.region][.bin] <contexts or legacy digit 0..3> [// comment].
  * Return 0 for a blank/comment line, 1 for an entry, -1 for invalid syntax.
  * Splitting in place keeps memory use small; paths cannot contain whitespace.
  * Full-line # comments remain accepted for existing comment-only lines.
@@ -335,13 +356,31 @@ static int parseModuleLine(char *line, char **name, unsigned int *modes)
     *line++ = 0;
     while (isSpace(*line))
         ++line;
-    if (*line < '0' || *line > '3')
-        return -1;
-    *modes = *line++ - '0';
-    while (isSpace(*line))
-        ++line;
-    if (*line && !(line[0] == '/' && line[1] == '/'))
-        return -1;
+    if(*line>='0' && *line<='3') *modes=*line++-'0';
+    else {
+        unsigned int mask=0; int special=0;
+        for(;;) {
+            char *word=line,stop;unsigned int bit;
+            while(*line && !isSpace(*line) && *line!=',' && *line!='/') ++line;
+            stop=*line;*line=0;
+            if(sameText(word,"campaign")) bit=UYA_CONTEXT_CAMPAIGN;
+            else if(sameText(word,"local")) bit=UYA_CONTEXT_LOCAL;
+            else if(sameText(word,"online")) bit=UYA_CONTEXT_ONLINE;
+            else if(sameText(word,"all")) {bit=UYA_CONTEXT_ALL;special=1;}
+            else if(sameText(word,"disabled")) {bit=0;special=1;}
+            else return -1;
+            *line=stop;
+            if((mask&bit) || (special && mask)) return -1;
+            mask|=bit;
+            while(isSpace(*line)) ++line;
+            if(*line!=',') break;
+            if(special) return -1;
+            ++line;while(isSpace(*line)) ++line;
+        }
+        *modes=mask?(NAMED_CONTEXTS|mask):0;
+    }
+    while (isSpace(*line)) ++line;
+    if (*line && *line!='#' && !(line[0]=='/' && line[1]=='/')) return -1;
     return validPath(*name) && strlen(*name) <= 96 ? 1 : -1;
 }
 
@@ -385,7 +424,7 @@ static int loadModuleList(void)
         ++lineNumber;
         parsed = parseModuleLine(line, &name, &modes);
         if (parsed < 0)
-            printf("loader: invalid module.txt line %u (expected path 0..3)\n", lineNumber);
+            printf("loader: invalid module.txt line %u (expected path and contexts or 0..3)\n", lineNumber);
         else if (parsed && modes)
             loadModule(name, modes);
         if (!next)
@@ -419,6 +458,8 @@ void loaderTick(unsigned int layout)
     STATE->busy = 1;
     STATE->mode = mode;
     platformApi(&api, mode);
+    api.size=sizeof(api); api.context=platformContext(mode);
+    api.setLifecycle=setLifecycle;api.restrictContexts=restrictContexts;
     api.publishService = publishService;
     api.findService = findService;
     installExceptionHandler();
@@ -433,9 +474,18 @@ void loaderTick(unsigned int layout)
     }
     if (STATE->retryTicks)
         --STATE->retryTicks;
+    /* Clean up all departing modules before any newly active module runs. */
+    for(i=STATE->count;i>0;--i) {
+        struct LoadedModule *m=&STATE->modules[i-1];
+        if(m->active && !moduleAllowed(m)) {
+            STATE->currentModule=i;
+            if(m->deactivate) m->deactivate();
+            m->active=0;
+        }
+    }
     for (i = 0; i < STATE->count; ++i) {
         struct LoadedModule *module = &STATE->modules[i];
-        if (!(module->modes & mode))
+        if (!moduleAllowed(module))
             continue;
         STATE->currentModule = i + 1;
         if (!module->initialized) {
@@ -447,12 +497,20 @@ void loaderTick(unsigned int layout)
                 for (j=0; j<8; ++j)
                     if (STATE->services[j].owner == i+1)
                         memset(&STATE->services[j], 0, sizeof(struct ModuleService));
+                if(module->deactivate) module->deactivate();
+                module->policy=0;
                 module->update = 0; /* Keep its memory reserved after failure. */
             }
             syncCode();
+            if(result>=0 && !moduleAllowed(module) && module->deactivate) module->deactivate();
         }
-        if (module->update)
-            module->update();
+        if(!moduleAllowed(module)) continue;
+        if(!module->active) { module->active=1; if(module->activate) module->activate(); }
+        if(moduleAllowed(module) && module->update) module->update();
+        if(module->active && !moduleAllowed(module)) {
+            if(module->deactivate) module->deactivate();
+            module->active=0;
+        }
     }
     STATE->currentModule = 0;
     STATE->busy = 0;

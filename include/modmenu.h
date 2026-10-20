@@ -45,6 +45,9 @@ typedef struct ModMenuApi {
     int (*setListInfo)(int tab, ModMenuListLabel info);
     /* Contexts are independent of module execution modes; combine with |. */
     int (*setTabVisibility)(int tab, unsigned int contexts);
+    /* API-1 extension: execution contexts ANDed with the existing screen
+     * visibility filter. Thus LOCAL + MAIN_MENU means Local Play menus only. */
+    int (*setTabContexts)(int tab, unsigned int contexts);
 } ModMenuApi;
 /* Look this up again after mode changes; absence is normal, not fatal.
  * Retry registration from moduleUpdate until the provider is available. */

@@ -88,10 +88,17 @@ static int rebuild(int context)
     if(focused) menu->focusTab(tab); /* Status updates keep this tab open. */
     return 1;
 }
+static void deactivate(void)
+{
+    if(menu && tab) menu->removeTab(tab);
+    tab=0;menu=0;dirty=1;lastContext=-1;
+    mapRestoreBase();mapDisableHooks();
+}
 int moduleInit(const ModuleApi *api)
 {
-    if(api->version!=UYA_MODULE_VERSION) return -1;
+    if(api->version<UYA_API_VERSION || api->size<sizeof(*api)) return -1;
     mapApi=api;
+    api->setLifecycle(0,deactivate);
     /* Explicit opt-in for a future server without Horizon. Missing/invalid
      * configuration remains disabled; read once at boot. */
     {

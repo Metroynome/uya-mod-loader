@@ -139,3 +139,13 @@ split-screen loads have not been tested live.
 The standalone loader also occupies Horizon's `CUSTOM_GAME_MODE` range,
 `0x000f0000`–`0x00100000`. Full Horizon-patch coexistence needs an explicit
 memory/hook integration; simply enabling both is not supported.
+
+## Execution contexts
+
+The default `module.txt` now uses `maploader local`. Loader API 3 disables it at
+the post-DNAS profile screen and invokes its cleanup callback to remove the tab
+and owned map hooks. On returning to Local Play it registers its tab and hooks
+again. The optional `maploader-online.txt` flag does not override `module.txt`:
+future online use requires both an online-capable context entry and that flag.
+This is not support for coexistence with the full Horizon patch's overlapping
+memory layout.

@@ -31,20 +31,37 @@ as a base name such as `campaign-test`; the loader adds the running region and
 Edit **`hostfs/uya/module.txt`**:
 
 ```text
-// 0 = disabled, 1 = singleplayer, 2 = multiplayer, 3 = both
-hello                      3 // both
-campaign-test              1 // singleplayer
-multiplayer-test           2 // multiplayer
-disabled-mod               0 // do not load
+# Campaign and Local Play
+modmenu          campaign,local
+menu-example     campaign,local
+maploader        local
+
+# Independent modules (no Mod Menu dependency)
+campaign-test    campaign
+multiplayer-test local,online
+hello            all
+unused           disabled
 ```
 
-Each entry requires a path and exactly one digit from `0` through `3`.
-Blank lines, `//` comments (full-line or trailing), tabs, and Windows line endings
-are accepted. Full-line `#` comments are also accepted for compatibility, but old
-bare-path entries must be updated to include a mode. Malformed entries are logged
-and skipped. Names cannot contain whitespace. Binaries live directly in
-`host0:uya/mods/`. There is one shared list, with a maximum of eight loaded
-module images and 2047 bytes of list text.
+Use `campaign`, `local`, and `online`, joined with commas (spaces around commas
+are allowed). `all` and `disabled` stand alone. Legacy `0` (disabled), `1`
+(campaign), `2` (all multiplayer), and `3` (both) keep their original meaning.
+Both `#` and `//` comments may appear on their own line or after an entry.
+Unknown names, duplicate contexts, missing contexts, and malformed lines are
+rejected. Names cannot contain whitespace. There is one shared list at
+`host0:uya/module.txt`, with at most eight images and 2047 bytes of list text.
+Binary names and explicit regional suffixes are unchanged.
+
+`local` includes the multiplayer main menu, Local Play staging, and offline
+matches, including custom maps using online overlay IDs. `online` starts at the
+post-DNAS profile-selection screen, before login: NetInfo reaches
+`NETREGISTERED` (5), with `onlyLocalPlayers` clear. Returning to the multiplayer
+main menu returns to `local`. Campaign includes its boot menu and Veldin (0).
+
+Configuration narrows a binary's campaign/multiplayer library support; it cannot
+make a campaign-only binary run in multiplayer. Default modules are configured
+offline. Context filtering does not relocate the loader: running alongside the
+full Horizon patch still has the documented memory overlap.
 
 ```text
 campaign-test           1 // automatic region: campaign-test.<region>.bin
@@ -129,11 +146,11 @@ NTSC-U/PAL multiplayer. NTSC-J multiplayer retains the loader limitation below.
 See [the menu API guide](modules/modmenu/README.md) for integration and validation
 details.
 
-**This adds loader ABI version 2. Rebuild and deploy the loader PNACH and all
+**The loader uses runtime API 3 with binary header version 2. Deploy the loader PNACH and all
 module binaries together, then cold-boot.** Old ABI-1 binaries are rejected.
 The loader now supplies `publishService` / `findService` for versioned APIs.
 Service IDs belong to their publishing module; lookup requires an exact API
-version and an active owner mode. Failed initialization removes that module's
+version and an allowed owner mode/context. Failed initialization removes that module's
 services. Consumers should retry lookup when a provider is not yet available.
 
 ## Build
@@ -353,3 +370,36 @@ Library-backed modules can include `<librac3/stdio.h>` or `<libuya/stdio.h>`
 and call `printf` for PCSX2 console output. Campaign `printf` uses the verified
 SDK console routine at `0x00121760`; multiplayer uses `0x00128c70`.
 Library-free modules can use `api->print`, which follows the active mode.
+
+## Context and lifecycle API (loader API 3)
+
+Mods need only `module.h`; the Mod Menu API is optional. `api->mode` continues to
+select campaign versus multiplayer libraries. `api->context` reports exactly one
+of `UYA_CONTEXT_CAMPAIGN`, `UYA_CONTEXT_LOCAL`, or `UYA_CONTEXT_ONLINE`.
+
+```c
+static const ModuleApi *loader;
+static void activate(void) { /* Reinstall this mod's hooks if needed. */ }
+static void deactivate(void) { /* Restore owned hooks, release input, remove UI. */ }
+int moduleInit(const ModuleApi *api)
+{
+    if (api->version < UYA_API_VERSION || api->size < sizeof(*api)) return -1;
+    loader = api;
+    api->setLifecycle(activate, deactivate);
+    api->restrictContexts(UYA_CONTEXT_CAMPAIGN | UYA_CONTEXT_LOCAL);
+    return 0;
+}
+```
+
+`restrictContexts` is optional and can only narrow the configuration. Register
+callbacks from your own init/update callback. Init runs once; activation runs
+before the first update and on re-entry. Deactivation runs once when permission
+ends, before newly enabled modules run. The API already describes the new
+context during cleanup. Do not assume old game overlays are still present:
+restore only hooks you still own. Memory stays reserved and services disappear
+from discovery while their provider is disabled. Modules must implement their
+own cleanup for persistent changes; skipping updates cannot undo arbitrary code.
+
+Deploy the new loader cheat and rebuilt modules together, then restart emulation.
+The binary header remains version 2; appended runtime fields use API version 3.
+Older modules that require runtime version exactly 2 must be rebuilt/updated.

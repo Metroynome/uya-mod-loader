@@ -28,6 +28,7 @@ int mapChooseBase(unsigned int base);
 void mapRestoreBase(void);
 int mapHooksReady(void);
 void mapInstallHooks(void);
+void mapDisableHooks(void);
 int mapLoading(void);
 void mapClearLoad(void);
 void mapMessage(const char *message);

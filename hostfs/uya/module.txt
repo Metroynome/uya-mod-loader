@@ -1,9 +1,16 @@
-// 0 = disabled, 1 = singleplayer, 2 = multiplayer, 3 = both
-// Restart emulation after editing.
-hello 3 // both
-campaign-test 1 // singleplayer test
-multiplayer-test 2 // multiplayer test
+# Execution contexts: campaign, local, online; combine with commas.
+# all and disabled stand alone. Legacy 0/1/2/3 still work.
+# Restart emulation after editing. Explicit .ntscu/.pal/.ntscj names still work.
 
-modmenu 3 // menu provider: campaign + multiplayer
-menu-example 3 // independent API registration example
-maploader 3 // Custom Maps tab; NTSC-U/PAL multiplayer backend
+# Campaign and Local Play (disabled at the post-DNAS profile screen)
+modmenu          campaign,local
+menu-example     campaign,local
+maploader        local
+
+# Standalone modules do not need the Mod Menu API
+hello            campaign,local
+campaign-test    campaign
+multiplayer-test local
+
+# Opt-in online example: my-mod online
+# Full Horizon patch memory overlaps this loader; context filtering is not relocation.

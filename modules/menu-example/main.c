@@ -1,9 +1,14 @@
 #include "include/modmenu.h"
 static const ModuleApi *loader;
 static int registered, enabled, amount=5;
+static const ModMenuApi *registeredMenu;
+static void deactivate(void)
+{ if(registeredMenu && registered) registeredMenu->removeTab(registered); registered=0;registeredMenu=0; }
 static void action(void *context)
 { (void)context; loader->print("menu-example: action, enabled=%d amount=%d mode=%u\n",enabled,amount,loader->mode); }
-int moduleInit(const ModuleApi *api) { loader=api; return 0; }
+int moduleInit(const ModuleApi *api) { loader=api;
+    if(api->version<UYA_API_VERSION || api->size<sizeof(*api)) return -1;
+    api->setLifecycle(0,deactivate);return 0; }
 void moduleUpdate(void)
 {
     const ModMenuApi *menu; int tab;
@@ -16,5 +21,6 @@ void moduleUpdate(void)
     if(menu->addItem(tab,&toggle)<0 || menu->addItem(tab,&range)<0 || menu->addItem(tab,&button)<0) {
         menu->removeTab(tab); return;
     }
-    registered=1;
+    menu->setTabContexts(tab,UYA_CONTEXT_CAMPAIGN|UYA_CONTEXT_LOCAL);
+    registered=tab;registeredMenu=menu;
 }
