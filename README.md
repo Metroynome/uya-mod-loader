@@ -445,3 +445,15 @@ Release PNACHs use `SERIAL_CRC.pnach` names and include `[UYA Mod Loader]` and
 campaign and multiplayer files for NTSC-U/PAL; see the
 [verified CRC table](release/README.md#verified-game-crcs). Normal builds use
 `build/dist/` so development builds cannot silently replace published files.
+
+## Release layout and mod utilities
+
+`make release` creates region ZIPs in `release/zips/`. Their root contains `uya/`,
+the PNACH files, a short README, and Horizon's Bash/PowerShell map updaters.
+Set the host root to the folder containing `uya/`. Detailed API documentation
+stays in the repository. The updaters must run from that same host root.
+
+Supporting files belong in `uya/mods/utils/`; Map Loader opens
+`host0:uya/mods/utils/mapscan.irx`. Other mods may put their own named files or
+subfolders there. Utilities are not module-list entries. Module binaries stay
+in `uya/mods/`, and saved settings stay in `uya/config/`.

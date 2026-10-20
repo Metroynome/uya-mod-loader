@@ -223,3 +223,7 @@ compatibility, with the same results and the new `host0:uya/config/` location.
 The Example Mod initializes its settings through the loader before attempting
 to register its tab. Its Save settings / Load settings actions also call the
 loader directly.
+
+### Progress popup
+
+The optional `setProgress(label, current, total)` API displays a modal progress bar and captures game input. Pass a nonpositive total while discovering work, then a positive total for measured progress. Pass `NULL` as the label to dismiss it, including when your mod deactivates. Check the API structure size before using this appended field.

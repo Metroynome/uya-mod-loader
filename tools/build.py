@@ -276,6 +276,19 @@ class Builder:
 
 
 
+def package_mapscan():
+    # Remove the former generated location when upgrading an existing checkout.
+    for old in (ROOT / "hostfs/uya/mods/mapscan.irx", ROOT / "build/dist/hostfs/uya/mods/mapscan.irx"):
+        if old.is_file():
+            old.unlink()
+    work = ROOT / "build/mapscan"
+    shutil.copytree(ROOT / "iop/mapscan", work, dirs_exist_ok=True)
+    run(["make"], cwd=work)
+    for dest in (ROOT / "hostfs/uya/mods/utils/mapscan.irx", ROOT / "build/dist/hostfs/uya/mods/utils/mapscan.irx"):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(work / "mapscan.irx", dest)
+
+
 def package_debug():
     """Include the optional payload only while it exists in the source hostfs."""
     source = ROOT / "hostfs/uya/mods/debug/exceptionhandler.bin"
@@ -290,10 +303,8 @@ def package_maps():
     """Package local map assets without adding them to version control."""
     source = ROOT / "hostfs/uya"
     destination = ROOT / "build/dist/hostfs/uya"
-    if any(source.glob("*.version")):
-        run([sys.executable, ROOT / "tools/index_maps.py", source])
     for pattern in ("*.version", "*.wad", "*.world", "*.sound", "*.map",
-                    "*.bg", "*.thumb", "*.code", "maps.*.idx"):
+                    "*.bg", "*.thumb", "*.code"):
         for file in source.glob(pattern):
             shutil.copyfile(file, destination / file.name)
 
@@ -370,6 +381,7 @@ def main():
                 target.unlink() # Remove stale generated lists that would shadow the fallback.
         shutil.copyfile(ROOT / "hostfs/uya/maploader-online.txt", dest.parent / "maploader-online.txt")
         (dest.parent / "config").mkdir(parents=True, exist_ok=True)
+        package_mapscan()
         package_debug()
         package_maps()
 

@@ -1,6 +1,14 @@
 {
   "library": "none",
   "mode": "both",
-  "regions": ["ntscu", "pal"],
-  "sources": ["main.c", "files.c", "multiplayer.c"]
+  "regions": [
+    "ntscu",
+    "pal"
+  ],
+  "sources": [
+    "main.c",
+    "files.c",
+    "multiplayer.c",
+    "directory.c"
+  ]
 }

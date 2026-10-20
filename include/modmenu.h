@@ -60,6 +60,9 @@ typedef struct ModMenuApi {
      * Save replaces the file; comments/unknown keys are not preserved. */
     int (*loadConfig)(const char *mod, const ModMenuConfigField *fields, int count);
     int (*saveConfig)(const char *mod, const ModMenuConfigField *fields, int count);
+    /* Modal progress overlay. total<=0 shows indeterminate discovery;
+     * label=NULL dismisses it. Caller must dismiss on deactivation. */
+    void (*setProgress)(const char *label,int current,int total);
 } ModMenuApi;
 /* Look this up again after mode changes; absence is normal, not fatal.
  * Retry registration from moduleUpdate until the provider is available. */

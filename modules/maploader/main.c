@@ -3,7 +3,7 @@
 #include "include/modmenu.h"
 #include "maploader.h"
 static const ModMenuApi *menu;
-static int tab,dirty=1,lastContext=-1,catalogLoaded;
+static int tab,dirty=1,lastContext=-1;
 static char status[48]="Choose a map in multiplayer staging";
 
 static void copy(char *dest,const char *src,unsigned int cap)
@@ -13,7 +13,7 @@ static int choose(void *context)
 {
     int index=(int)context-1;
     if(!mapStaging() || !mapHooksReady() || mapLoading() || index<0 || index>=mapCount) return 0;
-    if(!mapValidate(&mapRecords[index])) { mapMessage("Map files changed: rebuild the catalog"); return 0; }
+    if(!mapValidate(&mapRecords[index])) { mapMessage("Map files changed: re-enter staging"); return 0; }
     mapSelection=index;
     mapApi->print("maploader: selected %s; choose retail base ID %u (local ID %u) before starting\n",
                   mapRecords[index].name,mapRecords[index].base,mapRecords[index].base+10);
@@ -39,9 +39,10 @@ static void selectMap(void *context,int index)
 }
 static const char *mapInfo(void *context,int index)
 {
-    static int cached=-1;
+    static int cached=-1;static unsigned int revision;
     static char text[336]; char author[32],description[256]; unsigned int i,p=0;
     (void)context;
+    if(revision!=mapCatalogRevision){revision=mapCatalogRevision;cached=-1;}
     if(index==cached) return text;
     cached=index;text[0]=0;
     if(!index) { copy(text,"Use the selected retail map without a custom map override.",sizeof(text));return text; }
@@ -64,10 +65,12 @@ static int add(const char *label,int type,ModMenuCallback callback,void *context
     if(handle>0 && !enabled) menu->setItemEnabled(handle,0);
     return handle>0;
 }
+static int lastEditable=-1;
 static int rebuild(int context)
 {
     int ok=1,editable=context>0 && mapHooksReady() && !mapLoading();
     int focused=tab>0 && menu->getActiveTab()==tab;
+    lastEditable=editable;
     if(tab>0) menu->removeTab(tab);
     tab=menu->addTab("maploader","Custom Maps",UYA_MODE_BOTH);
     if(tab<0) return 0;
@@ -90,9 +93,9 @@ static int rebuild(int context)
 }
 static void deactivate(void)
 {
-    if(menu && tab) menu->removeTab(tab);
+    if(menu) {menu->setProgress(0,0,0);if(tab)menu->removeTab(tab);}
     tab=0;menu=0;dirty=1;lastContext=-1;
-    mapRestoreBase();mapDisableHooks();
+    mapRestoreBase();mapDisableHooks();mapScanRelease();
 }
 int moduleInit(const ModuleApi *api)
 {
@@ -105,9 +108,7 @@ int moduleInit(const ModuleApi *api)
         char flag=0; int fd=api->open("host0:uya/maploader-online.txt",1,0);
         if(fd>=0) { if(api->read(fd,&flag,1)==1 && flag=='1') mapAllowOnline=1; api->close(fd); }
     }
-    catalogLoaded=mapLoadCatalog();
-    if(!catalogLoaded) mapMessage("No catalog: run tools/index_maps.py");
-    api->print("maploader: %d maps indexed; select from Custom Maps in staging\n",mapCount);
+    mapMessage("Enter Local Play staging to scan custom maps");
     return 0;
 }
 void moduleUpdate(void)
@@ -120,6 +121,14 @@ void moduleUpdate(void)
         if(tab && menu) { menu->removeTab(tab); tab=0; }
         lastContext=-2; dirty=1; return;
     }
+    if(context==1 && lastContext!=1)mapScanStart();
+    if(context!=1 && mapScanActive()){mapScanRelease();if(menu)menu->setProgress(0,0,0);}
+    if(context==1 && mapScanActive()){
+        int result=mapScanTick();
+        found=modmenuFind(mapApi);
+        if(found)found->setProgress(mapScanActive()?"Scanning custom maps...":0,mapScanCurrent(),mapScanTotal());
+        if(result)dirty=1;
+    }
     if(context==1 && mapSelection>=0) mapChooseBase(mapRecords[mapSelection].base);
     mapUpdateName();
     if(mapApi->mode==UYA_MODE_CAMPAIGN) {
@@ -130,5 +139,7 @@ void moduleUpdate(void)
     found=modmenuFind(mapApi);
     if(!found) return;
     menu=found;
+    /* Hooks may become ready after the staging screen first appears. */
+    if(lastEditable!=(context>0 && mapHooksReady() && !mapLoading())) dirty=1;
     if(dirty || !tab) { if(rebuild(context)) dirty=0; }
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Index Horizon-format maps without downloading IOP filesystem modules.
+"""Legacy v1 catalog utility; current Map Loader builds its v2 cache in-game.
 
 Run against the actual host0:uya directory. Map payloads stay in place.
 """

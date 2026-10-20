@@ -12,6 +12,8 @@ static struct Tab tabs[MODMENU_MAX_TABS];
 static struct Item items[MODMENU_MAX_ITEMS];
 static const ModuleApi *loader;
 static int homeTab;
+static char progressLabel[64];
+static int progressCurrent,progressTotal,progressPulse;
 static int nextHandle=1, opened, selectedTab, selectedItem, lastLevel=-999;
 static unsigned int previousButtons, previousMode, closingButtons;
 
@@ -119,7 +121,26 @@ static int menuConfigLoad(const char *mod,const ModMenuConfigField *f,int n)
 { return loader->loadConfig(mod,f,n); }
 static int menuConfigSave(const char *mod,const ModMenuConfigField *f,int n)
 { return loader->saveConfig(mod,f,n); }
-static const ModMenuApi menuApi={MODMENU_API_VERSION,sizeof(ModMenuApi),addTab,addItem,removeTab,setItemEnabled,isOpen,closeMenu,getActiveTab,focusTab,setList,setListInfo,setTabVisibility,setTabContexts,menuConfigLoad,menuConfigSave};
+static void setProgress(const char *label,int current,int total)
+{
+    if(!label){progressLabel[0]=0;closingButtons=previousButtons;return;}
+    copyText(progressLabel,label,sizeof(progressLabel));
+    progressCurrent=current;progressTotal=total;
+}
+static void drawProgress(void)
+{
+    float portion=progressTotal>0?(float)progressCurrent/progressTotal:0;
+    float x=.3f;
+    if(portion<0)portion=0;if(portion>1)portion=1;
+    menuBackendBox(0,0,1,1,0x50000000);
+    menuBackendBox(.24f,.36f,.52f,.25f,0x8018608f);
+    menuBackendBox(.25f,.37f,.5f,.23f,0x80123251);
+    menuBackendText(.28f,.43f,0x8069cbf2,progressLabel);
+    menuBackendBox(.3f,.52f,.4f,.025f,0x8004223f);
+    if(progressTotal<=0){x+=((progressPulse++%80)/80.0f)*.30f;portion=.25f;}
+    menuBackendBox(x,.52f,.4f*portion,.025f,0x803880af);
+}
+static const ModMenuApi menuApi={MODMENU_API_VERSION,sizeof(ModMenuApi),addTab,addItem,removeTab,setItemEnabled,isOpen,closeMenu,getActiveTab,focusTab,setList,setListInfo,setTabVisibility,setTabContexts,menuConfigLoad,menuConfigSave,setProgress};
 
 static void selectTab(int direction)
 {
@@ -315,7 +336,7 @@ static void draw(void)
 }
 static void deactivate(void)
 {
-    closeMenu();menuBackendDeactivate();closingButtons=previousButtons=0;
+    progressLabel[0]=0;closeMenu();menuBackendDeactivate();closingButtons=previousButtons=0;
     lastLevel=-999;
 }
 int moduleInit(const ModuleApi *api)
@@ -346,6 +367,7 @@ void moduleUpdate(void)
         closeMenu(); menuBackendRelease(); closingButtons=0; previousButtons=buttons; previousMode=loader->mode; lastLevel=level;
     }
     menuBackendPause(loader->mode,openFromPause);
+    if(progressLabel[0]) {menuBackendCapture(loader->mode);previousButtons=buttons;drawProgress();return;}
     pressed=buttons & ~previousButtons;
     /* Thumbstick shortcuts belong to front-end menus, not gameplay.
      * In-game opening is exclusively through the pause-menu callback. */

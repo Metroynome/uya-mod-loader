@@ -2,9 +2,7 @@ PYTHON ?= python3
 .DEFAULT_GOAL := all
 REGION ?= all
 LIBRARY ?= none
-.PHONY: all release modules new-module check test clean clean-release module maps
-maps:
-	$(PYTHON) tools/index_maps.py
+.PHONY: all release modules new-module check test clean clean-release module
 all modules:
 	$(PYTHON) tools/build.py build --region $(REGION)
 release:
@@ -30,6 +28,8 @@ test:
 	./build/modmenu-test
 	$(CC) -std=gnu99 -iquote . tests/config.c -o build/config-test
 	./build/config-test
+	$(CC) -std=gnu99 -fno-builtin -iquote . tests/mapscan.c -o build/mapscan-test
+	./build/mapscan-test
 	@set -e; for region in 1 2; do \
 	  $(CC) -std=gnu99 -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast -DUYA_MODULE_REGION=$$region -I. tests/maploader.c -o build/maploader-test-$$region; \
 	  ./build/maploader-test-$$region; \

@@ -23,10 +23,16 @@ def check():
             assert archive.testzip() is None, path
             names = archive.namelist()
             assert len(names) == len(set(names)), 'duplicate ZIP entries'
-            assert 'README.md' in names and 'docs/CONFIG.md' in names
+            assert 'README.md' in names
+            assert not any(n.startswith(('hostfs/', 'docs/', 'optional/', 'tools/')) for n in names)
+            for script in ('horizon_unix_update_cmaps.sh', 'horizon_windows_update_cmaps.ps1'):
+                assert archive.read(script) == (ROOT / 'tools/horizon' / script).read_bytes()
             assert not any(n.endswith('.ini') or n.endswith('.wad') for n in names), 'local user files leaked'
-            assert 'hostfs/uya/modules.txt' not in names
-            manifest = archive.read('hostfs/uya/config/modules.txt').decode()
+            assert 'uya/modules.txt' not in names
+            assert 'tools/index_maps.py' not in names
+            if regions & {'ntscu', 'pal'}:
+                assert archive.read('uya/mods/utils/mapscan.irx')[:4] == b'\x7fELF'
+            manifest = archive.read('uya/config/modules.txt').decode()
             enabled = set()
             for line in manifest.splitlines():
                 if not line or line.startswith('#'): continue
@@ -34,13 +40,13 @@ def check():
                 module, region = name.rsplit('.', 1)
                 assert region in regions and module not in TEST_MODULES
                 assert contexts in ('campaign', 'local', 'campaign,local')
-                filename = f'hostfs/uya/mods/{name}.bin'
+                filename = f'uya/mods/{name}.bin'
                 data = archive.read(filename)
                 header = struct.unpack('<10I', data[:40])
                 assert header[0] == 0x4d415955 and header[2] == REGIONS[region]
                 assert len(data) == header[4] + 40
                 enabled.add(filename)
-            modules = {n for n in names if n.startswith('hostfs/uya/mods/') and n.endswith('.bin')}
+            modules = {n for n in names if n.startswith('uya/mods/') and n.count('/') == 2 and n.endswith('.bin')}
             assert modules == enabled, 'unlisted module or missing binary'
             for region in regions:
                 for elf in crc_table[region]['elfs']:
@@ -48,9 +54,9 @@ def check():
                         patch = archive.read(f"{crc_table[region]['serial']}_{elf['crc']}.pnach")
                         assert patch.startswith(b'[UYA Mod Loader]\nauthor=Metroynome\n')
                         assert b'patch=1,EE,' in patch
-                assert f'hostfs/uya/mods/modmenu.{region}.bin' in modules
+                assert f'uya/mods/modmenu.{region}.bin' in modules
                 if region != 'ntscj':
-                    assert f'hostfs/uya/mods/maploader.{region}.bin' in modules
+                    assert f'uya/mods/maploader.{region}.bin' in modules
             assert not any('maploader.ntscj' in n for n in names)
             patches = {n for n in names if n.endswith('.pnach')}
             expected = {f"{crc_table[r]['serial']}_{e['crc']}.pnach"

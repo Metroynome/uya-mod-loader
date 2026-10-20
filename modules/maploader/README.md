@@ -22,35 +22,44 @@ host0:uya/
   aquadome.pal.world
   ...
   mods/
+    utils/
+      mapscan.irx
     maploader.ntscu.bin
     maploader.pal.bin
     modmenu.ntscu.bin
     modmenu.pal.bin
 ```
 
-Index the **actual** host filesystem folder after adding, changing or removing
-maps:
+Maps are discovered automatically when entering **Local Play staging**. Neither
+entering multiplayer menus nor entering online staging triggers a scan. The
+bundled `mods/utils/mapscan.irx` helper enumerates `host0:uya/` offline; it needs no
+Horizon connection, USB drivers, or Python command.
 
-```powershell
-python tools/index_maps.py "D:/PS2/ISOs/uya"
-```
+The modal popup shows discovery activity, followed by metadata-processing
+progress. Work is split across update calls. Input is captured until scanning
+finishes or fails. Every staging entry triggers exactly one scan. Filename,
+display name, base ID, version and regional asset sizes produce a 32-bit fingerprint; merely
+counting files would miss replacing one map with another.
 
-For maps kept in this repository's `hostfs/uya`, use `make maps`. A full build
-also indexes and packages those local assets into `release/hostfs/uya`. Map
-payloads and generated indexes are ignored by Git. External host folders are
-not overwritten by a build.
+The loader creates `maps.ntscu.idx` / `maps.pal.idx` itself. A version-2 cache
+stores magic, count, fingerprint and record checksum followed by 120-byte map
+records. Missing, old or corrupt caches are rebuilt. Unchanged scans reuse the
+current list and avoid rewriting the cache. A failed scan keeps the prior list;
+selection still validates asset sizes before loading. Re-enter staging to retry.
+Do not change map assets while scanning or loading a match.
 
-The indexer reads Horizon's existing 48-byte `.version` header and regional
-payload sizes. It leaves map files untouched and sorts the catalog by display
-name. The runtime uses resident `host0:` services, so it does not download or
-install Horizon's USB IRXs. Filenames may contain spaces. NTSC-U uses `.wad`,
-`.world`, `.sound`, `.map`; PAL uses `.pal.wad`, etc., with the same `.version`.
+Map records and scan workspaces use multiplayer `malloc/free`. On a change to
+the campaign ELF, old multiplayer pointers are discarded rather than passed to
+the campaign allocator. The helper stays resident until the IOP resets and is
+reused on later scans. Map payloads are not modified by discovery. NTSC-U uses
+`.wad`, `.world`, `.sound`, `.map`; PAL uses `.pal.wad`, etc., with shared `.version`
+metadata. Unsupported custom-code/game-mode maps are skipped.
 
 Enable:
 
 ```text
-modmenu 3
-maploader 3
+modmenu campaign,local
+maploader local
 ```
 
 Build and deploy **all** binaries together; adding this module changes the
@@ -58,7 +67,7 @@ linked addresses of other modules. Cold-boot after deployment.
 
 ## Local Play
 
-1. Enter Local Play staging.
+1. Enter Local Play staging and wait for the scan popup to finish.
 2. Open the menu with L3 + R3 and select the Custom Maps tab with L1/R1.
 3. Select a map with Cross. Its retail base map is set automatically.
 4. Close the menu and start the match normally.
@@ -67,8 +76,8 @@ linked addresses of other modules. Cold-boot after deployment.
 still in staging. Browse the entire catalog with Up/Down; X commits the
 highlighted entry and closes the menu. The highlighted map stays centered in
 the right-hand list; the left pane shows the author and description from the
-map pack?s `.version` metadata when available. There are no pages, and up to 96 maps per region are supported.
-Re-index and reboot after changing map files.
+map pack's `.version` metadata when available. There are no pages, and up to 96 maps per region are supported.
+Leave and re-enter Local Play staging after adding/removing maps.
 
 All retail bases 40–49 remain selectable in Local Play. The backend accepts
 the base ID directly or its split-screen counterpart where the game uses one;
@@ -107,7 +116,7 @@ Selection checks file sizes again. TOC replacement checks the target base and
 files before modifying allocations. Reads handle short transfers and verify
 the expected file length. A failed read **after replacement starts stalls the
 load** instead of allowing partially replaced map data to run. Fix the files,
-re-index and restart emulation. Do not change payload files during a match/load.
+leave and re-enter Local Play staging. Do not change payload files during a match/load.
 Sound RPC waits are bounded; failure also stops the load.
 
 The backend does not resize the heap. It reads into buffers allocated by the
@@ -118,7 +127,7 @@ game from the updated TOC. Catalog and loader state live in module BSS.
 - `main.c`: menu registration, scrolling list and selection.
 - `files.c`: catalog validation and bounded hostfs reads.
 - `multiplayer.c`: regional staging access and guarded loading hooks.
-- `tools/index_maps.py`: map-pack catalog generation.
+- `directory.c` and `iop/mapscan/`: offline directory RPC support.
 - `tools/verify_maploader.py`: checks loading/seek anchors and radar signatures
   against the supplied retail extraction.
 
