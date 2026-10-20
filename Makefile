@@ -22,6 +22,8 @@ test:
 	./build/runtime-test
 	$(CC) -std=gnu99 -fno-builtin -I. tests/modmenu.c -o build/modmenu-test
 	./build/modmenu-test
+	$(CC) -std=gnu99 -iquote . tests/config.c -o build/config-test
+	./build/config-test
 	@set -e; for region in 1 2; do \
 	  $(CC) -std=gnu99 -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast -DUYA_MODULE_REGION=$$region -I. tests/maploader.c -o build/maploader-test-$$region; \
 	  ./build/maploader-test-$$region; \

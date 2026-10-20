@@ -1,19 +1,20 @@
 /* UYA host module loader. No heap resizing or game allocator patches.
- * Flow: choose the current game's API -> read module.txt once -> validate and
+ * Flow: choose the current game's API -> read modules.txt once -> validate and
  * load each image -> initialize/update only modules matching the active mode.
- * Memory: loader f0000-f2000, modules f2000-fe000, state fe000-100000.
+ * Memory: loader f0000-f2f80, modules f2f80-ff000, state ff000-100000.
  */
 #include "module.h"
+#include "config.h"
 #include "exception.h"
 #include "platform.h"
 #include "strings.h"
 
 #ifndef MODULE_START
-#define MODULE_START 0x000f2000U
+#define MODULE_START 0x000f2f80U
 #endif
-#define MODULE_END 0x000fe000U
+#define MODULE_END 0x000ff000U
 #define MODULE_LIMIT 8
-#define LOADER_MAGIC 0x554d4c35U
+#define LOADER_MAGIC 0x554d4c37U
 
 struct LoadedModule {
     unsigned int address, size;
@@ -32,15 +33,19 @@ struct LoaderState {
     unsigned int magic, busy, count, mode, listLoaded, retryTicks, exceptionAttempted;
     struct LoadedModule modules[MODULE_LIMIT];
     ModuleApi api;
+    int configBusy;
     char list[2048];
     unsigned int currentModule; /* index + 1; zero outside callbacks */
     struct ModuleService services[8];
 };
 
 #ifndef STATE
-#define STATE ((struct LoaderState *)0x000fe000)
+#define STATE ((struct LoaderState *)0x000ff000)
 #endif
-typedef char LoaderStateMustFit[(sizeof(struct LoaderState) <= 0x2000) ? 1 : -1];
+typedef char LoaderStateMustFit[(sizeof(struct LoaderState) <= 0x1000) ? 1 : -1];
+
+const ModuleApi *moduleConfigApi(void) { return &STATE->api; }
+int *moduleConfigBusy(void) { return &STATE->configBusy; }
 
 #define api (STATE->api)
 #define printf api.print
@@ -391,10 +396,12 @@ static int loadModuleList(void)
     unsigned int modes, lineNumber = 0;
     int parsed;
     unsigned int size = 0;
-    int fd = fileOpen("host0:uya/module.txt", 1, 0);
+    int fd = fileOpen("host0:uya/config/modules.txt", 1, 0);
     int count = 0, valid = 1;
+    /* The config list wins; the root list is a fallback, never merged. */
+    if(fd<0) fd=fileOpen("host0:uya/modules.txt",1,0);
     if (fd < 0) {
-        printf("loader: module.txt unavailable (%d)\n", fd);
+        printf("loader: modules.txt unavailable (%d)\n", fd);
         return 0;
     }
     while (size < sizeof(STATE->list) - 1) {
@@ -412,7 +419,7 @@ static int loadModuleList(void)
     if (fileClose(fd) < 0)
         valid = 0;
     if (!valid || memchr(STATE->list, 0, size)) {
-        printf("loader: module.txt read failed or exceeds 2047 bytes\n");
+        printf("loader: modules.txt read failed or exceeds 2047 bytes\n");
         return 0;
     }
     STATE->list[size] = 0;
@@ -424,7 +431,7 @@ static int loadModuleList(void)
         ++lineNumber;
         parsed = parseModuleLine(line, &name, &modes);
         if (parsed < 0)
-            printf("loader: invalid module.txt line %u (expected path and contexts or 0..3)\n", lineNumber);
+            printf("loader: invalid modules.txt line %u (expected path and contexts or 0..3)\n", lineNumber);
         else if (parsed && modes)
             loadModule(name, modes);
         if (!next)
@@ -462,6 +469,7 @@ void loaderTick(unsigned int layout)
     api.setLifecycle=setLifecycle;api.restrictContexts=restrictContexts;
     api.publishService = publishService;
     api.findService = findService;
+    api.loadConfig=moduleConfigLoad;api.saveConfig=moduleConfigSave;
     installExceptionHandler();
 
     /* A missing list can be retried on a later tick. Once accepted, restart

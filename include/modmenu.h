@@ -25,6 +25,14 @@ typedef struct ModMenuItem {
     ModMenuCallback callback;
     void *context;
 } ModMenuItem;
+/* Compatibility aliases; persistence is owned by the loader. */
+typedef ModuleConfigField ModMenuConfigField;
+#define MODMENU_CONFIG_MAX_FIELDS UYA_CONFIG_MAX_FIELDS
+#define MODMENU_CONFIG_OK UYA_CONFIG_OK
+#define MODMENU_CONFIG_MISSING UYA_CONFIG_MISSING
+#define MODMENU_CONFIG_INVALID UYA_CONFIG_INVALID
+#define MODMENU_CONFIG_IO UYA_CONFIG_IO
+
 typedef const char *(*ModMenuListLabel)(void *context, int index);
 typedef void (*ModMenuListSelect)(void *context, int index);
 typedef struct ModMenuApi {
@@ -48,6 +56,10 @@ typedef struct ModMenuApi {
     /* API-1 extension: execution contexts ANDed with the existing screen
      * visibility filter. Thus LOCAL + MAIN_MENU means Local Play menus only. */
     int (*setTabContexts)(int tab, unsigned int contexts);
+    /* host0:uya/config/<mod>.<region>.ini. Explicit calls, never per frame.
+     * Save replaces the file; comments/unknown keys are not preserved. */
+    int (*loadConfig)(const char *mod, const ModMenuConfigField *fields, int count);
+    int (*saveConfig)(const char *mod, const ModMenuConfigField *fields, int count);
 } ModMenuApi;
 /* Look this up again after mode changes; absence is normal, not fatal.
  * Retry registration from moduleUpdate until the provider is available. */

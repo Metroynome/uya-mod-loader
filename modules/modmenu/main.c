@@ -4,6 +4,7 @@
 #include "backend.h"
 #include "version.h"
 
+
 struct Tab { int handle; unsigned int modes, contexts, executionContexts; char key[32], label[32];
     int count, cursor; ModMenuListLabel listLabel, listInfo; ModMenuListSelect listSelect; void *context; };
 struct Item { int handle, tab, enabled; char label[48]; ModMenuItem definition; };
@@ -113,7 +114,12 @@ static int setListInfo(int tab,ModMenuListLabel info)
     int i=tabIndex(tab); if(i<0) return -1;
     tabs[i].listInfo=info; return 0;
 }
-static const ModMenuApi menuApi={MODMENU_API_VERSION,sizeof(ModMenuApi),addTab,addItem,removeTab,setItemEnabled,isOpen,closeMenu,getActiveTab,focusTab,setList,setListInfo,setTabVisibility,setTabContexts};
+/* Retain the original menu API as forwarding helpers for existing clients. */
+static int menuConfigLoad(const char *mod,const ModMenuConfigField *f,int n)
+{ return loader->loadConfig(mod,f,n); }
+static int menuConfigSave(const char *mod,const ModMenuConfigField *f,int n)
+{ return loader->saveConfig(mod,f,n); }
+static const ModMenuApi menuApi={MODMENU_API_VERSION,sizeof(ModMenuApi),addTab,addItem,removeTab,setItemEnabled,isOpen,closeMenu,getActiveTab,focusTab,setList,setListInfo,setTabVisibility,setTabContexts,menuConfigLoad,menuConfigSave};
 
 static void selectTab(int direction)
 {
@@ -244,7 +250,7 @@ static void draw(void)
         menuBackendText(.53f,.52f,0x8069cbf2,region);
         menuBackendText(.14f,.575f,0x8069cbf2,"Menu works without a server connection.");
         menuBackendText(.13f,.66f,0x8069cbf2,"D-pad: Browse settings / change values");
-        menuBackendText(.13f,.715f,0x8069cbf2,"Enable mods in module.txt, then restart.");
+        menuBackendText(.13f,.715f,0x8069cbf2,"Enable mods in modules.txt, then restart.");
         menuBackendText(.12f,.81f,0x8069cbf2,"\x14 \x15 TAB     \x10 SELECT     \x12 BACK");
         return;
     }
@@ -317,6 +323,7 @@ int moduleInit(const ModuleApi *api)
 
     if(api->version<UYA_API_VERSION || api->size<sizeof(*api)) return -1;
     loader=api;
+
     loader->setLifecycle(0,deactivate);
     homeTab=addTab("modmenu.home","Mod Menu",UYA_MODE_BOTH);
     if(homeTab<0) return -1;

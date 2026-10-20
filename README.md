@@ -10,11 +10,11 @@ of the campaign and multiplayer cheat projects in `uya-cheats`.
 
 ## Enable or disable modules
 
-The host filesystem layout keeps the editable list at the root of `uya/`:
+The host filesystem layout keeps the editable list in `uya/config/`:
 
 ```text
 hostfs/uya/
-  module.txt
+  config/modules.txt
   mods/
     debug/exceptionhandler.bin
     campaign-test.ntscu.bin
@@ -28,7 +28,7 @@ The packaged `release/hostfs/uya/` uses the same layout. Entries in the list sta
 as a base name such as `campaign-test`; the loader adds the running region and
 `.bin` automatically. Explicit region suffixes are also supported.
 
-Edit **`hostfs/uya/module.txt`**:
+Edit **`hostfs/uya/config/modules.txt`**:
 
 ```text
 # Campaign and Local Play
@@ -49,7 +49,7 @@ are allowed). `all` and `disabled` stand alone. Legacy `0` (disabled), `1`
 Both `#` and `//` comments may appear on their own line or after an entry.
 Unknown names, duplicate contexts, missing contexts, and malformed lines are
 rejected. Names cannot contain whitespace. There is one shared list at
-`host0:uya/module.txt`, with at most eight images and 2047 bytes of list text.
+`host0:uya/config/modules.txt`, with at most eight images and 2047 bytes of list text.
 Binary names and explicit regional suffixes are unchanged.
 
 `local` includes the multiplayer main menu, Local Play staging, and offline
@@ -106,7 +106,7 @@ Or use `make new-module NAME=my-mod LIBRARY=none` (`PYTHON=python` on systems
 without a `python3` command).
 
 Each command creates `modules/<name>/module.json` and commented starter C code,
-and appends entries set to **`0` (disabled)** to `module.txt`, with comments
+and appends entries set to **`0` (disabled)** to `modules.txt`, with comments
 showing the appropriate enable value. Existing folders are never
 overwritten. The `hello` sample is enabled by default and only prints a message.
 
@@ -146,7 +146,7 @@ NTSC-U/PAL multiplayer. NTSC-J multiplayer retains the loader limitation below.
 See [the menu API guide](modules/modmenu/README.md) for integration and validation
 details.
 
-**The loader uses runtime API 3 with binary header version 2. Deploy the loader PNACH and all
+**The loader uses runtime API 4 with binary header version 2. Deploy the loader PNACH and all
 module binaries together, then cold-boot.** Old ABI-1 binaries are rejected.
 The loader now supplies `publishService` / `findService` for versioned APIs.
 Service IDs belong to their publishing module; lookup requires an exact API
@@ -173,7 +173,7 @@ make                                        # same as all-region build
 
 Modules receive automatic, nonoverlapping, 64-byte-aligned addresses. No manual
 layout file or address selection is needed. All declared modules are built;
-`module.txt` selects which ones load and the modes in which they run. The layout is recorded in
+`modules.txt` selects which ones load and the modes in which they run. The layout is recorded in
 `build/<region>/layout.json`. Rebuild/deploy the complete module set together:
 adding or resizing a module can change later modules' linked addresses.
 
@@ -207,7 +207,7 @@ cloned sources already in the image.
 ```powershell
 # Build just NTSC-U:
 docker run --rm -v "${PWD}:/workspace" uya-mod-loader make REGION=ntscu
-# Create a module, then enable its entry in hostfs/uya/module.txt and rebuild:
+# Create a module, then enable its entry in hostfs/uya/config/modules.txt and rebuild:
 docker run --rm -v "${PWD}:/workspace" uya-mod-loader make new-module NAME=my-mod LIBRARY=librac3
 ```
 
@@ -241,7 +241,7 @@ make REGION=ntscu
 ```
 
 `make clean` at the root removes generated build/release directories and regional
-hostfs binaries. It keeps module sources, `module.txt`, and the optional debug
+hostfs binaries. It keeps module sources, `modules.txt`, and the optional debug
 payload. A module-folder clean removes only that module's objects/binaries and
 keeps its address reservation. Generated module folders include a Makefile.
 
@@ -270,9 +270,9 @@ After a successful build:
    CRC (PCSX2 shows it in the log). Enable cheats. Do not enable another cheat
    that occupies the loader/module memory range or replaces the same hooks.
 2. Enable PCSX2 host filesystem access and point its host root at
-   `release/hostfs`, so `host0:uya/module.txt` resolves to the packaged list.
-3. Edit the packaged `release/hostfs/uya/module.txt` if needed, then cold-boot.
-   If you rebuild, the source list in `hostfs/uya/module.txt` replaces that copy.
+   `release/hostfs`, so `host0:uya/config/modules.txt` resolves to the packaged list.
+3. Edit the packaged `release/hostfs/uya/config/modules.txt` if needed, then cold-boot.
+   If you rebuild, the source list in `hostfs/uya/config/modules.txt` replaces that copy.
 
 The loader uses host filesystem access, as the SM loader does. It is not a disc
 or memory-card module installer. Switching campaign/multiplayer selects the
@@ -291,7 +291,7 @@ patches need to be enabled.
 payload (10,356 bytes). When present, the build copies it to
 `release/hostfs/uya/mods/debug/exceptionhandler.bin`. The loader attempts installation
 once per boot, on its first valid menu/gameplay/lobby hook, before initializing modules.
-It is separate from `module.txt` and does not consume a module slot.
+It is separate from `modules.txt` and does not consume a module slot.
 
 To disable it, remove or rename the file in the hostfs root you use and cold-boot.
 To keep it disabled across builds, remove/rename the source file too; the next
@@ -340,9 +340,9 @@ its own low-memory range only when installed:
 | Range | Use |
 |---|---|
 | `0x000c8000?0x000ce000` | Optional exception handler, 24 KiB including workspace |
-| `0x000f0000?0x000f2000` | Loader, maximum 8 KiB |
-| `0x000f2000?0x000fe000` | Modules, 48 KiB including BSS |
-| `0x000fe000?0x00100000` | Persistent loader state |
+| `0x000f0000?0x000f2f80` | Loader, maximum 12,160 bytes |
+| `0x000f2f80?0x000ff000` | Modules, 49,280 bytes including BSS |
+| `0x000ff000?0x00100000` | Persistent loader state |
 
 Headers include ABI version, region, mode mask, link address, sizes, and entry
 point offsets. The loader rejects invalid ranges, oversized/truncated images,
@@ -401,5 +401,23 @@ from discovery while their provider is disabled. Modules must implement their
 own cleanup for persistent changes; skipping updates cannot undo arbitrary code.
 
 Deploy the new loader cheat and rebuilt modules together, then restart emulation.
-The binary header remains version 2; appended runtime fields use API version 3.
+The binary header remains version 2; context/lifecycle fields arrived in API 3; configuration helpers use API 4.
 Older modules that require runtime version exactly 2 must be rebuilt/updated.
+
+## Mod configuration files
+
+The loader's `ModuleApi` provides `loadConfig` / `saveConfig` independently of
+Mod Menu. Settings live at `host0:uya/config/<mod-name>.<region>.ini`.
+See [configuration API usage and return codes](CONFIG.md). The Example Mod tab
+provides Save/Load actions. Preserve the config directory when updating.
+
+Module lists may be placed in the host's `uya/` root or `uya/config/`. Lookup
+order is `config/modules.txt`, then `modules.txt`. The first file that opens wins; lists are never merged,
+and a malformed config list does not silently fall back. Module binaries remain
+under `uya/mods/` regardless of the list's location. The build and new-module
+command support either location.
+
+Install matching loader cheats and module binaries, then cold-boot without a
+savestate. This update changes the loader/module boundary within the existing
+reserved memory. Move existing `.ini` files from `uya/mods/config/` to
+`uya/config/`; files are not read from the old location.

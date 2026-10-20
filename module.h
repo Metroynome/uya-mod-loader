@@ -6,7 +6,7 @@
 #define UYA_MODE_CAMPAIGN 1U
 #define UYA_MODE_MULTIPLAYER 2U
 #define UYA_MODE_BOTH 3U
-#define UYA_API_VERSION 3U
+#define UYA_API_VERSION 4U
 #define UYA_CONTEXT_CAMPAIGN 1U
 #define UYA_CONTEXT_LOCAL 2U
 #define UYA_CONTEXT_ONLINE 4U
@@ -18,6 +18,19 @@ typedef struct ModuleHeader {
     unsigned int imageSize, memorySize, initOffset, updateOffset;
     unsigned int modes, reserved;
 } ModuleHeader;
+/* Flat INI integer bindings: booleans use 0..1, choices use their index range.
+ * Missing keys preserve defaults. Loading is transactional on parse failure. */
+#define UYA_CONFIG_MAX_FIELDS 32
+#define UYA_CONFIG_OK 1
+#define UYA_CONFIG_MISSING 0
+#define UYA_CONFIG_INVALID (-1)
+#define UYA_CONFIG_IO (-2)
+typedef struct ModuleConfigField {
+    const char *key;
+    int *value;
+    int minimum, maximum;
+} ModuleConfigField;
+
 typedef struct ModuleApi {
     unsigned int version, region, mode;
     int (*print)(const char *format, ...);
@@ -38,6 +51,10 @@ typedef struct ModuleApi {
     unsigned int size, context;
     int (*setLifecycle)(ModuleLifecycle activate, ModuleLifecycle deactivate);
     int (*restrictContexts)(unsigned int contexts);
+    /* API 4: optional persistence, independent of Mod Menu.
+     * host0:uya/config/<mod>.<region>.ini; explicit synchronous operations. */
+    int (*loadConfig)(const char *mod, const ModuleConfigField *fields, int count);
+    int (*saveConfig)(const char *mod, const ModuleConfigField *fields, int count);
 } ModuleApi;
 /* Retain the pointer, not a copy: mode and function pointers change on a
  * campaign/multiplayer transition. init runs once, update runs per sync hook

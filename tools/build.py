@@ -12,13 +12,20 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 REGIONS = {"ntscu": 1, "pal": 2, "ntscj": 3}
-LOW, HIGH = 0xf2000, 0xfe000
+LOW, HIGH = 0xf2f80, 0xff000
 MODES = {"campaign": 1, "multiplayer": 2, "both": 3}
 NAME = re.compile(r"[a-z][a-z0-9_-]{0,39}\Z")
 
 
 def run(args, **kw):
     subprocess.run([str(a) for a in args], check=True, **kw)
+
+
+MANIFEST_PATHS = ("config/modules.txt", "modules.txt")
+
+def module_list_path():
+    root = ROOT / "hostfs/uya"
+    return next((root / name for name in MANIFEST_PATHS if (root / name).is_file()), root / "config/modules.txt")
 
 
 def variants(name, config):
@@ -98,10 +105,11 @@ void moduleUpdate(void)
             source = source.replace('in module BSS, never in hard-coded game memory. */',
                                     'in module BSS, never in hard-coded game memory. */\n    uyaPostUpdate();')
         (folder / sources[0]).write_text(source)
-    with (ROOT / "hostfs/uya/module.txt").open("a") as f:
+    module_list_path().parent.mkdir(parents=True, exist_ok=True)
+    with module_list_path().open("a") as f:
         for output, lib, mode, sources in items:
             f.write(f"{output} disabled // choose campaign, local, online, or a supported combination ({mode})\n")
-    print(f"Created {folder}; set its mode in hostfs/uya/module.txt, then rebuild.")
+    print(f"Created {folder}; set its mode in the module list, then rebuild.")
 
 
 class Builder:
@@ -167,7 +175,7 @@ class Builder:
         return [archive]
 
     def loader(self):
-        objects = [self.compile(ROOT / f, self.work / (f + ".o")) for f in ("entry.S", "main.c", "platform.c", "strings.c")]
+        objects = [self.compile(ROOT / f, self.work / (f + ".o")) for f in ("entry.S", "main.c", "platform.c", "strings.c", "config.c", "campaign-write.S")]
         elf = self.work / "mod-loader.elf"
         binary = self.link(objects, "loader.ld", elf)
         symbols = self.symbols(elf)
@@ -347,10 +355,22 @@ def main():
             if not selected:
                 builder.loader()
             builder.modules(entries, selected)
-        dest = ROOT / "release/hostfs/uya/module.txt"
+        dest = ROOT / "release/hostfs/uya/modules.txt"
         dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(ROOT / "hostfs/uya/module.txt", dest)
+        # Discard obsolete generated singular-name lists.
+        for name in ("module.txt", "config/module.txt"):
+            old = dest.parent / name
+            if old.is_file(): old.unlink()
+        for name in MANIFEST_PATHS:
+            source = ROOT / "hostfs/uya" / name
+            target = dest.parent / name
+            if source.is_file():
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, target)
+            elif target.is_file():
+                target.unlink() # Remove stale generated lists that would shadow the fallback.
         shutil.copyfile(ROOT / "hostfs/uya/maploader-online.txt", dest.parent / "maploader-online.txt")
+        (dest.parent / "config").mkdir(parents=True, exist_ok=True)
         package_debug()
         package_maps()
 

@@ -6,11 +6,11 @@ from `Horizon/horizon-uya-patch/patch/maploader.c`.
 
 ## Installation
 
-Keep the Horizon map pack beside `module.txt`, separate from module binaries:
+Keep the Horizon map pack in the `uya/` root, separate from module binaries:
 
 ```text
 host0:uya/
-  module.txt
+  config/modules.txt
   maps.ntscu.idx
   maps.pal.idx
   aquadome.version
@@ -142,10 +142,10 @@ memory/hook integration; simply enabling both is not supported.
 
 ## Execution contexts
 
-The default `module.txt` now uses `maploader local`. Loader API 3 disables it at
+The default `modules.txt` now uses `maploader local`. Loader API 3 disables it at
 the post-DNAS profile screen and invokes its cleanup callback to remove the tab
 and owned map hooks. On returning to Local Play it registers its tab and hooks
-again. The optional `maploader-online.txt` flag does not override `module.txt`:
+again. The optional `maploader-online.txt` flag does not override `modules.txt`:
 future online use requires both an online-capable context entry and that flag.
 This is not support for coexistence with the full Horizon patch's overlapping
 memory layout.

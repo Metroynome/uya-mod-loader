@@ -48,3 +48,8 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# User-generated per-mod settings
+/hostfs/uya/config/*.ini
+
+/release/hostfs/uya/config/*.ini

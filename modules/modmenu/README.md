@@ -2,7 +2,7 @@
 
 `modmenu` provides a shared menu for other modules in campaign and multiplayer.
 It does not require a server connection or Horizon patch. Enable both the menu
-and your consumer in `hostfs/uya/module.txt`, then build and deploy:
+and your consumer in `hostfs/uya/config/modules.txt`, then build and deploy:
 
 ```text
 modmenu       campaign,local
@@ -212,3 +212,14 @@ online menus or gameplay. Omit the screen restriction to show it in gameplay
 as well. Existing tabs default to all contexts. Hiding a tab does not disable
 the mod: use configuration or `restrictContexts` to restrict execution, and
 remove registered tabs in your mod's deactivation callback (see menu-example).
+
+## Saving and loading mod settings
+
+Persistence belongs to the mod loader's `ModuleApi`, so mods can use it without
+Mod Menu. See the [configuration API](../../CONFIG.md). The original menu
+`loadConfig` and `saveConfig` functions remain as forwarding wrappers for
+compatibility, with the same results and the new `host0:uya/config/` location.
+
+The Example Mod initializes its settings through the loader before attempting
+to register its tab. Its Save settings / Load settings actions also call the
+loader directly.
