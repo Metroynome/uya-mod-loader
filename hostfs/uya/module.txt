@@ -1,0 +1,5 @@
+// 0 = disabled, 1 = singleplayer, 2 = multiplayer, 3 = both
+// Restart emulation after editing.
+hello 3 // both
+campaign-test 1 // singleplayer test
+multiplayer-test 2 // multiplayer test

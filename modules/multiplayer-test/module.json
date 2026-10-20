@@ -1,0 +1,7 @@
+{
+  "library": "libuya",
+  "regions": [
+    "ntscu",
+    "pal"
+  ]
+}

@@ -1,0 +1,39 @@
+# Generated builds and release packages
+/build/
+/release/
+bin/
+obj/
+*.o
+*.d
+*.elf
+*.map
+*.a
+
+# Local test sources and results
+/test/
+/tests/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Generated regional hostfs modules; keep the optional debug payload
+/hostfs/uya/mods/*.bin
+
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local editor, OS, and temporary files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+*~

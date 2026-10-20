@@ -1,0 +1,8 @@
+{
+  "library": "none",
+  "regions": [
+    "ntscu",
+    "pal",
+    "ntscj"
+  ]
+}
