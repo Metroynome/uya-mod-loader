@@ -3,3 +3,7 @@
 hello 3 // both
 campaign-test 1 // singleplayer test
 multiplayer-test 2 // multiplayer test
+
+modmenu 3 // menu provider: campaign + multiplayer
+menu-example 3 // independent API registration example
+maploader 3 // Custom Maps tab; NTSC-U/PAL multiplayer backend

@@ -116,7 +116,34 @@ previous level. Module BSS is zeroed at load time and persists across mode chang
 The supplied API pointer remains valid and is updated when the mode changes.
 Use `api->print/open/read/close/flushCache` for mode-correct resident SDK services.
 
+## Extensible mod menu
+
+The supplied `modmenu` module exposes a versioned API so other mods can register
+tabs, toggles, integer ranges and actions without editing the menu itself.
+`menu-example` demonstrates an independent consumer. Both are enabled in the
+sample list. Press **L3 + R3** to open; use L1/R1 for tabs, the D-pad to
+navigate, Cross to select and Triangle to close.
+
+The menu is independent of network connectivity and supports campaign plus
+NTSC-U/PAL multiplayer. NTSC-J multiplayer retains the loader limitation below.
+See [the menu API guide](modules/modmenu/README.md) for integration and validation
+details.
+
+**This adds loader ABI version 2. Rebuild and deploy the loader PNACH and all
+module binaries together, then cold-boot.** Old ABI-1 binaries are rejected.
+The loader now supplies `publishService` / `findService` for versioned APIs.
+Service IDs belong to their publishing module; lookup requires an exact API
+version and an active owner mode. Failed initialization removes that module's
+services. Consumers should retry lookup when a provider is not yet available.
+
 ## Build
+
+The independent `maploader` module adds a Custom Maps tab using Horizon-format
+hostfs map packs. See [maploader setup and current support](modules/maploader/README.md).
+Local staging selects the retail base automatically. Custom maps use one scrolling
+list with None and X to select. Maploader disables itself on an online lobby
+connection by default; `maploader-online.txt` provides an explicit future-server
+opt-in. Campaign replacement is not yet implemented.
 
 Requires Python 3.8+, GNU make, and the PS2 EE toolchain. Set `PS2SDK` and put
 `ee-gcc`, `ee-nm`, and `ee-objcopy` on PATH. `EE_PREFIX` overrides `ee-`.

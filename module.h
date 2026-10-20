@@ -1,7 +1,7 @@
 #ifndef UYA_MODULE_H
 #define UYA_MODULE_H
 #define UYA_MODULE_MAGIC 0x4d415955U
-#define UYA_MODULE_VERSION 1U
+#define UYA_MODULE_VERSION 2U
 #define UYA_MODULE_NO_ENTRY 0xffffffffU
 #define UYA_MODE_CAMPAIGN 1U
 #define UYA_MODE_MULTIPLAYER 2U
@@ -19,6 +19,12 @@ typedef struct ModuleApi {
     int (*read)(int fd, void *buffer, int size);
     int (*close)(int fd);
     void (*flushCache)(int operation);
+    /* Services are discovered by ID and exact API version, not linked address.
+     * publishService is valid only inside a module callback. The loader owns
+     * the registry; pointers remain valid until emulation restarts. */
+    int (*publishService)(unsigned int id, unsigned int version, const void *service);
+    const void *(*findService)(unsigned int id, unsigned int version);
+
 } ModuleApi;
 /* Retain the pointer, not a copy: mode and function pointers change on a
  * campaign/multiplayer transition. init runs once, update runs per sync hook

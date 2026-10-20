@@ -276,6 +276,17 @@ def package_debug():
     elif destination.exists():
         destination.unlink()  # Do not leave a previously enabled handler behind.
 
+def package_maps():
+    """Package local map assets without adding them to version control."""
+    source = ROOT / "hostfs/uya"
+    destination = ROOT / "release/hostfs/uya"
+    if any(source.glob("*.version")):
+        run([sys.executable, ROOT / "tools/index_maps.py", source])
+    for pattern in ("*.version", "*.wad", "*.world", "*.sound", "*.map",
+                    "*.bg", "*.thumb", "*.code", "maps.*.idx"):
+        for file in source.glob(pattern):
+            shutil.copyfile(file, destination / file.name)
+
 
 def clean(module=None):
     if module:
@@ -337,7 +348,9 @@ def main():
         dest = ROOT / "release/hostfs/uya/module.txt"
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / "hostfs/uya/module.txt", dest)
+        shutil.copyfile(ROOT / "hostfs/uya/maploader-online.txt", dest.parent / "maploader-online.txt")
         package_debug()
+        package_maps()
 
 
 if __name__ == "__main__":

@@ -20,6 +20,17 @@ htmlcov/
 # Generated regional hostfs modules; keep the optional debug payload
 /hostfs/uya/mods/*.bin
 
+# Local custom-map packs and their generated catalogs
+/hostfs/uya/*.wad
+/hostfs/uya/*.world
+/hostfs/uya/*.sound
+/hostfs/uya/*.map
+/hostfs/uya/*.bg
+/hostfs/uya/*.thumb
+/hostfs/uya/*.code
+/hostfs/uya/*.version
+/hostfs/uya/maps.*.idx
+
 # Python caches and local environments
 __pycache__/
 *.py[cod]

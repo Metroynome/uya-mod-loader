@@ -1,7 +1,10 @@
 PYTHON ?= python3
+.DEFAULT_GOAL := all
 REGION ?= all
 LIBRARY ?= none
-.PHONY: all release modules new-module check test clean module
+.PHONY: all release modules new-module check test clean module maps
+maps:
+	$(PYTHON) tools/index_maps.py
 all release modules:
 	$(PYTHON) tools/build.py build --region $(REGION)
 module:
@@ -17,6 +20,14 @@ test:
 	$(PYTHON) -m unittest discover -s tests -p 'test_*.py'
 	$(CC) -std=gnu99 -fno-builtin -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast -I. tests/runtime.c strings.c -o build/runtime-test
 	./build/runtime-test
+	$(CC) -std=gnu99 -fno-builtin -I. tests/modmenu.c -o build/modmenu-test
+	./build/modmenu-test
+	@set -e; for region in 1 2; do \
+	  $(CC) -std=gnu99 -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast -DUYA_MODULE_REGION=$$region -I. tests/maploader.c -o build/maploader-test-$$region; \
+	  ./build/maploader-test-$$region; \
+	  $(CC) -std=gnu99 -Wno-int-to-pointer-cast -DUYA_MODULE_REGION=$$region -I. tests/menu_backend.c -o build/menu-backend-test-$$region; \
+	  ./build/menu-backend-test-$$region; \
+	done
 	@set -e; for region in 1 2 3; do \
 	  $(CC) -std=gnu99 -Wno-int-to-pointer-cast -DUYA_MODULE_REGION=$$region -I. tests/platform.c -o build/platform-test-$$region; \
 	  ./build/platform-test-$$region; \

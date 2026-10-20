@@ -13,7 +13,7 @@
 #endif
 #define MODULE_END 0x000fe000U
 #define MODULE_LIMIT 8
-#define LOADER_MAGIC 0x554d4c33U
+#define LOADER_MAGIC 0x554d4c34U
 
 struct LoadedModule {
     unsigned int address, size;
@@ -23,11 +23,17 @@ struct LoadedModule {
     unsigned int modes, initialized;
 };
 
+struct ModuleService {
+    unsigned int id, version, owner;
+    const void *table;
+};
 struct LoaderState {
     unsigned int magic, busy, count, mode, listLoaded, retryTicks, exceptionAttempted;
     struct LoadedModule modules[MODULE_LIMIT];
     ModuleApi api;
     char list[2048];
+    unsigned int currentModule; /* index + 1; zero outside callbacks */
+    struct ModuleService services[8];
 };
 
 #ifndef STATE
@@ -40,6 +46,40 @@ typedef char LoaderStateMustFit[(sizeof(struct LoaderState) <= 0x2000) ? 1 : -1]
 #define fileOpen api.open
 #define fileRead api.read
 #define fileClose api.close
+
+/* Modules can export APIs without hard-coded addresses or load-order coupling.
+ * Services are visible only while their owner's mode is active. */
+static int publishService(unsigned int id, unsigned int version, const void *table)
+{
+    unsigned int i;
+    if (!id || !version || !table || !STATE->currentModule) return -1;
+    for (i = 0; i < 8; ++i) {
+        struct ModuleService *s = &STATE->services[i];
+        if (s->id == id) {
+            if (s->owner != STATE->currentModule || s->version != version || s->table != table)
+                return -1;
+            return 0; /* Idempotent retry by the same publisher. */
+        }
+    }
+    for (i = 0; i < 8; ++i) {
+        struct ModuleService *s = &STATE->services[i];
+        if (!s->id) {
+            s->id=id; s->version=version; s->owner=STATE->currentModule; s->table=table;
+            return 0;
+        }
+    }
+    return -1;
+}
+static const void *findService(unsigned int id, unsigned int version)
+{
+    unsigned int i;
+    for (i=0; i<8; ++i) {
+        struct ModuleService *s=&STATE->services[i];
+        if (s->id==id && s->version==version && s->owner &&
+            (STATE->modules[s->owner-1].modes & STATE->mode)) return s->table;
+    }
+    return 0;
+}
 
 static int readExact(int fd, void *buffer, unsigned int size)
 {
@@ -379,6 +419,8 @@ void loaderTick(unsigned int layout)
     STATE->busy = 1;
     STATE->mode = mode;
     platformApi(&api, mode);
+    api.publishService = publishService;
+    api.findService = findService;
     installExceptionHandler();
 
     /* A missing list can be retried on a later tick. Once accepted, restart
@@ -395,11 +437,16 @@ void loaderTick(unsigned int layout)
         struct LoadedModule *module = &STATE->modules[i];
         if (!(module->modes & mode))
             continue;
+        STATE->currentModule = i + 1;
         if (!module->initialized) {
             int result = module->init ? module->init(&api) : 0;
             module->initialized = 1;
             if (result < 0) {
                 printf("loader: init failed (%d) at %08x\n", result, module->address);
+                unsigned int j;
+                for (j=0; j<8; ++j)
+                    if (STATE->services[j].owner == i+1)
+                        memset(&STATE->services[j], 0, sizeof(struct ModuleService));
                 module->update = 0; /* Keep its memory reserved after failure. */
             }
             syncCode();
@@ -407,5 +454,6 @@ void loaderTick(unsigned int layout)
         if (module->update)
             module->update();
     }
+    STATE->currentModule = 0;
     STATE->busy = 0;
 }
