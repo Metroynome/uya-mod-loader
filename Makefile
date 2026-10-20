@@ -2,13 +2,19 @@ PYTHON ?= python3
 .DEFAULT_GOAL := all
 REGION ?= all
 LIBRARY ?= none
-.PHONY: all release modules new-module check test clean module maps
+.PHONY: all release modules new-module check test clean clean-release module maps
 maps:
 	$(PYTHON) tools/index_maps.py
-all release modules:
+all modules:
 	$(PYTHON) tools/build.py build --region $(REGION)
+release:
+	$(MAKE) all REGION=all
+	$(PYTHON) tools/package_release.py
+	$(PYTHON) tools/check_release.py
 module:
 	$(PYTHON) tools/build.py build --region $(REGION) --module "$(NAME)"
+clean-release:
+	$(PYTHON) tools/clean_release.py
 clean:
 	$(PYTHON) tools/build.py clean
 new-module:

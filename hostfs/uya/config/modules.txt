@@ -1,16 +1,6 @@
-# Execution contexts: campaign, local, online; combine with commas.
-# all and disabled stand alone. Legacy 0/1/2/3 still work.
-# Restart emulation after editing. Explicit .ntscu/.pal/.ntscj names still work.
-
-# Campaign and Local Play (disabled at the post-DNAS profile screen)
-modmenu          campaign,local
-menu-example     campaign,local
-maploader        local
-
-# Standalone modules do not need the Mod Menu API
-hello            campaign,local
-campaign-test    campaign
-multiplayer-test local
-
-# Opt-in online example: my-mod online
-# Full Horizon patch memory overlaps this loader; context filtering is not relocation.
+# Default modules: campaign and Local Play only.
+# Config list takes precedence over uya/modules.txt. Restart after editing.
+modmenu campaign,local
+# Explicit regions avoid attempting unsupported NTSC-J multiplayer hooks.
+maploader.ntscu local
+maploader.pal local

@@ -1,6 +1,26 @@
 # Generated builds and release packages
 /build/
-/release/
+# Published release files are tracked; ZIPs and development outputs are not.
+/release/**
+!/release/README.md
+!/release/modules.json
+!/release/crcs.json
+!/release/files.json
+!/release/SC*-*.pnach
+!/release/hostfs/
+!/release/hostfs/uya/
+!/release/hostfs/uya/maploader-online.txt
+!/release/hostfs/uya/config/
+!/release/hostfs/uya/config/modules.txt
+!/release/hostfs/uya/mods/
+!/release/hostfs/uya/mods/*.bin
+!/release/optional/
+!/release/optional/debug/
+!/release/optional/debug/exceptionhandler.bin
+!/release/docs/
+!/release/docs/*.md
+!/release/tools/
+!/release/tools/index_maps.py
 bin/
 obj/
 *.o

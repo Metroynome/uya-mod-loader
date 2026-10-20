@@ -1,0 +1,14 @@
+{
+  "ntscu": {"serial": "SCUS-97353", "elfs": [
+    {"path": "SCUS_973.53;1", "mode": "campaign", "crc": "45FE0CC4", "supported": true},
+    {"path": "I5BOOTN.ELF;1", "mode": "multiplayer", "crc": "49536F3F", "supported": true}
+  ]},
+  "pal": {"serial": "SCES-52456", "elfs": [
+    {"path": "SCES_524.56;1", "mode": "campaign", "crc": "17125698", "supported": true},
+    {"path": "I5BOOTN.ELF;1", "mode": "multiplayer", "crc": "EDE8B391", "supported": true}
+  ]},
+  "ntscj": {"serial": "SCPS-15084", "elfs": [
+    {"path": "SCPS_150.84;1", "mode": "campaign", "crc": "64DC6000", "supported": true},
+    {"path": "I5BOOTN.ELF;1", "mode": "multiplayer", "crc": "68FD292A", "supported": false}
+  ]}
+}

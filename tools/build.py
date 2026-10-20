@@ -203,7 +203,7 @@ class Builder:
                                           (2, 4, 0x20), (1, 6, 0x27bd)]:
                 lines.append(f"patch=1,EE,E0{count:02X}{value:04X},extended,{site+offset:08X}")
             lines.append(f"patch=1,EE,2{site:07X},extended,{jump:08X}")
-        release = ROOT / "release"
+        release = ROOT / "build/dist"
         release.mkdir(exist_ok=True)
         (release / f"mod-loader.{self.region}.pnach").write_text("\n".join(lines) + "\n")
 
@@ -253,7 +253,7 @@ class Builder:
             report.append({"name": name, "library": library, "mode": mode, "address": hex(address), "bytes": header[5]})
             address = (end + 63) & ~63
         if selected:
-            dest = ROOT / "release/hostfs/uya/mods"
+            dest = ROOT / "build/dist/hostfs/uya/mods"
             dest.mkdir(parents=True, exist_ok=True)
             for item in report:
                 filename = item["name"] + "." + self.region + ".bin"
@@ -267,7 +267,7 @@ class Builder:
                 old.unlink()
         (self.work / "layout.json").write_text(json.dumps(report, indent=2) + "\n")
         print(f"{self.region}: {len(report)} modules, {address-LOW}/{HIGH-LOW} arena bytes")
-        dest = ROOT / "release/hostfs/uya/mods"
+        dest = ROOT / "build/dist/hostfs/uya/mods"
         dest.mkdir(parents=True, exist_ok=True)
         for old in dest.glob("*." + self.region + ".bin"):
             old.unlink()
@@ -279,7 +279,7 @@ class Builder:
 def package_debug():
     """Include the optional payload only while it exists in the source hostfs."""
     source = ROOT / "hostfs/uya/mods/debug/exceptionhandler.bin"
-    destination = ROOT / "release/hostfs/uya/mods/debug/exceptionhandler.bin"
+    destination = ROOT / "build/dist/hostfs/uya/mods/debug/exceptionhandler.bin"
     destination.parent.mkdir(parents=True, exist_ok=True)
     if source.is_file():
         shutil.copyfile(source, destination)
@@ -289,7 +289,7 @@ def package_debug():
 def package_maps():
     """Package local map assets without adding them to version control."""
     source = ROOT / "hostfs/uya"
-    destination = ROOT / "release/hostfs/uya"
+    destination = ROOT / "build/dist/hostfs/uya"
     if any(source.glob("*.version")):
         run([sys.executable, ROOT / "tools/index_maps.py", source])
     for pattern in ("*.version", "*.wad", "*.world", "*.sound", "*.map",
@@ -306,14 +306,13 @@ def clean(module=None):
         for region in REGIONS:
             for name in names:
                 shutil.rmtree(ROOT / "build" / region / "modules" / name, ignore_errors=True)
-                for base in (ROOT / "hostfs/uya/mods", ROOT / "release/hostfs/uya/mods"):
+                for base in (ROOT / "hostfs/uya/mods", ROOT / "build/dist/hostfs/uya/mods"):
                     path = base / (name + "." + region + ".bin")
                     if path.exists():
                         path.unlink()
         # Keep layout reservations so a single-module rebuild cannot collide.
     else:
-        for name in ("build", "release"):
-            shutil.rmtree(ROOT / name, ignore_errors=True)
+        shutil.rmtree(ROOT / "build", ignore_errors=True)
         for region in REGIONS:
             for path in (ROOT / "hostfs/uya/mods").glob("*." + region + ".bin"):
                 path.unlink()
@@ -355,7 +354,7 @@ def main():
             if not selected:
                 builder.loader()
             builder.modules(entries, selected)
-        dest = ROOT / "release/hostfs/uya/modules.txt"
+        dest = ROOT / "build/dist/hostfs/uya/modules.txt"
         dest.parent.mkdir(parents=True, exist_ok=True)
         # Discard obsolete generated singular-name lists.
         for name in ("module.txt", "config/module.txt"):

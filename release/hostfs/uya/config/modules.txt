@@ -1,0 +1,7 @@
+# Release defaults: no test/example modules.
+# Restart the game after editing. See README.md.
+modmenu.ntscu campaign,local
+maploader.ntscu local
+modmenu.pal campaign,local
+maploader.pal local
+modmenu.ntscj campaign

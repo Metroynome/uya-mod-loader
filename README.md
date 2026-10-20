@@ -24,23 +24,17 @@ hostfs/uya/
     multiplayer-test.pal.bin
 ```
 
-The packaged `release/hostfs/uya/` uses the same layout. Entries in the list stay
+The packaged `build/dist/hostfs/uya/` uses the same layout. Entries in the list stay
 as a base name such as `campaign-test`; the loader adds the running region and
 `.bin` automatically. Explicit region suffixes are also supported.
 
 Edit **`hostfs/uya/config/modules.txt`**:
 
 ```text
-# Campaign and Local Play
+# Default production modules (tests/examples are opt-in)
 modmenu          campaign,local
-menu-example     campaign,local
-maploader        local
-
-# Independent modules (no Mod Menu dependency)
-campaign-test    campaign
-multiplayer-test local,online
-hello            all
-unused           disabled
+maploader.ntscu  local
+maploader.pal    local
 ```
 
 Use `campaign`, `local`, and `online`, joined with commas (spaces around commas
@@ -240,7 +234,7 @@ make clean && make             # only this module, all its supported regions
 make REGION=ntscu
 ```
 
-`make clean` at the root removes generated build/release directories and regional
+`make clean` at the root removes the generated build directory and regional
 hostfs binaries. It keeps module sources, `modules.txt`, and the optional debug
 payload. A module-folder clean removes only that module's objects/binaries and
 keeps its address reservation. Generated module folders include a Makefile.
@@ -266,12 +260,12 @@ shell does not require sourcing the script before subsequent `make` commands.
 
 After a successful build:
 
-1. Use `release/mod-loader.<region>.pnach` as the cheat contents for your game's
+1. Use `build/dist/mod-loader.<region>.pnach` as the cheat contents for your game's
    CRC (PCSX2 shows it in the log). Enable cheats. Do not enable another cheat
    that occupies the loader/module memory range or replaces the same hooks.
 2. Enable PCSX2 host filesystem access and point its host root at
-   `release/hostfs`, so `host0:uya/config/modules.txt` resolves to the packaged list.
-3. Edit the packaged `release/hostfs/uya/config/modules.txt` if needed, then cold-boot.
+   `build/dist/hostfs`, so `host0:uya/config/modules.txt` resolves to the packaged list.
+3. Edit the packaged `build/dist/hostfs/uya/config/modules.txt` if needed, then cold-boot.
    If you rebuild, the source list in `hostfs/uya/config/modules.txt` replaces that copy.
 
 The loader uses host filesystem access, as the SM loader does. It is not a disc
@@ -289,7 +283,7 @@ patches need to be enabled.
 
 `hostfs/uya/mods/debug/exceptionhandler.bin` is an exact copy of the SM loader's
 payload (10,356 bytes). When present, the build copies it to
-`release/hostfs/uya/mods/debug/exceptionhandler.bin`. The loader attempts installation
+`build/dist/hostfs/uya/mods/debug/exceptionhandler.bin`. The loader attempts installation
 once per boot, on its first valid menu/gameplay/lobby hook, before initializing modules.
 It is separate from `modules.txt` and does not consume a module slot.
 
@@ -421,3 +415,33 @@ Install matching loader cheats and module binaries, then cold-boot without a
 savestate. This update changes the loader/module boundary within the existing
 reserved memory. Move existing `.ini` files from `uya/mods/config/` to
 `uya/config/`; files are not read from the old location.
+
+
+## Release packages and GitHub Actions
+
+Run `make release` in the initialized Docker environment to build all regions
+and create `release/zips/uya-mod-loader-{ntscu,pal,ntscj,all}.zip` plus SHA-256
+checksums. Each ZIP contains matching loader cheats, production modules, default
+`config/modules.txt`, setup instructions, and an optional exception handler.
+The combined ZIP uses explicit region suffixes to skip unsupported binaries.
+NTSC-J includes campaign Mod Menu; Map Loader is available for NTSC-U/PAL.
+
+The tracked [release guide](release/README.md) explains installation. Published PNACHs and production host files are tracked in `release/`;
+development binaries and ZIPs remain ignored. [release/modules.json](release/modules.json) controls
+which modules enter the ZIPs; tests/examples remain available in source but are
+excluded from the release defaults and archives. Local INIs and downloaded map
+packs are never included in ZIPs. `make clean` preserves all release files; `make clean-release` removes generated
+release outputs while retaining the guide and policies.
+
+The [Release workflow](.github/workflows/release.yml) builds the Docker image,
+packages all regions, verifies the ZIPs, and uploads a downloadable artifact.
+Run it manually from Actions, or push a `v*` tag to attach the ZIPs to a draft
+GitHub release. Review and publish that draft when ready. Rerunning a tag build
+replaces its matching assets using [GitHub CLI release upload](https://cli.github.com/manual/gh_release_upload).
+
+
+Release PNACHs use `SERIAL_CRC.pnach` names and include `[UYA Mod Loader]` and
+`author=Metroynome`, matching the rac-cheats release convention. Install both
+campaign and multiplayer files for NTSC-U/PAL; see the
+[verified CRC table](release/README.md#verified-game-crcs). Normal builds use
+`build/dist/` so development builds cannot silently replace published files.
