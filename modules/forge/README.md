@@ -2,8 +2,8 @@
 
 Status: the NTSC-U Local Play map-hop prototype is implemented. Same-map reloads
 and a cross-base hop followed by repeated reloads have passed live testing. The remaining sections retain the planned feature suggestions;
-they are not a claim that all features exist. No Forge v2 changes or PINE bridge
-are included.
+they are not a claim that all features exist. No Forge v2 source changes are included. The PINE mailbox is documented in
+[PINE.md](PINE.md), including the current live verification coverage.
 
 ## Current prototype
 
@@ -17,8 +17,9 @@ overlays 40-49; split-screen overlays 50-55, PAL, and NTSC-J hopping remain disa
 Requests are deferred to Map Loader, validated against the installed map files,
 and sent through a signature-checked retail scene-change routine. Acceptance is
 not completion. Repeated/busy requests are rejected. Automatic build detection,
-manual refresh, shortcut controls, position restoration, and PINE integration
-are still future work. Live coverage is limited to the scenarios listed below;
+shortcut controls, position restoration, and editor-side PINE integration
+are still future work. Refresh Custom Maps and the PINE command mailbox are implemented, including
+**Start Game** from Local Play staging using the selected map and game settings. Live coverage is limited to the scenarios listed below;
 other map bases and player counts still need testing before a general release.
 
 
@@ -35,7 +36,15 @@ other map bases and player counts still need testing before a general release.
   reloads: user confirmed the HUD appears in all tested scenarios. HUD setup
   runs once after every completed Forge transition, including same-base reloads.
   Sequential-hop regression tests also pass.
-- Other regions and split-screen overlays: not verified or enabled.
+- Mailbox commands: staging refresh/select and refresh-and-select passed;
+  in-match Temple of Shaar reload, refresh-and-hop to Bakisi Mini, and Bakisi
+  Mini reload returned successful completion and game/scene ready flags.
+  The user confirmed gameplay and HUD were working after the sequence.
+  See [PINE.md](PINE.md) for protocol coverage and remaining verification.
+- **Start Game** mailbox command: started the selected Temple of Shaar directly
+  from staging; user confirmed gameplay and HUD work normally. A second request
+  during gameplay was rejected. Retail-map and split-screen starts remain untested.
+- Other regions and split-screen hopping: not verified or enabled.
 
 The reload resets transient Local Play network-player records at the level TOC
 loading boundary. This is necessary because the retail local-player constructor

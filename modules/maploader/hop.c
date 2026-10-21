@@ -6,6 +6,7 @@
 static unsigned int requestAddress;
 static int queued=-1,phase,ticks;
 int mapHopSawLoading;
+int mapHopResult;
 #ifndef MAP_HOP_CALL
 #define MAP_HOP_CALL(address,base) ((void (*)(int))(address))(base)
 #endif
@@ -62,7 +63,34 @@ int mapHopRequest(int index)
 {
     if(!mapHopAvailable() || index<0 || index>=mapCount)return 0;
     if(!mapValidate(&mapRecords[index])) {mapMessage("Map files changed; refresh before reloading");return 0;}
-    queued=index;phase=1;ticks=mapHopSawLoading=0;mapMessage("Map hop queued");return 1;
+    mapHopResult=1;queued=index;phase=1;ticks=mapHopSawLoading=0;mapMessage("Map hop queued");return 1;
+}
+/* NTSC-U local staging update 0x6ab8e8 calls 0x6ac720 for its
+ * Start Game action. Reuse retail roster/settings initialization unchanged.
+ * Hash the whole callback before calling code from the staging overlay. */
+#ifndef MAP_START_GAME_CALL
+#define MAP_START_GAME_CALL(menu) ((void (*)(unsigned int))0x6ac720)(menu)
+#endif
+static unsigned int startGameMenu(void)
+{
+#if UYA_MODULE_REGION == 1
+    unsigned int menu,hash=2166136261U,i;
+    if(mapApi->context!=UYA_CONTEXT_LOCAL || mapStaging()!=1)return 0;
+    menu=WORD(0x1c5c0c0);
+    if(menu<0x100000 || menu>0x1fffc00 || (menu&3) ||
+       WORD(menu+0x60)!=0x47de60)return 0;
+    for(i=0;i<240;++i)hash=(hash^*(volatile unsigned char *)(0x6ac720+i))*16777619U;
+    return hash==0xeca152d0U?menu:0;
+#else
+    return 0;
+#endif
+}
+int mapStartGame(void)
+{
+    if(!mapForgeActive() || phase || mapLoading() || mapScanActive() ||
+       !mapHooksReady() || !startGameMenu())return 0;
+    if(mapSelection>=0 && (mapSelection>=mapCount || !mapValidate(&mapRecords[mapSelection])))return 0;
+    mapHopResult=1;phase=3;ticks=0;mapMessage("Start Game queued");return 1;
 }
 /* The ordinary transition preserves local network-player records. Re-entering
  * local player creation with pNetPlayerData still set makes 0x19a2c0 return
@@ -87,6 +115,15 @@ void mapHopTick(void)
 {
     unsigned int settings,base;
     if(!phase)return;
+    if(phase==3){
+        unsigned int menu=startGameMenu();
+        if(!menu || !mapForgeActive() || mapLoading()){mapHopCancel();return;}
+        phase=4;mapMessage("Starting game...");MAP_START_GAME_CALL(menu);return;
+    }
+    if(phase==4 && WORD(0x1f8528)>=40 && WORD(0x1f8528)<=55 &&
+       WORD(0x241bd0)==1 && WORD(0x2459c8)==1 && !mapLoading()){
+        phase=0;mapHopResult=2;mapMessage("Game started");return;
+    }
     if(phase==1) {
         if(!mapForgeActive() || !mapHopInGame() || mapLoading()) {mapHopCancel();return;}
         settings=WORD(0x2417c0);
@@ -102,13 +139,14 @@ void mapHopTick(void)
     }
     ++ticks;
     /* mapHopOnLoad marks the one-time reset at the level-loading boundary. */
-    if(mapHopSawLoading && mapHopInGame() && !mapLoading() &&
+    if(phase==2 && mapHopSawLoading && mapHopInGame() && !mapLoading() &&
        WORD(0x1f8528)==mapRecords[queued].base) {
         int hudReady=restoreHud(WORD(0x1f8528));
+        mapHopResult=hudReady?2:3;
         phase=0;queued=-1;requestAddress=0;
         mapMessage(hudReady?"Map hop complete":"HUD setup unavailable; return to staging");
     } else if(ticks>12000) {
-        phase=0;queued=-1;mapMessage("Map transition timed out; restart if needed");
+        mapHopResult=3;phase=0;queued=-1;mapMessage("Map transition timed out; restart if needed");
     }
 }
-void mapHopCancel(void) {phase=0;queued=-1;requestAddress=0;}
+void mapHopCancel(void) {if(phase)mapHopResult=3;phase=0;queued=-1;requestAddress=0;}

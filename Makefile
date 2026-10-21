@@ -32,6 +32,10 @@ test:
 	./build/mapscan-test
 	$(CC) -std=gnu99 -fno-builtin -Wno-int-to-pointer-cast -DUYA_MODULE_REGION=1 -I. tests/forge_hop.c -o build/forge-hop-test
 	./build/forge-hop-test
+	$(CC) -std=gnu99 -iquote . tests/forge_bridge.c -o build/forge-bridge-test
+	./build/forge-bridge-test
+	$(CC) -std=gnu99 -ffunction-sections -fdata-sections -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast -iquote . tests/forge_commands.c -Wl,--gc-sections -o build/forge-commands-test
+	./build/forge-commands-test
 	@set -e; for region in 1 2; do \
 	  $(CC) -std=gnu99 -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast -DUYA_MODULE_REGION=$$region -I. tests/maploader.c -o build/maploader-test-$$region; \
 	  ./build/maploader-test-$$region; \

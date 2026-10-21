@@ -201,7 +201,7 @@ static void hookedTable(unsigned int sector,unsigned int count,void *dest)
     mapHopOnLoad();
     armed=failed=soundSent=0; soundBuffer=0;
     if(mapSelection<0 || mapSelection>=mapCount) return;
-    active=mapRecords[mapSelection];
+    mapCopyRecord(&active,&mapRecords[mapSelection]);
     /* Local play loads 50..59, online play 40..49. Never reuse a selected
      * multiplayer WAD for campaign/menu or a different base map's code. */
     if(level!=active.base && level!=active.base+10) return;

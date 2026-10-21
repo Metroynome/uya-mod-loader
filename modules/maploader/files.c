@@ -184,8 +184,8 @@ int mapScanActive(void){return phase!=0;}
 int mapScanCurrent(void){return current;}
 int mapScanTotal(void){return phase==4?candidates:0;}
 /* Keep repeated 120-byte catalog moves out of the scan state machine. */
-static void copyRecord(MapRecord *to,const MapRecord *from) __attribute__((noinline));
-static void copyRecord(MapRecord *to,const MapRecord *from)
+void mapCopyRecord(MapRecord *to,const MapRecord *from) __attribute__((noinline));
+void mapCopyRecord(MapRecord *to,const MapRecord *from)
 {unsigned int i;unsigned char *d=(unsigned char *)to;const unsigned char *s=(const unsigned char *)from;for(i=0;i<sizeof(*to);++i)d[i]=s[i];}
 int mapScanTick(void)
 {
@@ -215,15 +215,15 @@ int mapScanTick(void)
     }
     if(phase==4 && current<candidates){
         r=inspect(&work[current]);if(r<0){finish(1);return -1;}
-        if(r)copyRecord(&work[kept++],&work[current]);++current;waitTicks=0;return 0;
+        if(r)mapCopyRecord(&work[kept++],&work[current]);++current;waitTicks=0;return 0;
     }
     /* Stable ordering makes the fingerprint independent of directory order. */
-    for(n=1;n<kept;++n){copyRecord(&temp,&work[n]);i=n;while(i && compare(work[i-1].filename,temp.filename)>0){copyRecord(&work[i],&work[i-1]);--i;}copyRecord(&work[i],&temp);}
+    for(n=1;n<kept;++n){mapCopyRecord(&temp,&work[n]);i=n;while(i && compare(work[i-1].filename,temp.filename)>0){mapCopyRecord(&work[i],&work[i-1]);--i;}mapCopyRecord(&work[i],&temp);}
     fingerprint=hash(work,kept*sizeof(MapRecord));
     if(fingerprint==cachedFingerprint && kept==mapCount){mapMessage("Custom maps are up to date");finish(0);return 1;}
     selected[0]=0;if(mapSelection>=0 && mapSelection<mapCount)copyName(selected,mapRecords[mapSelection].filename);
     /* Sort the displayed list by name after hashing the canonical file order. */
-    for(n=1;n<kept;++n){copyRecord(&temp,&work[n]);i=n;while(i && compare(work[i-1].name,temp.name)>0){copyRecord(&work[i],&work[i-1]);--i;}copyRecord(&work[i],&temp);}
+    for(n=1;n<kept;++n){mapCopyRecord(&temp,&work[n]);i=n;while(i && compare(work[i-1].name,temp.name)>0){mapCopyRecord(&work[i],&work[i-1]);--i;}mapCopyRecord(&work[i],&temp);}
     mapFree(mapRecords);mapRecords=work;work=0;mapCount=kept;mapSelection=-1;
     for(i=0;i<mapCount;++i)if(!compare(selected,mapRecords[i].filename))mapSelection=i;
     if(selected[0] && mapSelection<0){mapRestoreBase();mapClearLoad();}

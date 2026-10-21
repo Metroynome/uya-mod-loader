@@ -335,8 +335,9 @@ its own low-memory range only when installed:
 |---|---|
 | `0x000c8000?0x000ce000` | Optional exception handler, 24 KiB including workspace |
 | `0x000f0000?0x000f2f80` | Loader, maximum 12,160 bytes |
-| `0x000f2f80?0x000ff000` | Modules, 49,280 bytes including BSS |
-| `0x000ff000?0x00100000` | Persistent loader state |
+| `0x000f2f80-0x000ffc00` | Modules, 52,352 bytes including BSS |
+| `0x000ffc00-0x000fff00` | Persistent loader state
+| `0x000fff00-0x00100000` | Reserved Forge PINE mailbox |
 
 Headers include ABI version, region, mode mask, link address, sizes, and entry
 point offsets. The loader rejects invalid ranges, oversized/truncated images,
@@ -457,3 +458,5 @@ Supporting files belong in `uya/mods/utils/`; Map Loader opens
 `host0:uya/mods/utils/mapscan.irx`. Other mods may put their own named files or
 subfolders there. Utilities are not module-list entries. Module binaries stay
 in `uya/mods/`, and saved settings stay in `uya/config/`.
+
+Forge editor integration: see [PINE command protocol](modules/forge/PINE.md).

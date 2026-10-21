@@ -1,24 +1,24 @@
 /* UYA host module loader. No heap resizing or game allocator patches.
  * Flow: choose the current game's API -> read modules.txt once -> validate and
  * load each image -> initialize/update only modules matching the active mode.
- * Memory: loader f0000-f2f80, modules f2f80-ff000, state ff000-100000.
+ * Memory: loader f0000-f2f80, modules f2f80-ffc00, state ffc00-fff00, Forge mailbox fff00-100000.
  */
 #include "module.h"
 #include "config.h"
 #include "exception.h"
 #include "platform.h"
 #include "strings.h"
+#include "include/forge.h"
 
 #ifndef MODULE_START
 #define MODULE_START 0x000f2f80U
 #endif
-#define MODULE_END 0x000ff000U
+#define MODULE_END 0x000ffc00U
 #define MODULE_LIMIT 8
-#define LOADER_MAGIC 0x554d4c37U
+#define LOADER_MAGIC 0x554d4c39U
 
 struct LoadedModule {
     unsigned int address, size;
-    char filename[112];
     ModuleUpdate update;
     ModuleInit init;
     unsigned int modes, initialized, contexts, policy, active;
@@ -34,15 +34,16 @@ struct LoaderState {
     struct LoadedModule modules[MODULE_LIMIT];
     ModuleApi api;
     int configBusy;
-    char list[2048];
     unsigned int currentModule; /* index + 1; zero outside callbacks */
     struct ModuleService services[8];
 };
 
 #ifndef STATE
-#define STATE ((struct LoaderState *)0x000ff000)
+#define STATE ((struct LoaderState *)0x000ffc00)
 #endif
-typedef char LoaderStateMustFit[(sizeof(struct LoaderState) <= 0x1000) ? 1 : -1];
+#ifdef _EE
+typedef char LoaderStateMustFit[(sizeof(struct LoaderState) <= 0x300) ? 1 : -1];
+#endif
 
 const ModuleApi *moduleConfigApi(void) { return &STATE->api; }
 int *moduleConfigBusy(void) { return &STATE->configBusy; }
@@ -265,7 +266,7 @@ static int resolveModuleName(const char *name, char *filename)
 }
 
 /* Images have a fixed linked address; BSS is zeroed before initialization. */
-static void loadModule(const char *name, unsigned int modes)
+static void loadModule(const char *name, unsigned int modes, char names[MODULE_LIMIT][112])
 {
     char path[128], filename[112];
     unsigned int i;
@@ -284,7 +285,7 @@ static void loadModule(const char *name, unsigned int modes)
     }
     /* First successfully loaded, enabled entry wins; aliases cannot run twice. */
     for (i = 0; i < STATE->count; ++i) {
-        if (sameText(filename, STATE->modules[i].filename)) {
+        if (sameText(filename, names[i])) {
             printf("loader: duplicate module skipped: %s\n", name);
             return;
         }
@@ -322,7 +323,7 @@ static void loadModule(const char *name, unsigned int modes)
         return;
     }
     module = &STATE->modules[STATE->count++];
-    strcpy(module->filename, filename);
+    strcpy(names[STATE->count-1], filename);
     module->address = header.address;
     module->size = header.memorySize;
     module->update = 0;
@@ -392,6 +393,7 @@ static int parseModuleLine(char *line, char **name, unsigned int *modes)
 /* Read once per boot. Accept LF/CRLF, blank lines and // comments. */
 static int loadModuleList(void)
 {
+    char list[2048], names[MODULE_LIMIT][112]; /* Startup-only list and duplicate names. */
     char *line, *next, *name;
     unsigned int modes, lineNumber = 0;
     int parsed;
@@ -404,9 +406,9 @@ static int loadModuleList(void)
         printf("loader: modules.txt unavailable (%d)\n", fd);
         return 0;
     }
-    while (size < sizeof(STATE->list) - 1) {
-        count = fileRead(fd, STATE->list + size, sizeof(STATE->list) - 1 - size);
-        if (count < 0 || (unsigned int)count > sizeof(STATE->list) - 1 - size) {
+    while (size < sizeof(list) - 1) {
+        count = fileRead(fd, list + size, sizeof(list) - 1 - size);
+        if (count < 0 || (unsigned int)count > sizeof(list) - 1 - size) {
             valid = 0;
             break;
         }
@@ -414,16 +416,16 @@ static int loadModuleList(void)
             break;
         size += count;
     }
-    if (size == sizeof(STATE->list) - 1 && !atEnd(fd))
+    if (size == sizeof(list) - 1 && !atEnd(fd))
         valid = 0;
     if (fileClose(fd) < 0)
         valid = 0;
-    if (!valid || memchr(STATE->list, 0, size)) {
+    if (!valid || memchr(list, 0, size)) {
         printf("loader: modules.txt read failed or exceeds 2047 bytes\n");
         return 0;
     }
-    STATE->list[size] = 0;
-    line = STATE->list;
+    list[size] = 0;
+    line = list;
     while (*line) {
         next = strchr(line, '\n');
         if (next)
@@ -433,7 +435,7 @@ static int loadModuleList(void)
         if (parsed < 0)
             printf("loader: invalid modules.txt line %u (expected path and contexts or 0..3)\n", lineNumber);
         else if (parsed && modes)
-            loadModule(name, modes);
+            loadModule(name, modes, names);
         if (!next)
             break;
         line = next;
@@ -452,6 +454,7 @@ void loaderTick(unsigned int layout)
         return;
     if (STATE->magic != LOADER_MAGIC) {
         memset(STATE, 0, sizeof(*STATE));
+        memset((void *)FORGE_MAILBOX,0,256);
         STATE->magic = LOADER_MAGIC;
     }
     if (!platformReady(layout))

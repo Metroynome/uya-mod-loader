@@ -12,7 +12,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 REGIONS = {"ntscu": 1, "pal": 2, "ntscj": 3}
-LOW, HIGH = 0xf2f80, 0xff000
+LOW, HIGH = 0xf2f80, 0xffc00
 MODES = {"campaign": 1, "multiplayer": 2, "both": 3}
 NAME = re.compile(r"[a-z][a-z0-9_-]{0,39}\Z")
 
@@ -122,7 +122,7 @@ class Builder:
         if not sdk:
             raise ValueError("Set PS2SDK and put the EE compiler on PATH (see README.md)")
         self.sdk = Path(sdk)
-        self.flags = ["-std=gnu99", "-Os", "-G0", "-Wall", "-W", "-ffreestanding", "-fno-builtin",
+        self.flags = ["-std=gnu99", "-Os", "-fno-inline", "-G0", "-Wall", "-W", "-ffreestanding", "-fno-builtin",
                       "-fno-pic", "-mno-abicalls", "-ffunction-sections", "-fdata-sections", "-D_EE",
                       f"-DUYA_MODULE_REGION={REGIONS[region]}", f'-DUYA_REGION_NAME="{region}"',
                       f"-D{region.upper()}", f"-DUYA_{region.upper()}", f"-DRAC3_{region.upper()}",

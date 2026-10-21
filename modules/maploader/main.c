@@ -12,24 +12,86 @@ static void copy(char *dest,const char *src,unsigned int cap)
 void mapMessage(const char *message) { copy(status,message,sizeof(status)); dirty=1; }
 static int reloadMap(void) {return mapHopRequest(mapSelection);}
 static const char *hopStatus(void) {return status;}
-static const MapHopApi hopService={FORGE_API_VERSION,sizeof(MapHopApi),mapHopAvailable,reloadMap,hopStatus};
+static unsigned int commandContext(void),commandState(void),commandError(void);
+static int commandRequest(unsigned int,const char *);
+static const MapHopApi hopService={FORGE_API_VERSION,sizeof(MapHopApi),mapHopAvailable,reloadMap,hopStatus,commandContext,commandRequest,commandState,commandError};
 static int choose(void *context)
 {
     int index=(int)context-1;
+    if(mapScanActive())return 0;
     if(mapHopInGame())return mapHopRequest(index);
     if(!mapStaging() || !mapHooksReady() || mapLoading() || index<0 || index>=mapCount) return 0;
     if(!mapValidate(&mapRecords[index])) { mapMessage("Map files changed: re-enter staging"); return 0; }
     mapSelection=index;
-    mapApi->print("maploader: selected %s; choose retail base ID %u (local ID %u) before starting\n",
-                  mapRecords[index].name,mapRecords[index].base,mapRecords[index].base+10);
     mapMessage(mapChooseBase(mapRecords[index].base)?"Selected; local base map updated":
                "Selected; host must choose its retail base");
     return 1;
 }
+/* Shared asynchronous requests; usable without a menu service. */
+static unsigned int jobState,jobError,jobCommand;
+static char jobName[64];
+static unsigned int commandState(void){return jobState;}
+static unsigned int commandError(void){return jobError;}
+static unsigned int commandContext(void)
+{
+    if(mapApi->context!=UYA_CONTEXT_LOCAL || !mapForgeActive() || !mapHooksReady())return 0;
+    return mapStaging()==1?1:mapHopInGame()?2:0;
+}
+static void commandFinish(unsigned int error)
+{jobError=error;jobState=error?FORGE_FAILED:FORGE_COMPLETE;}
+static int commandSelect(void)
+{
+    int i,j;
+    for(i=0;i<mapCount;++i){
+        for(j=0;jobName[j] && jobName[j]==mapRecords[i].filename[j];++j);
+        if(!jobName[j] && !mapRecords[i].filename[j]){
+            if(!choose((void *)(i+1)))return FORGE_ERROR_LOAD;
+            jobState=mapHopInGame()?FORGE_LOADING:FORGE_COMPLETE;dirty=1;return 0;
+        }
+    }
+    return FORGE_ERROR_NOT_FOUND;
+}
+static int commandRequest(unsigned int command,const char *name)
+{
+    unsigned int context=commandContext(),i;
+    if(jobState==FORGE_SCANNING || jobState==FORGE_LOADING || mapScanActive() || mapLoading() || mapHopResult==1)return FORGE_ERROR_BUSY;
+    if(!context)return FORGE_ERROR_CONTEXT;
+    if(command<FORGE_RELOAD || command>FORGE_START_GAME)return FORGE_ERROR_COMMAND;
+    if(command==FORGE_RELOAD && context!=2)return FORGE_ERROR_CONTEXT;
+    if(command==FORGE_START_GAME && context!=1)return FORGE_ERROR_CONTEXT;
+    if(command==FORGE_SELECT || command==FORGE_REFRESH_SELECT){
+        if(!name || !name[0] || name[0]=='.')return FORGE_ERROR_NAME;
+        for(i=0;i<64 && name[i];++i){unsigned char c=name[i];
+            if(c<32 || c>126 || c=='/' || c=='\\' || c==':' || c=='"' || c=='*' || c=='?')return FORGE_ERROR_NAME;
+        }
+        if(i==64)return FORGE_ERROR_NAME;
+        copy(jobName,name,sizeof(jobName));
+    }
+    jobCommand=command;jobError=0;
+    if(command==FORGE_REFRESH || command==FORGE_REFRESH_SELECT){
+        mapScanStart();if(!mapScanActive())return FORGE_ERROR_SCAN;
+        jobState=FORGE_SCANNING;
+    }else if(command==FORGE_RELOAD || command==FORGE_START_GAME){
+        if(!(command==FORGE_START_GAME?mapStartGame():reloadMap()))return FORGE_ERROR_LOAD;jobState=FORGE_LOADING;
+    }else return commandSelect();
+    return 0;
+}
+static void commandTick(int scanResult)
+{
+    if(jobState==FORGE_SCANNING && !mapScanActive()){
+        if(scanResult<0)commandFinish(FORGE_ERROR_SCAN);
+        else if(scanResult>0){
+            if(jobCommand==FORGE_REFRESH_SELECT){int error=commandSelect();if(error)commandFinish(error);}
+            else commandFinish(0);
+        }else commandFinish(FORGE_ERROR_CONTEXT);
+    }
+    if(jobState==FORGE_LOADING && mapHopResult!=1)
+        commandFinish(mapHopResult==2?0:FORGE_ERROR_LOAD);
+}
 static void clear(void *context)
 {
     (void)context;
-    if(!mapStaging() || mapLoading()) return;
+    if(!mapStaging() || mapLoading() || mapScanActive()) return;
     mapRestoreBase(); mapSelection=-1; mapClearLoad(); mapMessage("Retail map selected");
 }
 static const char *mapLabel(void *context,int index)
@@ -37,7 +99,8 @@ static const char *mapLabel(void *context,int index)
 static void selectMap(void *context,int index)
 {
     (void)context;
-    if((!mapStaging() && !(mapForgeActive() && mapHopInGame())) || !mapHooksReady() || mapLoading()) return;
+    if(mapScanActive())return;
+    if((!mapStaging() && !(mapForgeActive() && mapHopInGame())) || !mapHooksReady() || mapLoading() || mapScanActive()) return;
     if(!index && mapHopInGame()){mapMessage("Retail map hopping is not enabled");return;}
     if(index) { if(!choose((void *)index)) return; }
     else clear(0);
@@ -74,7 +137,7 @@ static int add(const char *label,int type,ModMenuCallback callback,void *context
 static int lastEditable=-1;
 static int rebuild(int context)
 {
-    int ok=1,editable=(context>0 || (mapForgeActive() && mapHopInGame())) && mapHooksReady() && !mapLoading();
+    int ok=1,editable=(context>0 || (mapForgeActive() && mapHopInGame())) && mapHooksReady() && !mapLoading() && !mapScanActive();
     int focused=tab>0 && menu->getActiveTab()==tab;
     lastEditable=editable;
     if(tab>0) menu->removeTab(tab);
@@ -102,6 +165,7 @@ static void deactivate(void)
 {
     if(menu) {menu->setProgress(0,0,0);if(tab)menu->removeTab(tab);}
     tab=0;menu=0;dirty=1;lastContext=-1;
+    commandFinish(FORGE_ERROR_INACTIVE);
     mapHopCancel();mapRestoreBase();mapDisableHooks();mapScanRelease();
 }
 int moduleInit(const ModuleApi *api)
@@ -121,7 +185,7 @@ int moduleInit(const ModuleApi *api)
 }
 void moduleUpdate(void)
 {
-    const ModMenuApi *found; int context;
+    const ModMenuApi *found; int context,scanResult=0,scanAllowed;
     mapHopTick();
     if(mapLoading()) return; /* Hostfs/RPC may yield through the loader hook. */
     mapInstallHooks();
@@ -131,13 +195,16 @@ void moduleUpdate(void)
         lastContext=-2; dirty=1; return;
     }
     if(context==1 && lastContext!=1)mapScanStart();
-    if(context!=1 && mapScanActive()){mapScanRelease();if(menu)menu->setProgress(0,0,0);}
-    if(context==1 && mapScanActive()){
-        int result=mapScanTick();
+    scanAllowed=context==1 || (mapForgeActive() && mapHopInGame());
+    if(!scanAllowed && mapScanActive()){mapScanRelease();if(menu)menu->setProgress(0,0,0);}
+    if(scanAllowed && mapScanActive()){
+        int result=mapScanTick();scanResult=result;
         found=modmenuFind(mapApi);
         if(found)found->setProgress(mapScanActive()?"Scanning custom maps...":0,mapScanCurrent(),mapScanTotal());
         if(result)dirty=1;
     }
+    commandTick(scanResult);
+    if(context==1 && mapSelection<0)mapRestoreBase();
     if(context==1 && mapSelection>=0) mapChooseBase(mapRecords[mapSelection].base);
     mapUpdateName();
     if(mapApi->mode==UYA_MODE_CAMPAIGN) {
@@ -149,6 +216,6 @@ void moduleUpdate(void)
     if(!found) return;
     menu=found;
     /* Hooks may become ready after the staging screen first appears. */
-    if(lastEditable!=((context>0 || (mapForgeActive() && mapHopInGame())) && mapHooksReady() && !mapLoading())) dirty=1;
+    if(lastEditable!=((context>0 || (mapForgeActive() && mapHopInGame())) && mapHooksReady() && !mapLoading() && !mapScanActive())) dirty=1;
     if(dirty || !tab) { if(rebuild(context)) dirty=0; }
 }
