@@ -321,6 +321,16 @@ static void draw(void)
             menuBackendBox(.115f,y-.008f,.77f,.052f,0x8018608f);
             menuBackendText(.125f,y,color,">");
         }
+        if(items[i].definition.type==MODMENU_ACTION) {
+            /* Horizon config.c button: inset dark border, gray face, centered
+             * gold label. The outer row highlight still indicates focus. */
+            int enabled=items[i].enabled;
+            menuBackendBox(.165f,y-.006f,.67f,.048f,enabled?0x80303030:0x40181818);
+            menuBackendBox(.17f,y-.001f,.66f,.038f,enabled?0x80505050:0x40282828);
+            menuBackendText(.5f-menuBackendWidth(items[i].label)*.5f,y,
+                enabled?0x8069cbf2:0x40346579,items[i].label);
+            continue;
+        }
         menuBackendText(.15f,y,color,items[i].label);
         if(items[i].definition.type==MODMENU_TOGGLE) {
             const char *state=*items[i].definition.value?"ON":"OFF";

@@ -86,7 +86,8 @@ Mutation functions return zero on success, negative on failure.
 
 Supported controls:
 
-- `MODMENU_ACTION`: invokes the required callback on Cross or Right.
+- `MODMENU_ACTION`: renders a Horizon-style bordered button with centered text
+  and invokes the required callback on Cross or Right. Disabled buttons are dimmed.
 - `MODMENU_TOGGLE`: toggles the pointed-to integer between zero and one.
 - `MODMENU_RANGE`: changes the pointed-to integer by a positive step, clamped
   to inclusive minimum/maximum bounds.
