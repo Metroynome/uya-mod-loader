@@ -30,6 +30,8 @@ test:
 	./build/config-test
 	$(CC) -std=gnu99 -fno-builtin -iquote . tests/mapscan.c -o build/mapscan-test
 	./build/mapscan-test
+	$(CC) -std=gnu99 -fno-builtin -Wno-int-to-pointer-cast -DUYA_MODULE_REGION=1 -I. tests/forge_hop.c -o build/forge-hop-test
+	./build/forge-hop-test
 	@set -e; for region in 1 2; do \
 	  $(CC) -std=gnu99 -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast -DUYA_MODULE_REGION=$$region -I. tests/maploader.c -o build/maploader-test-$$region; \
 	  ./build/maploader-test-$$region; \

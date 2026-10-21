@@ -72,6 +72,15 @@ static const unsigned int radarHooks[10]={0x4931b4,0x49520c,0x48ab24,0x488274,0x
 static const unsigned int localRadarHooks[6]={0x4a41b4,0x4a620c,0x49bb24,0x499274,0x49868c,0x495ea4};
 #endif
 int mapAllowOnline;
+unsigned int mapSceneRequest;
+#if UYA_MODULE_REGION == 1
+#include "hop_addresses.h"
+static unsigned int wadReader=WAD_READ,soundInit=SOUND_INIT,soundCore=SOUND_CORE;
+#else
+#define wadReader WAD_READ
+#define soundInit SOUND_INIT
+#define soundCore SOUND_CORE
+#endif
 static MapRecord active;
 static int armed,busy,failed,soundSent;
 static void *soundBuffer;
@@ -189,6 +198,7 @@ static void hookedTable(unsigned int sector,unsigned int count,void *dest)
 {
     unsigned int level=WORD(MAP_ID);
     ((void (*)(unsigned int,unsigned int,void *))TOC_READ)(sector,count,dest);
+    mapHopOnLoad();
     armed=failed=soundSent=0; soundBuffer=0;
     if(mapSelection<0 || mapSelection>=mapCount) return;
     active=mapRecords[mapSelection];
@@ -241,15 +251,15 @@ static void hookedSound(int loc,int offset,SoundCallback callback,unsigned long 
     ((void (*)(int,int,SoundCallback,unsigned long long))SOUND_DISC)(loc,offset,callback,user);
 }
 static void hookedSoundInit(void)
-{ if(!armed || !soundSent) ((void (*)(void))SOUND_INIT)(); }
+{ if(!armed || !soundSent) ((void (*)(void))soundInit)(); }
 static void hookedSoundCore(void)
-{ if(!armed || !soundSent) ((void (*)(void))SOUND_CORE)(); }
+{ if(!armed || !soundSent) ((void (*)(void))soundCore)(); }
 static void hookedLoad(void *dest,unsigned int sector,unsigned int sectors)
 {
     unsigned int part=WORD(PART_ID),size;
     const char *extension;
     if(!armed || part>1) {
-        ((void (*)(void *,unsigned int,unsigned int))WAD_READ)(dest,sector,sectors); return;
+        ((void (*)(void *,unsigned int,unsigned int))wadReader)(dest,sector,sectors); return;
     }
     size=part?active.world:active.wad; extension=part?".world":".wad";
     busy=1;
@@ -259,8 +269,8 @@ static void hookedLoad(void *dest,unsigned int sector,unsigned int sectors)
         if(active.sound>sectors*0x800 || !writable(dest,active.sound) ||
            !mapReadPart(&active,".sound",dest,active.sound)) { loadError(); busy=0; return; }
         soundBuffer=dest; mapApi->flushCache(0);
-        ((void (*)(void))SOUND_INIT)();
-        ((void (*)(void))SOUND_CORE)();
+        ((void (*)(void))soundInit)();
+        ((void (*)(void))soundCore)();
         soundBuffer=0;
         if(!soundSent || failed) { loadError(); busy=0; return; }
     }
@@ -275,7 +285,7 @@ static void hookedLoad(void *dest,unsigned int sector,unsigned int sectors)
         }
         mapApi->flushCache(0);
     } else {
-        ((void (*)(void *,unsigned int,unsigned int))WAD_READ)(dest,sector,sectors);
+        ((void (*)(void *,unsigned int,unsigned int))wadReader)(dest,sector,sectors);
     }
     busy=0;
 }
@@ -302,6 +312,24 @@ static struct Hook hooks[]={
     {SOUND_INIT_HOOK,JAL(SOUND_INIT),hookedSoundInit},
     {SOUND_CORE_HOOK,JAL(SOUND_CORE),hookedSoundCore}
 };
+/* Loading code is map-specific after leaving staging. Switch the entire hook
+ * group only when its retail/current-owned calls match the requested overlay. */
+static void configureHooks(void)
+{
+#if UYA_MODULE_REGION == 1
+    unsigned int level=WORD(LEVEL_ID),i,a[6],o[6];const unsigned int *row;
+    if(level<39 || level>49)return;
+    row=hopAddresses[level-39];
+    if(hooks[1].address==row[0]){mapSceneRequest=row[4];return;}
+    a[0]=TOC_HOOK;a[1]=row[0];a[2]=row[0]-0x158;
+    a[3]=row[3]+0x44;a[4]=row[0]+0x2c;a[5]=row[0]+0x34;
+    o[0]=JAL(TOC_READ);o[1]=JAL(row[1]);o[2]=JAL(CD_SYNC);
+    o[3]=JAL(SOUND_DISC);o[4]=JAL(row[2]);o[5]=JAL(row[3]);
+    for(i=0;i<6;++i)if(WORD(a[i])!=o[i] && WORD(a[i])!=JAL(hooks[i].replacement))return;
+    for(i=0;i<6;++i){hooks[i].address=a[i];hooks[i].original=o[i];}
+    wadReader=row[1];soundInit=row[2];soundCore=row[3];mapSceneRequest=row[4];
+#endif
+}
 static int radarMatches(unsigned int address)
 {
     static const unsigned int signature[10]={
@@ -347,6 +375,7 @@ void mapInstallHooks(void)
     unsigned int i,changed=0,level;
     if(!mapMultiplayerReady() || busy) return;
     if(mapOnlineDisabled()) { mapDisableHooks(); return; }
+    configureHooks();
     if(WORD(LEVEL_ID)!=39) savedSettings=0;
     /* Tail-hook the transition name builder, preserving its stack delay slot. */
     if(WORD(NAME_HOOK)==0x03e00008 && WORD(NAME_HOOK+4)==0x27bd0050 &&

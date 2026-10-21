@@ -48,4 +48,13 @@ void mapDisableHooks(void);
 int mapLoading(void);
 void mapClearLoad(void);
 void mapMessage(const char *message);
+extern int mapHopSawLoading;
+extern unsigned int mapSceneRequest;
+int mapForgeActive(void);
+int mapHopInGame(void);
+int mapHopAvailable(void);
+int mapHopRequest(int index);
+void mapHopTick(void);
+void mapHopCancel(void);
+void mapHopOnLoad(void);
 #endif

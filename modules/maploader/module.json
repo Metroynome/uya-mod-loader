@@ -9,6 +9,7 @@
     "main.c",
     "files.c",
     "multiplayer.c",
-    "directory.c"
+    "directory.c",
+    "hop.c"
   ]
 }
