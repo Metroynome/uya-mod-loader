@@ -27,6 +27,7 @@ typedef struct MapHopApi {
 #define FORGE_SELECT 3U
 #define FORGE_REFRESH_SELECT 4U
 #define FORGE_START_GAME 5U
+#define FORGE_SELECT_RETAIL 6U
 #define FORGE_IDLE 0U
 #define FORGE_SCANNING 1U
 #define FORGE_LOADING 2U

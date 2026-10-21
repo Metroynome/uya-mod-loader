@@ -3,7 +3,7 @@
 #include "maploader.h"
 #include "include/forge.h"
 #define WORD(a) (*(volatile unsigned int *)(a))
-static unsigned int requestAddress;
+static unsigned int targetBase;
 static int queued=-1,phase,ticks;
 int mapHopSawLoading;
 int mapHopResult;
@@ -61,8 +61,9 @@ int mapHopAvailable(void)
 {return mapForgeActive() && mapHopInGame() && !phase && !mapLoading() && !mapScanActive() && mapHooksReady() && findRequest()!=0;}
 int mapHopRequest(int index)
 {
-    if(!mapHopAvailable() || index<0 || index>=mapCount)return 0;
-    if(!mapValidate(&mapRecords[index])) {mapMessage("Map files changed; refresh before reloading");return 0;}
+    if(!mapHopAvailable() || (index<0?(index>-40 || index<-49):index>=mapCount))return 0;
+    if(index>=0 && !mapValidate(&mapRecords[index])) {mapMessage("Files changed; refresh first");return 0;}
+    targetBase=index<0?-index:mapRecords[index].base;
     mapHopResult=1;queued=index;phase=1;ticks=mapHopSawLoading=0;mapMessage("Map hop queued");return 1;
 }
 /* NTSC-U local staging update 0x6ab8e8 calls 0x6ac720 for its
@@ -113,7 +114,7 @@ void mapHopOnLoad(void)
 }
 void mapHopTick(void)
 {
-    unsigned int settings,base;
+    unsigned int settings,base,requestAddress;
     if(!phase)return;
     if(phase==3){
         unsigned int menu=startGameMenu();
@@ -129,24 +130,24 @@ void mapHopTick(void)
         settings=WORD(0x2417c0);
         if(settings<0x100000 || settings>0x1fffe00 || (settings&3) || !findRequest()) {mapHopCancel();return;}
         requestAddress=findRequest();
-        base=mapRecords[queued].base;
-        mapSelection=queued;mapClearLoad();
+        base=targetBase;
+        mapSelection=queued<0?-1:queued;mapClearLoad();
         WORD(settings+0x17c)=base;
         phase=2;
-        mapMessage("Loading custom map...");
+        mapMessage("Loading map...");
         MAP_HOP_CALL(requestAddress,base);
         return;
     }
     ++ticks;
     /* mapHopOnLoad marks the one-time reset at the level-loading boundary. */
     if(phase==2 && mapHopSawLoading && mapHopInGame() && !mapLoading() &&
-       WORD(0x1f8528)==mapRecords[queued].base) {
+       WORD(0x1f8528)==targetBase) {
         int hudReady=restoreHud(WORD(0x1f8528));
         mapHopResult=hudReady?2:3;
-        phase=0;queued=-1;requestAddress=0;
+        phase=0;queued=-1;
         mapMessage(hudReady?"Map hop complete":"HUD setup unavailable; return to staging");
     } else if(ticks>12000) {
-        mapHopResult=3;phase=0;queued=-1;mapMessage("Map transition timed out; restart if needed");
+        mapHopResult=3;phase=0;queued=-1;mapMessage("Load timeout; restart game");
     }
 }
-void mapHopCancel(void) {if(phase)mapHopResult=3;phase=0;queued=-1;requestAddress=0;}
+void mapHopCancel(void) {if(phase)mapHopResult=3;phase=0;queued=-1;}

@@ -9,7 +9,7 @@ they are not a claim that all features exist. No Forge v2 source changes are inc
 
 Enable `forge.ntscu local` alongside `maploader` and `modmenu` in modules.txt.
 Rebuild and deploy all modules together, then cold-boot. Open MOD MENU from the
-pause menu. Forge provides **Reload Current Map**, and the Custom Maps list can
+pause menu. Forge provides **Reload Current Map** for retail or custom maps, and the Custom Maps list can
 request a hop during gameplay while Forge is active. In-game `None` is rejected;
 its staging behavior is unchanged. This prototype supports NTSC-U retail base
 overlays 40-49; split-screen overlays 50-55, PAL, and NTSC-J hopping remain disabled.
@@ -134,10 +134,12 @@ While Forge is active:
   repeatedly trigger reloads.
 - Progress captures controller input and releases it on completion or failure.
 
-The existing `None` option keeps its staging meaning: restore the selected retail
-map. During gameplay, initially disable it with an explanation until a safe hop
-back to the original retail map has been implemented and verified. Do not merely
-clear the override while a custom level is still running.
+The Custom Maps list merges retail maps 40-49 alphabetically with custom entries, with
+"Retail map" descriptions. Selecting one in staging clears the custom override
+and makes it the baseline for subsequent custom selections. During gameplay,
+Forge performs a full transition with player reset and HUD setup. `None` remains
+staging-only and restores the baseline; choose a named retail entry in-game.
+The PINE interface provides the same behavior through command 6.
 
 With Forge inactive, hide the in-game list and reject in-game hop requests;
 staging map selection and refresh continue to work normally.
@@ -270,3 +272,13 @@ should continue to work when no editor or PINE client is connected.
 Further optional ideas: show load duration and expose developer diagnostics.
 These are secondary to reliable full reloads and hops and are not promises of
 implemented functionality.
+
+Retail hopping: automated tests and all regional builds pass. Live NTSC-U checks:
+- Temple of Shaar -> retail Korgon Outpost completed with the custom override
+  cleared. The user confirmed the retail loading name and HUD.
+- Reloading retail Korgon completed with custom assets still disabled.
+- Korgon -> Bakisi Mini completed with the custom override re-enabled on base 40.
+- The user confirmed gameplay and HUD after the retail reload and return hop.
+  Retail entries also appeared correctly; they now share alphabetical ordering
+  with custom maps, with `None` first. Other retail bases and PAL/split-screen
+  hopping have not been live-qualified.

@@ -21,7 +21,7 @@ void forgeBridgeTick(const MapHopApi *p)
     volatile ForgeMailbox *b=FORGE_MAILBOX;
     unsigned int id,command,i;char name[64];int error;
     ++b->heartbeat;b->available=p!=0;b->context=p?p->context():0;
-    b->capabilities=b->context==1?60:b->context==2?30:0;
+    b->capabilities=b->context==1?124:b->context==2?94:0;
     if(running){
         b->state=p?p->state():FORGE_FAILED;b->error=p?p->error():FORGE_ERROR_INACTIVE;
         message(p?p->status():"Map Loader unavailable");

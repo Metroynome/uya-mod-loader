@@ -158,3 +158,19 @@ again. The optional `maploader-online.txt` flag does not override `modules.txt`:
 future online use requires both an online-capable context entry and that flag.
 This is not support for coexistence with the full Horizon patch's overlapping
 memory layout.
+
+## Retail maps and Forge
+
+Custom Maps keeps `None` first, then merges retail bases 40-49 and installed
+custom maps alphabetically by display name. Retail
+entries use their stock names and show "Retail map" in the description area.
+They remain available when no custom maps are installed. Staging retail selection
+clears the override and establishes the baseline that `None` restores after a
+later custom selection. Retail names are displayed in English.
+
+With Forge active in supported NTSC-U Local Play gameplay, choosing a retail
+entry hops directly to it. Reload Current Map supports both retail and custom
+maps. The transition clears custom WAD/world, sound and radar overrides before
+retail loading, and restores the stock loading name. `None` remains staging-only.
+PAL/split-screen hopping restrictions are unchanged. See
+[Forge PINE commands](../forge/PINE.md) for command 6 and supported base IDs.

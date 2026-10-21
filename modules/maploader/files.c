@@ -5,6 +5,7 @@
 const ModuleApi *mapApi;
 MapRecord *mapRecords;
 int mapCount, mapSelection=-1;
+int mapCatalogReady;
 
 static int validName(const char *text,unsigned int size)
 {
@@ -100,7 +101,7 @@ unsigned int mapCatalogRevision;
 #endif
 static unsigned int hash(const void *data,unsigned int n)
 {const unsigned char *p=data;unsigned int h=2166136261U;while(n--)h=(h^*p++)*16777619U;return h;}
-static int compare(const char *a,const char *b)
+int mapCompareText(const char *a,const char *b)
 {while(*a && *a==*b){++a;++b;}return (unsigned char)*a-(unsigned char)*b;}
 static void copyName(char *to,const char *from)
 {while((*to++=*from++));}
@@ -168,6 +169,7 @@ static void finish(int error)
 {
     mapFree(work);work=0;phase=0;
     if(error)mapMessage("Map scan failed; retry by re-entering staging");
+    else mapCatalogReady=1;
 }
 void mapScanStart(void)
 {
@@ -178,7 +180,7 @@ void mapScanStart(void)
     if(!work){mapMessage("Not enough memory to scan custom maps");return;}
     memset(work,0,MAP_LIMIT*sizeof(MapRecord));candidates=current=kept=waitTicks=0;
     ++mapCatalogRevision; /* Re-read descriptions even when the catalog is unchanged. */
-    mapDirectoryReset();phase=1;mapApi->print("maploader: Local Play staging scan started\n");
+    mapDirectoryReset();phase=1;
 }
 int mapScanActive(void){return phase!=0;}
 int mapScanCurrent(void){return current;}
@@ -203,7 +205,7 @@ int mapScanTick(void)
         if(phase==3 && !r){if(!mapDirectoryRequest(3)){finish(1);return -1;}phase=5;return 0;}
         if(phase==3){
             for(n=0;name[n];++n);
-            if(n>8 && n<72 && !compare(name+n-8,".version")){
+            if(n>8 && n<72 && !mapCompareText(name+n-8,".version")){
                 name[n-8]=0;
                 if(validName(name,64)){
                     if(candidates==MAP_LIMIT){mapDirectoryRequest(3);finish(1);return -1;}
@@ -218,23 +220,22 @@ int mapScanTick(void)
         if(r)mapCopyRecord(&work[kept++],&work[current]);++current;waitTicks=0;return 0;
     }
     /* Stable ordering makes the fingerprint independent of directory order. */
-    for(n=1;n<kept;++n){mapCopyRecord(&temp,&work[n]);i=n;while(i && compare(work[i-1].filename,temp.filename)>0){mapCopyRecord(&work[i],&work[i-1]);--i;}mapCopyRecord(&work[i],&temp);}
+    for(n=1;n<kept;++n){mapCopyRecord(&temp,&work[n]);i=n;while(i && mapCompareText(work[i-1].filename,temp.filename)>0){mapCopyRecord(&work[i],&work[i-1]);--i;}mapCopyRecord(&work[i],&temp);}
     fingerprint=hash(work,kept*sizeof(MapRecord));
     if(fingerprint==cachedFingerprint && kept==mapCount){mapMessage("Custom maps are up to date");finish(0);return 1;}
     selected[0]=0;if(mapSelection>=0 && mapSelection<mapCount)copyName(selected,mapRecords[mapSelection].filename);
     /* Sort the displayed list by name after hashing the canonical file order. */
-    for(n=1;n<kept;++n){mapCopyRecord(&temp,&work[n]);i=n;while(i && compare(work[i-1].name,temp.name)>0){mapCopyRecord(&work[i],&work[i-1]);--i;}mapCopyRecord(&work[i],&temp);}
+    for(n=1;n<kept;++n){mapCopyRecord(&temp,&work[n]);i=n;while(i && mapCompareText(work[i-1].name,temp.name)>0){mapCopyRecord(&work[i],&work[i-1]);--i;}mapCopyRecord(&work[i],&temp);}
     mapFree(mapRecords);mapRecords=work;work=0;mapCount=kept;mapSelection=-1;
-    for(i=0;i<mapCount;++i)if(!compare(selected,mapRecords[i].filename))mapSelection=i;
+    for(i=0;i<mapCount;++i)if(!mapCompareText(selected,mapRecords[i].filename))mapSelection=i;
     if(selected[0] && mapSelection<0){mapRestoreBase();mapClearLoad();}
     ++mapCatalogRevision;
     r=saveCache(fingerprint);cachedFingerprint=r?fingerprint:0;
-    mapApi->print("maploader: scan complete: %d maps fingerprint=%08x saved=%d\n",mapCount,fingerprint,r);
     mapMessage(r?"Custom maps refreshed":"Maps ready; saving index failed");finish(0);return 1;
 }
 void mapScanRelease(void)
 {
     /* Never free an old multiplayer pointer through the campaign allocator. */
     if(phase && mapApi->mode==UYA_MODE_MULTIPLAYER && mapDirectoryIdle())mapDirectoryRequest(3);
-    finish(0);mapFree(mapRecords);mapRecords=0;mapCount=0;mapSelection=-1;cachedFingerprint=0;
+    finish(0);mapFree(mapRecords);mapRecords=0;mapCount=0;mapSelection=-1;cachedFingerprint=0;mapCatalogReady=0;
 }

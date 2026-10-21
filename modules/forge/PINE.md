@@ -40,11 +40,12 @@ Offsets are relative to `0x000FFF00`. The C declaration is `include/forge.h`.
 
 | Number | Command | Staging | In match |
 |---|---|---|---|
-| 1 | Reload current | Reject: no active match | Reload current selected custom map |
+| 1 | Reload current | Reject: no active game | Reload the current retail or custom map |
 | 2 | Refresh | Rescan catalog | Rescan catalog |
 | 3 | Select/load filename | Select map and update staging name; user still presses Start | Hop to map |
 | 4 | Refresh and select/load filename | Rescan, find and select map | Rescan, find and hop to map |
 | 5 | Start Game | Start with the current map and settings | Reject: already in a game |
+| 6 | Select/load retail map | Clear custom override and select retail base | Hop to retail base |
 
 Start Game takes no filename. Select a map with command 3 or 4 first if needed,
 wait for that request to finish, then submit command 5 with a new ID. Retail maps
@@ -54,8 +55,29 @@ and reports completion only when gameplay is ready. It preserves the game's
 normal roster, settings, overlay selection and HUD initialization. The callback
 is signature-checked; unavailable code or invalid selected map files reject the
 request. Leaving staging before execution cancels it. It cannot start online games.
-Staging capabilities are now `0x3C`; in-game capabilities remain `0x1E`.
+Staging capabilities are now `0x7C`; in-game capabilities are `0x5E`.
 Older builds without bit `(1 << 5)` do not implement Start Game.
+
+Command 6 (`FORGE_SELECT_RETAIL`) uses the existing filename field as a
+NUL-terminated **decimal base-map ID**, for example `"43"`. Exactly `40` through
+`49` are accepted. It takes no host path and does not scan custom maps. Check
+capability bit `(1 << 6)` before sending it. In staging, wait for completion and
+then send command 5 if you want to start the game. In gameplay, completion means
+the retail transition and HUD setup finished. Command 1 subsequently reloads that
+retail map; commands 3/4 can switch back to custom maps.
+
+| ID | Retail map |
+|---|---|
+| 40 | Bakisi Isles |
+| 41 | Hoven Gorge |
+| 42 | Outpost X12 |
+| 43 | Korgon Outpost |
+| 44 | Metropolis |
+| 45 | Blackwater City |
+| 46 | Command Center |
+| 47 | Blackwater Docks |
+| 48 | Aquatos Sewers |
+| 49 | Marcadia Palace |
 
 Example filename: `minikisi`, not `Bakisi Mini`, `minikisi.wad`, or a host path.
 Names are case-sensitive, 1-63 printable ASCII bytes. Separators, traversal,
@@ -116,3 +138,10 @@ command 5 started the selected Temple of Shaar map, reported successful completi
 and returned game/scene flags to ready. A second Start Game request during gameplay
 was rejected with wrong-context error 1. The user confirmed gameplay and HUD
 work normally.
+
+Command 6 live checks: Temple of Shaar -> retail Korgon Outpost completed and
+cleared custom asset overrides. The user confirmed the stock loading name and
+HUD. Command 1 then reloaded Korgon with overrides still disabled; command 3
+returned to Bakisi Mini with custom loading re-enabled. Both reported success
+and returned to gameplay. The user confirmed normal gameplay and HUD after
+the sequence.

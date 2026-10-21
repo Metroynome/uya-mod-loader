@@ -5,6 +5,7 @@
 #define WORD(a) (*(volatile unsigned int *)(a))
 #define JAL(a) (0x0c000000U | ((unsigned int)(a)>>2))
 #if UYA_MODULE_REGION == 2
+#define IMAGE_SET 0x6814b0
 #define MESSAGE 0x59a970
 #define MESSAGE_CALL 0x0c166a40
 #define MESSAGE_LOAD 0x8c42bcc0
@@ -38,6 +39,7 @@
 static const unsigned int radarHooks[10]={0x4951a4,0x4972bc,0x48cb94,0x48a264,0x48967c,0x486f14,0x486f0c,0x48978c,0x488a8c,0x48840c};
 static const unsigned int localRadarHooks[6]={0x4a61a4,0x4a82bc,0x49db94,0x49b264,0x49a67c,0x497f14};
 #else
+#define IMAGE_SET 0x67e990
 #define MESSAGE 0x599618
 #define MESSAGE_CALL 0x0c16656a
 #define MESSAGE_LOAD 0x8c42bdc0
@@ -99,10 +101,14 @@ int mapOnlineDisabled(void)
 static int hookedName(void)
 {
     unsigned int level=WORD(MAP_ID),i;
-    if(!mapOnlineDisabled() && mapSelection>=0 && mapSelection<mapCount &&
-       (level==mapRecords[mapSelection].base || level==mapRecords[mapSelection].base+10)) {
-        char *dest=(char *)(NAME_TABLE+((level-40)%10)*32);
-        for(i=0;i<32;++i) dest[i]=mapRecords[mapSelection].name[i];
+    if(!mapOnlineDisabled() && level>=40 && level<=59) {
+        unsigned int base=40+(level-40)%10;
+        const char *name=mapRetailName(base);
+        char *dest=(char *)(NAME_TABLE+(base-40)*32);
+        if(mapSelection>=0 && mapSelection<mapCount && base==mapRecords[mapSelection].base)
+            name=mapRecords[mapSelection].name;
+        for(i=0;i<31 && name[i];++i)dest[i]=name[i];
+        for(;i<32;++i)dest[i]=0;
     }
     return 1;
 }
@@ -123,22 +129,29 @@ int mapStaging(void)
 #ifndef MAP_MESSAGE
 #define MAP_MESSAGE(id) ((const char *(*)(int))MESSAGE)(id)
 #endif
-static const char *retailMapName(void)
+/* Names are also needed from gameplay overlays where the staging message
+ * lookup no longer exists. Keep stock names separate from the patched table. */
+const char *mapRetailName(unsigned int base)
 {
-    static const unsigned int ids[10]={0xbb1,0xbb2,0xda,0xbb4,0xd8,0xd4,0x18c4,0x18c5,0x18c6,0x18c7};
-    static const unsigned int signature[16]={0x27bdfff0,0xffbf0000,MESSAGE_CALL,0,
-        0x0040182d,0x2782aaf8,0x04600005,0x00031900,0x3c020025,MESSAGE_LOAD,
-        0x00621821,0x8c620000,0xdfbf0000,0x03e00008,0x27bd0010,0};
-    unsigned int settings=WORD(SETTINGS),base,i;
-    if(settings<0x100000 || settings>0x1fffe00 || (settings&3)) return 0;
-    base=WORD(settings+0x17c);if(base<40 || base>49) return 0;
-    for(i=0;i<16;++i) if(WORD(MESSAGE+i*4)!=signature[i]) return 0;
-    return MAP_MESSAGE(ids[base-40]);
+    static const char *names[]={"Bakisi Isles","Hoven Gorge","Outpost X12",
+        "Korgon Outpost","Metropolis","Blackwater City","Command Center",
+        "Blackwater Docks","Aquatos Sewers","Marcadia Palace"};
+    return base>=40 && base<=49?names[base-40]:"Retail map";
 }
+unsigned int mapCurrentBase(void)
+{
+    unsigned int settings=WORD(SETTINGS);
+    if(settings<0x100000 || settings>0x1fffe00 || (settings&3))return 0;
+    return WORD(settings+0x17c);
+}
+static const char *retailMapName(void){return mapRetailName(mapCurrentBase());}
 /* Local and online staging both use child 1 for the map name. */
+#ifndef MAP_IMAGE_SET
+#define MAP_IMAGE_SET(child,texture) ((int (*)(unsigned int,unsigned int))IMAGE_SET)(child,texture)
+#endif
 static void writeStagingName(const char *name)
 {
-    unsigned int menu,child,i;int context=mapStaging();
+    unsigned int menu,child,i,base;int context=mapStaging();
     if(!name || !context) return;
     menu=WORD(0x1c5c064+(context==1?23:33)*4);
     if(menu<0x100000 || menu>0x1fffd00 || (menu&3)) return;
@@ -147,6 +160,13 @@ static void writeStagingName(const char *name)
     if(child<0x100000 || child>0x1ffff80 || (child&3)) return;
     for(i=0;i<31 && name[i];++i) ((volatile char *)child)[0x14+i]=name[i];
     for(;i<32;++i) ((volatile char *)child)[0x14+i]=0;
+    /* Retail local staging uses child 4 and texture 37 + (base - 40).
+     * Call its setter: changing the ID alone does not upload the new texture. */
+    if(context!=1 || WORD(menu+0x10c)<5)return;
+    child=WORD(menu+0x120);base=mapCurrentBase();
+    if(child<0x100000 || child>0x1ffff80 || (child&3) || base<40 || base>49)return;
+    if(WORD(IMAGE_SET)==0x27bdfff0 && WORD(IMAGE_SET+16)==0x8e02007c)
+        MAP_IMAGE_SET(child,base-3);
 }
 void mapUpdateName(void)
 {
@@ -169,6 +189,12 @@ int mapChooseBase(unsigned int base)
     if(savedSettings!=settings) { savedSettings=settings; savedBase=WORD(settings+0x17c); }
     WORD(settings+0x17c)=forcedBase=base;
     return 1;
+}
+int mapChooseRetail(unsigned int base)
+{
+    if(!mapChooseBase(base))return 0;
+    /* An explicit retail choice becomes the baseline for subsequent overrides. */
+    savedSettings=0;mapSelection=-1;mapClearLoad();mapUpdateName();return 1;
 }
 void mapRestoreBase(void)
 {

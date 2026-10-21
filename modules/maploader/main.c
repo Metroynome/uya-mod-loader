@@ -10,7 +10,7 @@ static char status[48]="Choose a map in multiplayer staging";
 static void copy(char *dest,const char *src,unsigned int cap)
 { unsigned int i=0; while(src[i] && i+1<cap) { dest[i]=src[i]; ++i; } dest[i]=0; }
 void mapMessage(const char *message) { copy(status,message,sizeof(status)); dirty=1; }
-static int reloadMap(void) {return mapHopRequest(mapSelection);}
+static int reloadMap(void) {return mapHopRequest(mapSelection<0?-(int)mapCurrentBase():mapSelection);}
 static const char *hopStatus(void) {return status;}
 static unsigned int commandContext(void),commandState(void),commandError(void);
 static int commandRequest(unsigned int,const char *);
@@ -27,6 +27,12 @@ static int choose(void *context)
                "Selected; host must choose its retail base");
     return 1;
 }
+static int chooseRetail(unsigned int base)
+{
+    if(mapScanActive() || mapLoading() || base<40 || base>49)return 0;
+    if(mapHopInGame())return mapHopRequest(-(int)base);
+    return mapChooseRetail(base);
+}
 /* Shared asynchronous requests; usable without a menu service. */
 static unsigned int jobState,jobError,jobCommand;
 static char jobName[64];
@@ -42,6 +48,11 @@ static void commandFinish(unsigned int error)
 static int commandSelect(void)
 {
     int i,j;
+    if(jobCommand==FORGE_SELECT_RETAIL){
+        if(jobName[0]!='4' || jobName[1]<'0' || jobName[1]>'9' || jobName[2])return FORGE_ERROR_NAME;
+        if(!chooseRetail(40+jobName[1]-'0'))return FORGE_ERROR_LOAD;
+        jobState=mapHopInGame()?FORGE_LOADING:FORGE_COMPLETE;dirty=1;return 0;
+    }
     for(i=0;i<mapCount;++i){
         for(j=0;jobName[j] && jobName[j]==mapRecords[i].filename[j];++j);
         if(!jobName[j] && !mapRecords[i].filename[j]){
@@ -56,10 +67,10 @@ static int commandRequest(unsigned int command,const char *name)
     unsigned int context=commandContext(),i;
     if(jobState==FORGE_SCANNING || jobState==FORGE_LOADING || mapScanActive() || mapLoading() || mapHopResult==1)return FORGE_ERROR_BUSY;
     if(!context)return FORGE_ERROR_CONTEXT;
-    if(command<FORGE_RELOAD || command>FORGE_START_GAME)return FORGE_ERROR_COMMAND;
+    if(command<FORGE_RELOAD || command>FORGE_SELECT_RETAIL)return FORGE_ERROR_COMMAND;
     if(command==FORGE_RELOAD && context!=2)return FORGE_ERROR_CONTEXT;
     if(command==FORGE_START_GAME && context!=1)return FORGE_ERROR_CONTEXT;
-    if(command==FORGE_SELECT || command==FORGE_REFRESH_SELECT){
+    if(command==FORGE_SELECT || command==FORGE_REFRESH_SELECT || command==FORGE_SELECT_RETAIL){
         if(!name || !name[0] || name[0]=='.')return FORGE_ERROR_NAME;
         for(i=0;i<64 && name[i];++i){unsigned char c=name[i];
             if(c<32 || c>126 || c=='/' || c=='\\' || c==':' || c=='"' || c=='*' || c=='?')return FORGE_ERROR_NAME;
@@ -94,28 +105,51 @@ static void clear(void *context)
     if(!mapStaging() || mapLoading() || mapScanActive()) return;
     mapRestoreBase(); mapSelection=-1; mapClearLoad(); mapMessage("Retail map selected");
 }
+/* Merge the sorted catalog with retail names without allocating a second list.
+ * Keep stable catalog indices for selection, descriptions and reloads. */
+static const unsigned char retailOrder[]={48,40,45,47,46,41,43,49,44,42};
+static int retailPosition(int r)
+{
+    int c=0;const char *name=mapRetailName(retailOrder[r]);
+    while(c<mapCount && mapCompareText(mapRecords[c].name,name)<0)++c;
+    return c+r+1;
+}
+static int listEntry(int index)
+{
+    int r,p;if(!index)return -1;
+    for(r=0;r<10;++r){p=retailPosition(r);if(index<=p)return index==p?-retailOrder[r]:index-r-1;}
+    return index-11;
+}
+static int listFocus(void)
+{
+    int i,target=mapSelection<0?-(int)mapCurrentBase():mapSelection;
+    for(i=0;i<mapCount+11;++i)if(listEntry(i)==target)return i;
+    return 0;
+}
 static const char *mapLabel(void *context,int index)
-{ (void)context; return index?mapRecords[index-1].name:"None"; }
+{ (void)context; index=listEntry(index);return index==-1?"None":index<0?mapRetailName(-index):mapRecords[index].name; }
 static void selectMap(void *context,int index)
 {
     (void)context;
     if(mapScanActive())return;
     if((!mapStaging() && !(mapForgeActive() && mapHopInGame())) || !mapHooksReady() || mapLoading() || mapScanActive()) return;
-    if(!index && mapHopInGame()){mapMessage("Retail map hopping is not enabled");return;}
-    if(index) { if(!choose((void *)index)) return; }
+    if(!index && mapHopInGame()){mapMessage("None is only available in staging");return;}
+    if(index) { index=listEntry(index);if(!(index<0?chooseRetail(-index):choose((void *)(index+1)))) return; }
     else clear(0);
     menu->close();
 }
 static const char *mapInfo(void *context,int index)
 {
-    static int cached=-1;static unsigned int revision;
-    static char text[336]; char author[32],description[256]; unsigned int i,p=0;
+    static int cached=-2;static unsigned int revision;
+    static char text[292]; char author[32],description[256]; unsigned int i,p=0;
     (void)context;
-    if(revision!=mapCatalogRevision){revision=mapCatalogRevision;cached=-1;}
+    if(revision!=mapCatalogRevision){revision=mapCatalogRevision;cached=-2;}
+    index=listEntry(index);
+    if(index<-1)return "Retail map";
     if(index==cached) return text;
     cached=index;text[0]=0;
-    if(!index) { copy(text,"Use the selected retail map without a custom map override.",sizeof(text));return text; }
-    if(!mapReadInfo(&mapRecords[index-1],author,description) || !description[0])
+    if(index==-1) { copy(text,"Restore the original retail map.",sizeof(text));return text; }
+    if(!mapReadInfo(&mapRecords[index],author,description) || !description[0])
         copy(description,"No description available for this map.",sizeof(description));
     if(author[0]) {
         text[p++]='b';text[p++]='y';text[p++]=' ';
@@ -148,8 +182,8 @@ static int rebuild(int context)
         ok &= add("Campaign loading backend not available",MODMENU_LABEL,0,0,1);
         ok &= add("Existing map packs require multiplayer",MODMENU_LABEL,0,0,1);
     } else {
-        if(editable && mapCount) {
-            ok &= menu->setList(tab,mapCount+1,mapLabel,selectMap,0,mapSelection+1)==0;
+        if(editable) {
+            ok &= menu->setList(tab,mapCount+11,mapLabel,selectMap,0,listFocus())==0;
             ok &= menu->setListInfo(tab,mapInfo)==0;
         }
         else {
@@ -194,7 +228,8 @@ void moduleUpdate(void)
         if(tab && menu) { menu->removeTab(tab); tab=0; }
         lastContext=-2; dirty=1; return;
     }
-    if(context==1 && lastContext!=1)mapScanStart();
+    /* The successful catalog stays on the multiplayer heap until deactivation. */
+    if(context==1 && lastContext!=1 && !mapCatalogReady)mapScanStart();
     scanAllowed=context==1 || (mapForgeActive() && mapHopInGame());
     if(!scanAllowed && mapScanActive()){mapScanRelease();if(menu)menu->setProgress(0,0,0);}
     if(scanAllowed && mapScanActive()){

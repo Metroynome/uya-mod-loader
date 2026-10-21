@@ -10,6 +10,25 @@
 #ifndef MENU_FLUSH
 #define MENU_FLUSH(operation) ((void (*)(int))0x1264e0)(operation)
 #endif
+/* Regional font differences are verified by the renderer-table generator. */
+static unsigned int rendererFont(const struct MenuRenderer *r)
+{
+#if UYA_MODULE_REGION == 3
+    return r->print-(r->level>=39?1720:1696);
+#else
+    return r->print-1688;
+#endif
+}
+static unsigned int rendererFontHash(const struct MenuRenderer *r)
+{
+#if UYA_MODULE_REGION == 3
+    return r->level>=39?0x13484292U:0xbe9688deU;
+#elif UYA_MODULE_REGION == 2
+    return r->level>=39?0x899b90b4U:0xc72973b6U;
+#else
+    return r->level>=39?0x84926133U:0xc72973b6U;
+#endif
+}
 static const struct MenuRenderer *active;
 static volatile unsigned char *pad;
 static int levelId;
@@ -65,8 +84,9 @@ int menuBackendReady(unsigned int mode)
     } else return 0;
     for(i=0;i<sizeof(renderers)/sizeof(renderers[0]);++i) {
         r=&renderers[i]; if(r->level!=levelId) continue;
-        if(hash((void *)r->print,48)!=r->printHash || hash((void *)r->font,44)!=r->fontHash ||
-           hash((void *)r->box,64)!=r->boxHash || hash((void *)r->context,36)!=r->contextHash || hash((void *)r->width,64)!=r->widthHash) return 0;
+        /* Generator verifies these common hashes and the width offset for every row. */
+        if(hash((void *)r->print,48)!=0x1f803f0eU || hash((void *)rendererFont(r),44)!=rendererFontHash(r) ||
+           hash((void *)r->box,64)!=r->boxHash || hash((void *)r->context,36)!=r->contextHash || hash((void *)(r->print-0x2a0),64)!=0xa344514dU) return 0;
         active=r; return 1;
     }
     return 0;
@@ -188,7 +208,7 @@ void menuBackendText(float x,float y,unsigned int color,const char *text)
 #else
     height=416;
 #endif
-    ((void (*)(int))active->font)(0);
+    ((void (*)(int))rendererFont(active))(0);
     ((Print)active->print)(x*512,y*height,.7f,.7f,1,1,color,text,~0ULL,0,1,0x80000000);
 }
 
@@ -342,6 +362,6 @@ void menuBackendDeactivate(void)
 float menuBackendWidth(const char *text)
 {
     if(!active || !text) return 0;
-    ((void (*)(int))active->font)(0);
-    return ((int (*)(const char *,int,float))active->width)(text,-1,.7f)/512.f;
+    ((void (*)(int))rendererFont(active))(0);
+    return ((int (*)(const char *,int,float))(active->print-0x2a0))(text,-1,.7f)/512.f;
 }
