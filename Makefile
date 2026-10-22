@@ -20,45 +20,21 @@ catalog:
 	done > build/catalog.new
 	@mv build/catalog.new build/catalog.txt
 
-# Full builds pack modules consecutively. Individual builds retain their addresses
-# and stage every selected image before publishing, so failures cannot mix layouts.
+# Every module uses the same link base. The runtime chooses its actual address.
 _region:
-	+@set -eu; work=build/$(REGION); mkdir -p "$$work"; \
-	awk -F'|' -v r='$(REGION)' 'index(" "$$5" "," "r" ")' build/catalog.txt > "$$work/catalog.new"; \
-	pick='$(NAME)'; \
-	if test -n "$$pick"; then \
-	  if ! grep -q "^modules/$$pick|" "$$work/catalog.new"; then \
-	    test '$(REQUESTED_REGION)' = all || { echo "$$pick does not support $(REGION)" >&2; exit 1; }; \
-	    echo "$$pick: skipping unsupported $(REGION)"; exit 0; \
-	  fi; \
-	  if test ! -f "$$work/layout.txt"; then echo 'Establishing layout with a full build'; pick=; \
-	  elif ! cmp -s "$$work/catalog.new" "$$work/catalog.txt"; then echo 'Module definitions changed; run make from the root' >&2; exit 1; fi; \
+	+@set -eu; work=build/$(REGION); mkdir -p "$$work/publish"; \
+	if test -z '$(NAME)'; then \
+	  $(MAKE) --no-print-directory -f Makefile.eeglobal REGION=$(REGION) image; \
+	  mkdir -p build/dist; cp "$$work/publish/loader.pnach" build/dist/mod-loader.$(REGION).pnach; \
 	fi; \
-	rm -rf "$$work/publish"; mkdir -p "$$work/publish"; \
-	if test -z "$$pick"; then $(MAKE) --no-print-directory -f Makefile.eeglobal REGION=$(REGION) image; fi; \
-	address=$$((0xf2f80)); count=0; : > "$$work/layout.new"; \
 	while IFS='|' read -r folder name lib mode supported objects; do \
-	  test -z "$$pick" || test "$$folder" = "modules/$$pick" || continue; \
-	  if test -n "$$pick"; then \
-	    address=$$(awk -F'|' -v n="$$name" '$$1==n {print $$4}' "$$work/layout.txt"); \
-	    test -n "$$address"; \
-	  fi; \
-	  $(MAKE) --no-print-directory -f Makefile.eeglobal REGION=$(REGION) MODULE="$$folder" IMAGE="$$name" ADDRESS="$$address" image; \
-	  bytes=$$(cat "$$work/modules/$$name/size.txt"); \
-	  printf '%s|%s|%s|%s|%s\n' "$$name" "$$lib" "$$mode" "$$address" "$$bytes" >> "$$work/layout.new"; \
-	  address=$$(((address+bytes+63)&~63)); count=$$((count+1)); \
-	done < "$$work/catalog.new"; \
-	mkdir -p hostfs/uya/mods build/dist/hostfs/uya/mods; \
-	if test -z "$$pick"; then \
-	  mv "$$work/layout.new" "$$work/layout.txt"; mv "$$work/catalog.new" "$$work/catalog.txt"; \
-	  rm -f hostfs/uya/mods/*.$(REGION).bin build/dist/hostfs/uya/mods/*.$(REGION).bin; \
-	  cp "$$work/publish/loader.pnach" build/dist/mod-loader.$(REGION).pnach; \
-	  echo "$(REGION): $$count modules, $$((address-0xf2f80))/$$((0x100000-0xf2f80)) arena bytes"; \
-	else echo "$(REGION): rebuilt $$count modules at reserved addresses"; fi; \
-	for bin in "$$work/publish/"*.bin; do \
-	  test -f "$$bin" || continue; cp "$$bin" hostfs/uya/mods/; cp "$$bin" build/dist/hostfs/uya/mods/; \
-	done
-
+	  test -z '$(NAME)' || test "$$folder" = 'modules/$(NAME)' || continue; \
+	  case " $$supported " in *" $(REGION) "*) ;; *) continue;; esac; \
+	  $(MAKE) --no-print-directory -f Makefile.eeglobal REGION=$(REGION) MODULE="$$folder" IMAGE="$$name" image; \
+	  mkdir -p hostfs/uya/mods build/dist/hostfs/uya/mods; \
+	  cp "$$work/publish/$$name.$(REGION).bin" hostfs/uya/mods/; \
+	  cp "$$work/publish/$$name.$(REGION).bin" build/dist/hostfs/uya/mods/; \
+	done < build/catalog.txt
 _assets: build/mapscan/mapscan.irx
 	@mkdir -p hostfs/uya/mods/utils build/dist/hostfs/uya/mods/utils build/dist/hostfs/uya/mods/debug build/dist/hostfs/uya/config
 	cp $< hostfs/uya/mods/utils/

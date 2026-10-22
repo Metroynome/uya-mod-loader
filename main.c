@@ -1,7 +1,8 @@
 /* UYA host module loader. No heap resizing or game allocator patches.
  * Flow: choose the current game's API -> read modules.txt once -> validate and
  * load each image -> initialize/update only modules matching the active mode.
- * Memory: loader a0000-afd00, state afd00-b0000, modules f2f80-100000.
+ * Memory: loader a0000-af800, public table af800-afd00, state afd00-b0000,
+ * modules f2f80-100000.
  */
 #include "module.h"
 #include "config.h"
@@ -13,8 +14,8 @@
 #define MODULE_START 0x000f2f80U
 #endif
 #define MODULE_END 0x00100000U
-#define MODULE_LIMIT 8
-#define LOADER_MAGIC 0x554d4c39U
+#define MODULE_LIMIT UYA_MODULE_LIMIT
+#define LOADER_MAGIC 0x554d4c3aU
 
 struct LoadedModule {
     unsigned int address, size;
@@ -40,8 +41,12 @@ struct LoaderState {
 #ifndef STATE
 #define STATE ((struct LoaderState *)0x000afd00)
 #endif
+#ifndef MODULE_TABLE
+#define MODULE_TABLE ((ModuleTable *)UYA_MODULE_TABLE_ADDRESS)
+#endif
 #ifdef _EE
 typedef char LoaderStateMustFit[(sizeof(struct LoaderState) <= 0x300) ? 1 : -1];
+typedef char ModuleTableMustFit[(sizeof(ModuleTable) <= 0x500) ? 1 : -1];
 #endif
 
 const ModuleApi *moduleConfigApi(void) { return &STATE->api; }
@@ -134,6 +139,7 @@ static void installExceptionHandler(void)
     unsigned char *memory = (unsigned char *)EXCEPTION_ADDRESS;
     unsigned int i, hash = 2166136261U;
     int fd, valid;
+    unsigned int address;
 
     /* Optional and attempted once per boot, before any module initialization.
      * Missing/invalid payloads never prevent normal module loading. */
@@ -195,29 +201,43 @@ static int validEntry(unsigned int offset, unsigned int size)
     return offset == UYA_MODULE_NO_ENTRY || (!(offset & 3) && offset < size);
 }
 
-/* Validate everything before writing executable memory, including overlaps. */
-static int validHeader(const ModuleHeader *header)
+/* A small monotonic allocator: successful loads retain their slots until restart.
+ * Failed loads never consume space. No game heap edits or per-module addresses. */
+static unsigned int nextModuleAddress(void)
 {
-    unsigned int i, end = MODULE_END;
-    if (header->magic != UYA_MODULE_MAGIC || header->version != UYA_MODULE_VERSION ||
-        (header->region && header->region != UYA_MODULE_REGION) ||
-        (header->address & 63) || header->address < MODULE_START ||
-        header->address >= end || !header->modes || (header->modes & ~3U) ||
-        header->reserved || !header->imageSize ||
-        (header->imageSize & 3) || header->imageSize > header->memorySize ||
-        header->memorySize > end - header->address ||
-        !validEntry(header->initOffset, header->imageSize) ||
-        !validEntry(header->updateOffset, header->imageSize))
-        return 0;
-    for (i = 0; i < STATE->count; ++i) {
-        struct LoadedModule *module = &STATE->modules[i];
-        if (header->address < module->address + module->size &&
-            module->address < header->address + header->memorySize)
-            return 0;
-    }
-    return 1;
+    if (!STATE->count) return MODULE_START;
+    return (STATE->modules[STATE->count-1].address + STATE->modules[STATE->count-1].size + 63U) & ~63U;
 }
-
+static int validHeader(const ModuleHeader *h)
+{
+    unsigned int address=nextModuleAddress();
+    return h->magic==UYA_MODULE_MAGIC && h->version==UYA_MODULE_VERSION &&
+        (!h->region || h->region==UYA_MODULE_REGION) && h->address==0x000f0000 &&
+        h->modes && !(h->modes&~3U) && h->imageSize && !(h->imageSize&3) &&
+        h->imageSize<=h->memorySize && address<MODULE_END &&
+        h->memorySize<=MODULE_END-address && h->relocationCount<=h->imageSize/4 &&
+        validEntry(h->initOffset,h->imageSize) && validEntry(h->updateOffset,h->imageSize);
+}
+/* The build preserves only references into the module. Game addresses stay
+ * absolute. Read records incrementally so relocation metadata needs no heap. */
+static int relocateModule(int fd,const ModuleHeader *h,unsigned int address)
+{
+    unsigned int i,previous=0;
+    for(i=0;i<h->relocationCount;++i) {
+        ModuleRelocation r;unsigned int *word,value;
+        if(!readExact(fd,&r,sizeof(r)) || (r.offset&3) || r.offset>=h->imageSize ||
+           (i && r.offset<=previous)) return 0;
+        previous=r.offset;word=(unsigned int *)(address+r.offset);value=address+r.value;
+        switch(r.type) {
+        case 2: *word=value;break; /* R_MIPS_32 */
+        case 4: *word=(*word&0xfc000000U)|((value>>2)&0x03ffffffU);break;
+        case 5: *word=(*word&0xffff0000U)|(((value+0x8000U)>>16)&0xffffU);break;
+        case 6: *word=(*word&0xffff0000U)|(value&0xffffU);break;
+        default: return 0;
+        }
+    }
+    return atEnd(fd);
+}
 static int sameText(const char *a, const char *b)
 {
     while (*a && *a == *b) { ++a; ++b; }
@@ -264,7 +284,7 @@ static int resolveModuleName(const char *name, char *filename)
     return 1;
 }
 
-/* Images have a fixed linked address; BSS is zeroed before initialization. */
+/* Allocate, read, relocate, then publish. BSS is zeroed before initialization. */
 static void loadModule(const char *name, unsigned int modes, char names[MODULE_LIMIT][112])
 {
     char path[128], filename[112];
@@ -272,6 +292,7 @@ static void loadModule(const char *name, unsigned int modes, char names[MODULE_L
     ModuleHeader header;
     struct LoadedModule *module;
     int fd, valid;
+    unsigned int address;
 
     unsigned int contexts=(modes & NAMED_CONTEXTS)?(modes & ~NAMED_CONTEXTS):modeContexts(modes);
     if(modes & NAMED_CONTEXTS) modes=(contexts&1?1:0)|(contexts&6?2:0);
@@ -301,7 +322,7 @@ static void loadModule(const char *name, unsigned int modes, char names[MODULE_L
         return;
     }
     if (!readExact(fd, &header, sizeof(header)) || !validHeader(&header)) {
-        printf("loader: invalid header, region, range or overlap: %s\n", name);
+        printf("loader: invalid module header/region or no free space: %s\n", name);
         fileClose(fd);
         return;
     }
@@ -312,29 +333,35 @@ static void loadModule(const char *name, unsigned int modes, char names[MODULE_L
         fileClose(fd);
         return;
     }
-    memset((void *)header.address, 0, header.memorySize);
-    valid = readExact(fd, (void *)header.address, header.imageSize) && atEnd(fd);
+    address=nextModuleAddress();
+    memset((void *)address, 0, header.memorySize);
+    valid = readExact(fd, (void *)address, header.imageSize) && relocateModule(fd,&header,address);
     if (fileClose(fd) < 0)
         valid = 0;
     if (!valid) {
-        memset((void *)header.address, 0, header.memorySize);
-        printf("loader: incomplete or oversized module: %s\n", name);
+        memset((void *)address, 0, header.memorySize);
+        printf("loader: incomplete image or invalid relocations: %s\n", name);
         return;
     }
     module = &STATE->modules[STATE->count++];
     strcpy(names[STATE->count-1], filename);
-    module->address = header.address;
+    module->address = address;
     module->size = header.memorySize;
     module->update = 0;
     module->modes = modes;
     module->contexts=contexts; module->policy=UYA_CONTEXT_ALL;
     module->initialized = 0;
     module->init = header.initOffset == UYA_MODULE_NO_ENTRY ? 0 :
-        (ModuleInit)(header.address + header.initOffset);
+        (ModuleInit)(address + header.initOffset);
     if (header.updateOffset != UYA_MODULE_NO_ENTRY)
-        module->update = (ModuleUpdate)(header.address + header.updateOffset);
+        module->update = (ModuleUpdate)(address + header.updateOffset);
+    strcpy(MODULE_TABLE->entries[STATE->count-1].name,filename);
+    MODULE_TABLE->entries[STATE->count-1].address=address;
+    MODULE_TABLE->entries[STATE->count-1].size=header.memorySize;
+    MODULE_TABLE->entries[STATE->count-1].modes=modes;
+    MODULE_TABLE->count=STATE->count;
     syncCode();
-    printf("loader: loaded %s at %08x (%u bytes)\n", name, header.address, header.memorySize);
+    printf("loader: loaded %s at %08x (%u bytes)\n", name, address, header.memorySize);
 }
 
 static int isSpace(char c)
@@ -453,6 +480,9 @@ void loaderTick(unsigned int layout)
         return;
     if (STATE->magic != LOADER_MAGIC) {
         memset(STATE, 0, sizeof(*STATE));
+        memset(MODULE_TABLE,0,sizeof(*MODULE_TABLE));
+        MODULE_TABLE->version=1;MODULE_TABLE->entrySize=sizeof(ModuleInfo);
+        MODULE_TABLE->magic=UYA_MODULE_TABLE_MAGIC;
         STATE->magic = LOADER_MAGIC;
     }
     if (!platformReady(layout))

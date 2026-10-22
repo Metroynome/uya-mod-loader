@@ -137,6 +137,10 @@ The root `Makefile` provides the build commands and allocates module addresses.
 Only module creation and release packaging use shell helpers. The loader uses
 `bin2code` plus regional hooks in `template/` to produce PNACH files only.
 Modules are plain binaries; the loader validates them at runtime. No Python is needed.
+For runtime placement, `tools/relocate.c` packages the ELF's MIPS relocation
+records into the module binary. `tools/sections.awk` preserves the normal link's
+live sections because the older EE linker cannot retain relocations and discard
+unused code correctly in one pass. Neither utility chooses module addresses.
 
 `moduleInit(const ModuleApi *)` runs once, the first time its mode is active.
 A negative result disables its update callback while retaining its memory.
@@ -160,8 +164,9 @@ NTSC-U/PAL multiplayer. NTSC-J multiplayer retains the loader limitation below.
 See [the menu API guide](modules/modmenu/README.md) for integration and validation
 details.
 
-**The loader uses runtime API 4 with binary header version 2. Deploy the loader PNACH and all
-module binaries together, then cold-boot.** Old ABI-1 binaries are rejected.
+**The loader uses runtime API 4 with binary header version 3. For this upgrade,
+rebuild all modules and deploy them with the new PNACH, then cold-boot.**
+Old version-1/2 binaries are rejected. Subsequent version-3 modules can be replaced independently.
 The loader now supplies `publishService` / `findService` for versioned APIs.
 Service IDs belong to their publishing module; lookup requires an exact API
 version and an allowed owner mode/context. Failed initialization removes that module's
@@ -176,7 +181,7 @@ list with None and X to select. Maploader disables itself on an online lobby
 connection by default; `maploader-online.txt` provides an explicit future-server
 opt-in. Campaign replacement is not yet implemented.
 
-Requires a POSIX shell, GNU Make, `bin2code`, and the PS2 EE/IOP toolchain (a host C compiler is needed for tests). Release packaging also uses zip/unzip and sha256sum. No Python is needed. Set `PS2SDK` and put
+Requires a POSIX shell, GNU Make, a host C compiler, `bin2code`, and the PS2 EE/IOP toolchain. Release packaging also uses zip/unzip and sha256sum. No Python is needed. Set `PS2SDK` and put
 `ee-gcc`, `ee-nm`, and `ee-objcopy` on PATH. `EE_PREFIX` overrides `ee-`.
 
 ```sh
@@ -184,11 +189,13 @@ make                                       # all three regions
 make REGION=ntscu                          # one region
 ```
 
-Modules receive automatic, nonoverlapping, 64-byte-aligned addresses. No manual
-layout file or address selection is needed. All declared modules are built;
-`modules.txt` selects which ones load and the modes in which they run. The layout is recorded in
-`build/<region>/layout.txt`. Rebuild/deploy the complete module set together:
-adding or resizing a module can change later modules' linked addresses.
+Modules receive nonoverlapping, 64-byte-aligned addresses at runtime, in
+`modules.txt` order. Each module is built independently at the same link base;
+the loader adjusts its internal references after assigning space. Creators do
+not coordinate addresses or rebuild each other's modules. All declared modules
+are built; only enabled entries consume runtime memory. The limit remains eight
+modules and the existing 53,376-byte arena. Allocations last until restart;
+individual unloading, compaction, and heap resizing are not implemented.
 
 Library defaults match this workspace:
 
@@ -255,15 +262,12 @@ make REGION=ntscu
 
 `make clean` at the root removes the generated build directory and regional
 hostfs binaries. It keeps module sources, `modules.txt`, and the optional debug
-payload. A module-folder clean removes only that module's objects/binaries and
-keeps its address. Rebuild the full set if it grows into a neighboring module.
+payload. A module-folder clean removes only that module's objects/binaries.
 Generated module folders include a Makefile.
 
-Single-module builds use the existing regional layout. If there is no layout,
-the first invocation builds all modules to establish one. If a module grows
-beyond its reserved size or the module set/library/mode configuration changes,
-run a full root build and deploy all binaries together. A `both` source folder
-rebuilds both of its library variants. Restart emulation to load new binaries.
+Single-module builds need no existing layout or full-set build. A `both` source
+folder rebuilds both of its library variants. Replace that module's binary and
+restart emulation to load it; the loader assigns space based on its current size.
 A fresh project still needs the root build to produce the loader PNACH itself.
 
 To work interactively using the Dockerfile image:
@@ -354,7 +358,8 @@ its own low-memory range only when installed:
 | Range | Use |
 |---|---|
 | `0x000c8000?0x000ce000` | Optional exception handler, 24 KiB including workspace |
-| `0x000a0000-0x000afd00` | Loader code/data, maximum 64,768 bytes |
+| `0x000a0000-0x000af800` | Loader code/data, 63,488-byte reservation |
+| `0x000af800-0x000afd00` | Read-only public loaded-module table |
 | `0x000afd00-0x000b0000` | Persistent loader state, 768 bytes |
 | `0x000f2f80-0x00100000` | Modules, 53,376 bytes including BSS and Forge's mailbox when loaded |
 
@@ -365,6 +370,20 @@ Memory is cleared before loading; data/instruction caches are synchronized befor
 executing new code. State is outside PNACH-injected bytes so repeated cheat writes
 do not reset it. This area must remain free of other injected patches.
 
+Version-3 module binaries contain a 40-byte header, code/data, then relocation
+records. The loader handles MIPS 32-bit pointers, jumps, and paired high/low
+address instructions; absolute game addresses remain unchanged. Older version-2
+binaries are rejected: rebuild them once with this version's module Makefiles.
+Unsupported relocation types fail packaging instead of producing broken code.
+
+Other modules can inspect `UYA_MODULE_TABLE` from `module.h`, at `0x000AF800`.
+Check `magic == UYA_MODULE_TABLE_MAGIC`, `version == 1`, `entrySize == sizeof(ModuleInfo)`,
+and `count <= UYA_MODULE_LIMIT` before reading `entries[0..count-1]`. Each entry
+has a canonical filename, base `address`, allocated `size` (including BSS), and
+configured `modes`. These are loaded modules, not necessarily currently active.
+Never modify this table. Use the existing service APIs to call another mod's
+published functions; a module base address is not a function pointer.
+
 The loader and its state reserve the full 64 KiB at `0x000a0000-0x000affff`.
 Rebuild the Docker image after updating: the pinned libuya revision moves its
 network callback pointer out of this block. Older Horizon patch/downloader/game
@@ -373,7 +392,9 @@ Relocation alone does not resolve shared hooks or implement online unloading.
 Replace the old PNACH files and fully restart the game; do not load an old savestate.
 
 `make release` builds every region and validates the generated ZIPs.
-Build-time binary size/header checks are omitted; runtime module checks remain.
+Build-time binary size limits are omitted; runtime module checks remain. Relocation
+packaging verifies that the retained-relocation link has the same payload as the
+normal link, to account for the old toolchain's behavior.
 Local native C regression tests run with `make test`; local tests remain excluded
 from version control by this project's `.gitignore`. The game runtime and
 modules are C; compilation and linking use shared Make rules.
@@ -415,7 +436,7 @@ from discovery while their provider is disabled. Modules must implement their
 own cleanup for persistent changes; skipping updates cannot undo arbitrary code.
 
 Deploy the new loader cheat and rebuilt modules together, then restart emulation.
-The binary header remains version 2; context/lifecycle fields arrived in API 3; configuration helpers use API 4.
+The binary header is version 3; the callback API remains version 4.
 Older modules that require runtime version exactly 2 must be rebuilt/updated.
 
 ## Mod configuration files

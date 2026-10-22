@@ -19,6 +19,12 @@ Offsets are relative to the discovered mailbox address. The C declaration is
 
 ### Discovery (replaces the old fixed address)
 
+The loader also publishes its read-only module table at `0x000AF800`
+(`ModuleTable` in `module.h`). After checking its magic/version/count, find
+`forge.ntscu.bin` and restrict the scan below to that entry's address/size.
+The table points to the module base, not directly to its mailbox. Its presence
+alone does not mean Forge is currently active; still check the mailbox heartbeat.
+
 Read the module arena `[0x000F2F80, 0x00100000)` through PINE in chunks.
 At 16-byte-aligned addresses, look for magic `0x31475246`, version `1`, and
 size `172`. Require the entire structure to fit in the arena. Re-read the header

@@ -1,7 +1,7 @@
 #ifndef UYA_MODULE_H
 #define UYA_MODULE_H
 #define UYA_MODULE_MAGIC 0x4d415955U
-#define UYA_MODULE_VERSION 2U
+#define UYA_MODULE_VERSION 3U
 #define UYA_MODULE_NO_ENTRY 0xffffffffU
 #define UYA_MODE_CAMPAIGN 1U
 #define UYA_MODE_MULTIPLAYER 2U
@@ -16,8 +16,25 @@ typedef void (*ModuleLifecycle)(void);
 typedef struct ModuleHeader {
     unsigned int magic, version, region, address;
     unsigned int imageSize, memorySize, initOffset, updateOffset;
-    unsigned int modes, reserved;
+    unsigned int modes, relocationCount;
 } ModuleHeader;
+/* Version 3 images are linked at a common base, then moved by the loader.
+ * Relocations follow imageSize bytes; BSS and relocation records are not code. */
+typedef struct ModuleRelocation { unsigned int offset, type, value; } ModuleRelocation;
+#define UYA_MODULE_TABLE_ADDRESS 0x000af800U
+#define UYA_MODULE_TABLE_MAGIC 0x554d5442U
+#define UYA_MODULE_LIMIT 8
+typedef struct ModuleInfo {
+    char name[112]; /* Canonical filename, e.g. forge.ntscu.bin. */
+    unsigned int address, size, modes;
+} ModuleInfo;
+typedef struct ModuleTable {
+    unsigned int magic, version, count, entrySize;
+    ModuleInfo entries[UYA_MODULE_LIMIT];
+} ModuleTable;
+/* Read only. Loaded does not imply active in the current execution context.
+ * Entries remain valid until restart; do not call unknown code via address. */
+#define UYA_MODULE_TABLE ((const volatile ModuleTable *)UYA_MODULE_TABLE_ADDRESS)
 /* Flat INI integer bindings: booleans use 0..1, choices use their index range.
  * Missing keys preserve defaults. Loading is transactional on parse failure. */
 #define UYA_CONFIG_MAX_FIELDS 32
