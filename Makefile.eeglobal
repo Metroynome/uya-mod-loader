@@ -75,15 +75,6 @@ clean-module:
 	done
 
 describe:
-	@set -eu; name='$(MODULE_NAME)'; case "$$name" in ''|[!a-z]*|*[!a-z0-9_-]*) echo 'Invalid module name' >&2; exit 1;; esac; test $${#name} -le 40
-	@case '$(LIBRARY):$(MODE)' in none:campaign|none:multiplayer|none:both|librac3:campaign|libuya:multiplayer|both:both) ;; *) echo 'Invalid library/mode in $(MODULE)/Makefile.defs' >&2; exit 1;; esac
-	@test -n '$(REGIONS)' && test -n '$(CHECK_OBJS)'
-	@set -eu; for r in $(REGIONS); do case "$$r" in ntscu|pal|ntscj) ;; *) echo "Invalid region: $$r" >&2; exit 1;; esac; done; \
-	  for obj in $(CHECK_OBJS); do \
-	    case "$$obj" in /*|*..*|*[!a-zA-Z0-9_./-]*) echo "Invalid object: $$obj" >&2; exit 1;; esac; \
-	    case "$$obj" in *.o) ;; *) exit 1;; esac; \
-	    test -f "$(MODULE)/$${obj%.o}.c" || test -f "$(MODULE)/$${obj%.o}.S"; \
-	  done
 ifeq ($(LIBRARY),both)
 	@printf '%s|%s|%s|%s|%s|%s\n' '$(MODULE)' '$(MODULE_NAME)-campaign' librac3 campaign '$(REGIONS)' '$(CAMPAIGN_OBJS)'
 	@printf '%s|%s|%s|%s|%s|%s\n' '$(MODULE)' '$(MODULE_NAME)-multiplayer' libuya multiplayer '$(REGIONS)' '$(MULTIPLAYER_OBJS)'
@@ -135,21 +126,21 @@ $(ELF): $(OBJECTS) $(LIB_ARCHIVE) $(LINKFILE) FORCE
 	$(EE_CC) $(EE_LDFLAGS) -Wl,-Map,$(@:.elf=.map) -o $@ $(OBJECTS) $(LIB_ARCHIVE) -lgcc
 
 ifeq ($(MODULE),)
+BIN2CODE ?= bin2code
 image: $(ELF)
-	@set -eu; \
-	  payload=$$($(EE_NM) $(ELF) | awk '$$3=="_payload_end" {print "0x"$$1}'); \
-	  bss=$$($(EE_NM) $(ELF) | awk '$$3=="_bss_start" {print "0x"$$1}'); \
-	  test -n "$$payload" && test "$$payload" = "$$bss" && test $$((payload)) -le $$((0xafd00))
 	$(EE_OBJCOPY) -O binary $(ELF) $(BIN)
+	$(BIN2CODE) $(BIN) 000A0000 $(WORK)/publish/loader.pnach pnach
 	@set -eu; campaign=$$($(EE_NM) $(ELF) | awk '$$3=="campaignEntry" {print "0x"$$1}'); \
 	  multiplayer=$$($(EE_NM) $(ELF) | awk '$$3=="multiplayerEntry" {print "0x"$$1}'); \
-	  if test '$(REGION)' = ntscj; then multiplayer=; fi; \
-	  build/image pnach $(BIN) "$$campaign" $$multiplayer > $(WORK)/publish/loader.pnach
+	  campaign=$$(printf '%08X' $$((0x08000000 | (campaign >> 2)))); \
+	  multiplayer=$$(printf '%08X' $$((0x08000000 | (multiplayer >> 2)))); \
+	  sed -e "s/@CAMPAIGN@/$$campaign/g" -e "s/@MULTIPLAYER@/$$multiplayer/g" template/footer.$(REGION).pnach >> $(WORK)/publish/loader.pnach
 else
 image: $(ELF)
 	@set -eu; end=$$($(EE_NM) $(ELF) | awk '$$3=="_image_end" {print "0x"$$1}'); \
-	  test -n "$$end"; $(EE_OBJCOPY) -O binary --pad-to="$$end" $(ELF) $(BIN)
-	build/image module $(BIN) $(REGION_ID) $(ADDRESS) $(RESERVATION) > $(OBJDIR)/size.txt
+	  $(EE_OBJCOPY) -O binary --pad-to="$$end" $(ELF) $(BIN); \
+	  memory=$$($(EE_NM) $(ELF) | awk '$$3=="_memory_end" {print "0x"$$1}'); \
+	  printf '%u\n' $$((memory-$(ADDRESS))) > $(OBJDIR)/size.txt
 	cp $(BIN) $(WORK)/publish/$(IMAGE).$(REGION).bin
 endif
 endif

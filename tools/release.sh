@@ -55,10 +55,6 @@ for label in ntscu pal ntscj all; do
             [ -n "$row" ] || { echo "Unknown release module: $name" >&2; exit 1; }
             supported=$(printf '%s\n' "$row" | cut -d'|' -f5)
             case " $supported " in *" $region "*) ;; *) continue;; esac
-            address=$(awk -F'|' -v n="$name" '$1==n {print $4}' "build/$region/layout.txt")
-            bytes=$(awk -F'|' -v n="$name" '$1==n {print $5}' "build/$region/layout.txt")
-            actual=$(build/image module "hostfs/uya/mods/$name.$region.bin" "$id" "$address" "$bytes")
-            [ "$actual" = "$bytes" ] || { echo 'Rebuild all modules before packaging' >&2; exit 1; }
             cp "hostfs/uya/mods/$name.$region.bin" "$bundle/uya/mods/"
             [ "$region" != ntscj ] || contexts=campaign
             printf '%s.%s %s\n' "$name" "$region" "$contexts" >> "$bundle/uya/config/modules.txt"

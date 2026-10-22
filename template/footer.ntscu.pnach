@@ -1,0 +1,12 @@
+
+// Conditional campaign/multiplayer hooks; jump values come from the linked ELF.
+patch=1,EE,E0040000,extended,0012C990
+patch=1,EE,E003DFB0,extended,0012C992
+patch=1,EE,E0020020,extended,0012C998
+patch=1,EE,E00127BD,extended,0012C99A
+patch=1,EE,2012C994,extended,@CAMPAIGN@
+patch=1,EE,E0040000,extended,00139E90
+patch=1,EE,E003DFB0,extended,00139E92
+patch=1,EE,E0020020,extended,00139E98
+patch=1,EE,E00127BD,extended,00139E9A
+patch=1,EE,20139E94,extended,@MULTIPLAYER@

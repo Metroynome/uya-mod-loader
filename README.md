@@ -134,8 +134,9 @@ settings to `Makefile.defs` and rebuild the complete module set once.
 
 The root `Makefile` provides the build commands and allocates module addresses.
 `Makefile.eeglobal` contains the shared EE compiler, library and linker rules.
-Only module creation and release packaging use shell helpers; `tools/image.c`
-checks binary headers and writes PNACH files. No Python or config parser is needed.
+Only module creation and release packaging use shell helpers. The loader uses
+`bin2code` plus regional hooks in `template/` to produce PNACH files only.
+Modules are plain binaries; the loader validates them at runtime. No Python is needed.
 
 `moduleInit(const ModuleApi *)` runs once, the first time its mode is active.
 A negative result disables its update callback while retaining its memory.
@@ -175,7 +176,7 @@ list with None and X to select. Maploader disables itself on an online lobby
 connection by default; `maploader-online.txt` provides an explicit future-server
 opt-in. Campaign replacement is not yet implemented.
 
-Requires a POSIX shell, GNU Make, a host C compiler, and the PS2 EE/IOP toolchain. Release packaging also uses zip/unzip and sha256sum. No Python is needed. Set `PS2SDK` and put
+Requires a POSIX shell, GNU Make, `bin2code`, and the PS2 EE/IOP toolchain (a host C compiler is needed for tests). Release packaging also uses zip/unzip and sha256sum. No Python is needed. Set `PS2SDK` and put
 `ee-gcc`, `ee-nm`, and `ee-objcopy` on PATH. `EE_PREFIX` overrides `ee-`.
 
 ```sh
@@ -255,7 +256,8 @@ make REGION=ntscu
 `make clean` at the root removes the generated build directory and regional
 hostfs binaries. It keeps module sources, `modules.txt`, and the optional debug
 payload. A module-folder clean removes only that module's objects/binaries and
-keeps its address reservation. Generated module folders include a Makefile.
+keeps its address. Rebuild the full set if it grows into a neighboring module.
+Generated module folders include a Makefile.
 
 Single-module builds use the existing regional layout. If there is no layout,
 the first invocation builds all modules to establish one. If a module grows
@@ -370,11 +372,11 @@ mode binaries still using `0x000a0000` must also be replaced before coexistence.
 Relocation alone does not resolve shared hooks or implement online unloading.
 Replace the old PNACH files and fully restart the game; do not load an old savestate.
 
-`make check` validates module definitions. `make release` builds every region,
-checks module headers and reservations, and validates the generated ZIPs.
+`make release` builds every region and validates the generated ZIPs.
+Build-time binary size/header checks are omitted; runtime module checks remain.
 Local native C regression tests run with `make test`; local tests remain excluded
 from version control by this project's `.gitignore`. The game runtime and
-binary-image utility are C; compilation and linking use shared Make rules.
+modules are C; compilation and linking use shared Make rules.
 Verified regional address tables are checked in and require no generation step.
 Runtime signature guards remain enabled.
 

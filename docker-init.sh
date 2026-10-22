@@ -12,6 +12,16 @@ LIBRAC3_REF=${LIBRAC3_REF:-b14f8259e6072d8a770d86b08895ad33fb398dc8}
 LIBUYA_REF=${LIBUYA_REF:-737dd562c7ea142de3e708594f74c239f19af4b0}
 export LIBRAC3_DIR LIBUYA_DIR
 
+# Same converter used by rac-cheats/uya-cheats; only the loader emits PNACH.
+if ! command -v bin2code >/dev/null 2>&1; then
+    bin2code_source=$(mktemp -d)
+    git clone https://github.com/Dnawrkshp/bin2code.git "$bin2code_source"
+    git -C "$bin2code_source" checkout --detach 355037597d634ae0cf6e10ce6cfdbc965bb7f1e3
+    make -C "$bin2code_source"
+    make -C "$bin2code_source" release
+    rm -rf "$bin2code_source"
+fi
+
 clone_library() {
     url=$1
     destination=$2
