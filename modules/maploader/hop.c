@@ -3,6 +3,32 @@
 #include "maploader.h"
 #include "include/forge.h"
 
+#if UYA_MODULE_REGION == 2
+#define LEVEL_ID          0x1f83a8
+#define GAME_ACTIVE       0x241a50
+#define SCENE_READY       0x245848
+#define SETTINGS          0x241640
+#define NET_PLAYERS       0x22f3d0
+#define PLAYER_COUNT      0x241644
+#define STAGING_MENU      0x1c5c0c0
+#define STAGING_VTABLE    0x47dda0
+#define START_GAME        0x6af070
+#define START_GAME_HASH   0x931aef7fU
+#define HUD_LOAD_SETTINGS 0x8c631120
+#else
+#define LEVEL_ID          0x1f8528
+#define GAME_ACTIVE       0x241bd0
+#define SCENE_READY       0x2459c8
+#define SETTINGS          0x2417c0
+#define NET_PLAYERS       0x22f550
+#define PLAYER_COUNT      0x2417c4
+#define STAGING_MENU      0x1c5c0c0
+#define STAGING_VTABLE    0x47de60
+#define START_GAME        0x6ac720
+#define START_GAME_HASH   0xeca152d0U
+#define HUD_LOAD_SETTINGS 0x8c6312a0
+#endif
+
 #define WORD(a) (*(volatile unsigned int*)(a))
 #ifndef MAP_HOP_CALL
 #define MAP_HOP_CALL(address, base) ((void (*)(int))(address))(base)
@@ -10,11 +36,11 @@
 #ifndef MAP_HOP_HUD_CALL
 #define MAP_HOP_HUD_CALL(address) ((void (*)(void))(address))()
 #endif
-/* NTSC-U local staging update 0x6ab8e8 calls 0x6ac720 for its
+/* Local staging calls the regional START_GAME callback for its
  * Start Game action. Reuse retail roster/settings initialization unchanged.
  * Hash the whole callback before calling code from the staging overlay. */
 #ifndef MAP_START_GAME_CALL
-#define MAP_START_GAME_CALL(menu) ((void (*)(unsigned int))0x6ac720)(menu)
+#define MAP_START_GAME_CALL(menu) ((void (*)(unsigned int))START_GAME)(menu)
 #endif
 
 static unsigned int targetBase;
@@ -28,12 +54,16 @@ int mapHopResult;
  * registration routines guard their own initialization. */
 static int restoreHud(unsigned int level)
 {
-#if UYA_MODULE_REGION == 1
+#if UYA_MODULE_REGION == 2
+	static const unsigned int addresses[] = {
+	    0x4a8f48, 0x4ab060, 0x4a0938, 0x49e0d0, 0x49d420, 0x49acb8, 0x49acb0, 0x49d530, 0x49c830, 0x49c1b0};
+#else
 	static const unsigned int addresses[] = {
 	    0x4a6a30, 0x4a8a88, 0x49e3a0, 0x49bbb8, 0x49af08, 0x498720, 0x4988d8, 0x49b118, 0x49a458, 0x499d98};
+#endif
 	static const unsigned int signature[] = {0x27bdffe0,
 	                                         0x3c030024,
-	                                         0x8c6312a0,
+	                                         HUD_LOAD_SETTINGS,
 	                                         0xffb00000,
 	                                         0x0000202d,
 	                                         0xffb10008,
@@ -51,9 +81,6 @@ static int restoreHud(unsigned int level)
 			return 0;
 	MAP_HOP_HUD_CALL(a);
 	return 1;
-#else
-	return 0;
-#endif
 }
 
 int mapForgeActive(void)
@@ -64,13 +91,9 @@ int mapForgeActive(void)
 
 int mapHopInGame(void)
 {
-#if UYA_MODULE_REGION == 1
-	unsigned int level = WORD(0x1f8528);
+	unsigned int level = WORD(LEVEL_ID);
 	return mapApi->context == UYA_CONTEXT_LOCAL && mapMultiplayerReady() && level >= 40 && level <= 49 &&
-	       WORD(0x241bd0) == 1 && WORD(0x2459c8) == 1;
-#else
-	return 0; /* PAL transition qualification is still required. */
-#endif
+	       WORD(GAME_ACTIVE) == 1 && WORD(SCENE_READY) == 1;
 }
 
 static unsigned int findRequest(void)
@@ -107,19 +130,15 @@ int mapHopRequest(int index)
 
 static unsigned int startGameMenu(void)
 {
-#if UYA_MODULE_REGION == 1
 	unsigned int menu, hash = 2166136261U, i;
 	if (mapApi->context != UYA_CONTEXT_LOCAL || mapStaging() != 1)
 		return 0;
-	menu = WORD(0x1c5c0c0);
-	if (menu < 0x100000 || menu > 0x1fffc00 || (menu & 3) || WORD(menu + 0x60) != 0x47de60)
+	menu = WORD(STAGING_MENU);
+	if (menu < 0x100000 || menu > 0x1fffc00 || (menu & 3) || WORD(menu + 0x60) != STAGING_VTABLE)
 		return 0;
 	for (i = 0; i < 240; ++i)
-		hash = (hash ^ *(volatile unsigned char*)(0x6ac720 + i)) * 16777619U;
-	return hash == 0xeca152d0U ? menu : 0;
-#else
-	return 0;
-#endif
+		hash = (hash ^ *(volatile unsigned char*)(START_GAME + i)) * 16777619U;
+	return hash == START_GAME_HASH ? menu : 0;
 }
 
 int mapStartGame(void)
@@ -142,19 +161,17 @@ int mapStartGame(void)
  * The game recreates these records from the existing match settings. */
 void mapHopOnLoad(void)
 {
-#if UYA_MODULE_REGION == 1
 	unsigned int i, j;
 	if (phase != 2 || mapHopSawLoading || mapApi->context != UYA_CONTEXT_LOCAL)
 		return;
 	for (i = 0; i < 8; ++i) {
-		volatile unsigned int* p = (volatile unsigned int*)(0x22f550 + i * 0xc70);
+		volatile unsigned int* p = (volatile unsigned int*)(NET_PLAYERS + i * 0xc70);
 		for (j = 0; j < 0xc70 / 4; ++j)
 			p[j] = 0;
 		p[0] = 0xffffffff;
 	}
-	WORD(0x2417c4) = 0;
+	WORD(PLAYER_COUNT) = 0;
 	mapHopSawLoading = 1;
-#endif
 }
 
 void mapHopTick(void)
@@ -173,8 +190,8 @@ void mapHopTick(void)
 		MAP_START_GAME_CALL(menu);
 		return;
 	}
-	if (phase == 4 && WORD(0x1f8528) >= 40 && WORD(0x1f8528) <= 55 && WORD(0x241bd0) == 1 && WORD(0x2459c8) == 1 &&
-	    !mapLoading()) {
+	if (phase == 4 && WORD(LEVEL_ID) >= 40 && WORD(LEVEL_ID) <= 55 && WORD(GAME_ACTIVE) == 1 &&
+	    WORD(SCENE_READY) == 1 && !mapLoading()) {
 		phase = 0;
 		mapHopResult = 2;
 		mapMessage("Game started");
@@ -185,7 +202,7 @@ void mapHopTick(void)
 			mapHopCancel();
 			return;
 		}
-		settings = WORD(0x2417c0);
+		settings = WORD(SETTINGS);
 		if (settings < 0x100000 || settings > 0x1fffe00 || (settings & 3) || !findRequest()) {
 			mapHopCancel();
 			return;
@@ -202,8 +219,8 @@ void mapHopTick(void)
 	}
 	++ticks;
 	/* mapHopOnLoad marks the one-time reset at the level-loading boundary. */
-	if (phase == 2 && mapHopSawLoading && mapHopInGame() && !mapLoading() && WORD(0x1f8528) == targetBase) {
-		int hudReady = restoreHud(WORD(0x1f8528));
+	if (phase == 2 && mapHopSawLoading && mapHopInGame() && !mapLoading() && WORD(LEVEL_ID) == targetBase) {
+		int hudReady = restoreHud(WORD(LEVEL_ID));
 		mapHopResult = hudReady ? 2 : 3;
 		phase = 0;
 		queued = -1;

@@ -6,8 +6,8 @@ Use PINE EE memory reads/writes; this is not a host-process pointer. Forge v2
 needs no plugin-specific transport. The Forge mod consumes commands on its
 normal game-thread update. No editor source changes are included here.
 
-Enable `forge.ntscu local`, `maploader`, and optionally `modmenu` in modules.txt.
-The protocol works without Mod Menu. Currently supported: NTSC-U Local Play
+Enable `forge local`, `maploader`, and optionally `modmenu` in modules.txt.
+The protocol works without Mod Menu. Currently supported: NTSC-U and PAL Local Play
 staging and supported in-match overlays 40-49. Online, campaign, boot menus,
 and transitions do not accept new map commands.
 
@@ -27,7 +27,7 @@ No memory scan is needed. All pointers are 32-bit little-endian EE addresses.
    pointer from +`0x00`. Its location is linker-selected, not fixed at AF800.
 2. Read the table header: magic `0x554D5442`, version `1`, count (at most 8),
    and entrySize `124`. Wait if the loader has not initialized it yet.
-   Entries begin at table + `0x10`. Find `forge.ntscu.bin` in the 112-byte
+   Entries begin at table + `0x10`. Find `forge.ntscu.bin` or `forge.pal.bin` in the 112-byte
    NUL-terminated name. Address, size and modes are at entry +`0x70`, +`0x74`,
    and +`0x78`. Check the table is inside the loader's A0000-B0000 reservation
    and the full module range is inside EE memory before following it.
@@ -186,3 +186,10 @@ HUD. Command 1 then reloaded Korgon with overrides still disabled; command 3
 returned to Bakisi Mini with custom loading re-enabled. Both reported success
 and returned to gameplay. The user confirmed normal gameplay and HUD after
 the sequence.
+
+PAL uses the same commands and discovery layout. Regional routines are matched
+to game dumps. Live Start Game and reload completed on retail Bakisi Isles and
+Aquatos Aquadome. Aquadome -> retail Bakisi -> Aquadome completed with successful
+HUD setup. The user confirmed gameplay, HUD, and the Forge menu reload action.
+Temple of Shaar crashes during normal PAL starts as well as hops;
+that map-specific loading case remains unresolved.

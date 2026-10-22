@@ -1,18 +1,18 @@
 # Forge mod suggestions
 
-Status: the NTSC-U Local Play map-hop prototype is implemented. Same-map reloads
-and a cross-base hop followed by repeated reloads have passed live testing. The remaining sections retain the planned feature suggestions;
+Status: NTSC-U and PAL Local Play map hopping are implemented. NTSC-U same-map
+reloads and a cross-base hop followed by repeated reloads have passed live testing. The remaining sections retain the planned feature suggestions;
 they are not a claim that all features exist. No Forge v2 source changes are included. The PINE mailbox is documented in
 [PINE.md](PINE.md), including the current live verification coverage.
 
 ## Current prototype
 
-Enable `forge.ntscu local` alongside `maploader` and `modmenu` in modules.txt.
+Enable `forge local` alongside `maploader` and `modmenu` in modules.txt.
 Rebuild and deploy all modules together, then cold-boot. Open MOD MENU from the
 pause menu. Forge provides **Reload Current Map** for retail or custom maps, and the Custom Maps list can
 request a hop during gameplay while Forge is active. In-game `None` is rejected;
-its staging behavior is unchanged. This prototype supports NTSC-U retail base
-overlays 40-49; split-screen overlays 50-55, PAL, and NTSC-J hopping remain disabled.
+its staging behavior is unchanged. This prototype supports NTSC-U and PAL retail base
+overlays 40-49; split-screen overlays 50-55 and NTSC-J hopping remain disabled.
 
 Requests are deferred to Map Loader, validated against the installed map files,
 and sent through a signature-checked retail scene-change routine. Acceptance is
@@ -44,7 +44,13 @@ other map bases and player counts still need testing before a general release.
 - **Start Game** mailbox command: started the selected Temple of Shaar directly
   from staging; user confirmed gameplay and HUD work normally. A second request
   during gameplay was rejected. Retail-map and split-screen starts remain untested.
-- Other regions and split-screen hopping: not verified or enabled.
+- PAL: loading calls, scene requests, HUD setup, and Start Game matched against
+  regional memory dumps. Live mailbox Start Game and reload completed on retail
+  Bakisi Isles and Aquatos Aquadome. Aquadome -> retail Bakisi -> Aquadome
+  completed with successful HUD setup. The user confirmed gameplay, HUD, and
+  Forge menu Reload Current Map work on PAL. Temple of Shaar crashed both when started
+  normally from staging and when reached by a hop; its PAL loading case remains
+  unresolved. NTSC-J and split-screen hopping remain disabled.
 
 The reload resets transient Local Play network-player records at the level TOC
 loading boundary. This is necessary because the retail local-player constructor
@@ -267,7 +273,7 @@ should continue to work when no editor or PINE client is connected.
 5. **PINE integration:** agree on the contract with Forge v2's developer and test
    reconnects, rebooted sessions, stale IDs, acknowledgement, and error reporting.
 6. **Regional qualification:** repeat the relevant runtime checks on PAL before
-   enabling its capabilities. Record any remaining unsupported cases explicitly.
+   declaring it live-qualified. Record any remaining unsupported cases explicitly.
 
 Further optional ideas: show load duration and expose developer diagnostics.
 These are secondary to reliable full reloads and hops and are not promises of
@@ -280,5 +286,5 @@ Retail hopping: automated tests and all regional builds pass. Live NTSC-U checks
 - Korgon -> Bakisi Mini completed with the custom override re-enabled on base 40.
 - The user confirmed gameplay and HUD after the retail reload and return hop.
   Retail entries also appeared correctly; they now share alphabetical ordering
-  with custom maps, with `None` first. Other retail bases and PAL/split-screen
-  hopping have not been live-qualified.
+  with custom maps, with `None` first. Other retail bases and split-screen
+  hopping have not been live-qualified. PAL coverage is listed above.

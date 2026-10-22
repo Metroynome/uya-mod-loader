@@ -140,8 +140,10 @@ live: menu identity, settings pointer and base-map field were verified.
 In an NTSC-U Local Play test, Aquatos Aquadome progressed through the replacement
 TOC and reached loaded gameplay (base 43, scene-ready flag set), with the custom
 sound upload completed, no loader failure flag, and the radar hook installed.
-The user confirmed that Aquatos Aquadome loaded. PAL and multi-controller
-split-screen loads have not been tested live.
+The user confirmed that Aquatos Aquadome loaded. PAL Aquatos Aquadome completed Start Game, reload, and hops to/from retail
+Bakisi Isles. Temple of Shaar crashes on PAL during normal starts and hops;
+that loading case remains unresolved. Multi-controller split-screen loads
+have not been tested live.
 
 The standalone modules still occupy part of Horizon's `CUSTOM_GAME_MODE` range,
 `0x000f0000`–`0x00100000`. Full Horizon-patch coexistence needs an explicit
@@ -167,11 +169,11 @@ They remain available when no custom maps are installed. Staging retail selectio
 clears the override and establishes the baseline that `None` restores after a
 later custom selection. Retail names are displayed in English.
 
-With Forge active in supported NTSC-U Local Play gameplay, choosing a retail
+With Forge active in supported NTSC-U/PAL Local Play gameplay, choosing a retail
 entry hops directly to it. Reload Current Map supports both retail and custom
 maps. The transition clears custom WAD/world, sound and radar overrides before
 retail loading, and restores the stock loading name. `None` remains staging-only.
-PAL/split-screen hopping restrictions are unchanged. See
+PAL hopping uses regional loading hooks; see Forge README for live coverage. Split-screen hopping remains disabled. See
 [Forge PINE commands](../forge/PINE.md) for command 6 and supported base IDs.
 
 Local staging also updates its retail preview texture when the selected base

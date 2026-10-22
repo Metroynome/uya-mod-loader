@@ -2,9 +2,7 @@
  * reads; it does not install USB IRXs or depend on the patch's global state.
  * Every replaced call must still be the expected retail instruction. */
 #include "maploader.h"
-#if UYA_MODULE_REGION == 1
 #include "hop_addresses.h"
-#endif
 
 #define WORD(a) (*(volatile unsigned int*)(a))
 #define JAL(a)  (0x0c000000U | ((unsigned int)(a) >> 2))
@@ -73,11 +71,6 @@
 #define SOUND_RPC       0x240280
 #define SOUND_FLUSH     0x193680
 #endif
-#if UYA_MODULE_REGION != 1
-#define wadReader WAD_READ
-#define soundInit SOUND_INIT
-#define soundCore SOUND_CORE
-#endif
 /* Resolve the retail name from GameLevel, never from a label that may already
  * contain a custom name (including after a live module reload). */
 #ifndef MAP_MESSAGE
@@ -113,9 +106,7 @@ static const unsigned int localRadarHooks[6] = {0x4a41b4, 0x4a620c, 0x49bb24, 0x
 #endif
 int mapAllowOnline;
 unsigned int mapSceneRequest;
-#if UYA_MODULE_REGION == 1
 static unsigned int wadReader = WAD_READ, soundInit = SOUND_INIT, soundCore = SOUND_CORE;
-#endif
 static MapRecord active;
 static int armed, busy, failed, soundSent;
 static void* soundBuffer;
@@ -484,7 +475,6 @@ static int hookedRadar(unsigned int sector, unsigned int count, void* dest, void
  * group only when its retail/current-owned calls match the requested overlay. */
 static void configureHooks(void)
 {
-#if UYA_MODULE_REGION == 1
 	unsigned int level = WORD(LEVEL_ID), i, a[6], o[6];
 	const unsigned int* row;
 	if (level < 39 || level > 49)
@@ -517,7 +507,6 @@ static void configureHooks(void)
 	soundInit = row[2];
 	soundCore = row[3];
 	mapSceneRequest = row[4];
-#endif
 }
 
 static int radarMatches(unsigned int address)
