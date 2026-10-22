@@ -79,3 +79,15 @@ menu retains the network-state classification, including online profile ID 0;
 a covered/stale Local Play menu cannot override the profile screen. UI pointer
 table `0x1c5c064` and these IDs are shared by NTSC-U/PAL in libuya/ui.h. Native
 regional tests cover this distinction; live PAL qualification remains pending.
+
+## Loader and module discovery
+
+The fixed loader discovery block occupies A0000-A0030. Its first word points
+to the linker-placed module table; the table and persistent state follow the
+payload in a NOLOAD section. Their addresses are not an ABI. The linked
+`_loader_end` must remain below B0000. The PNACH generator gets hook targets
+from `campaignEntry` and `multiplayerEntry`, now after the discovery block.
+
+Version-4 modules begin with a 16-byte discovery header containing an optional
+exports pointer. See README.md for layouts and the C declaration convention,
+and modules/forge/PINE.md for the complete mailbox pointer chain.

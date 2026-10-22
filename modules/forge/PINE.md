@@ -17,28 +17,45 @@ All integers are unsigned 32-bit little-endian. Strings are NUL-terminated ASCII
 Offsets are relative to the discovered mailbox address. The C declaration is
 `include/forge.h`; the ELF symbol is `forgeMailbox`.
 
-### Discovery (replaces the old fixed address)
+### Discovery through the loader and module headers
 
-The loader also publishes its read-only module table at `0x000AF800`
-(`ModuleTable` in `module.h`). After checking its magic/version/count, find
-`forge.ntscu.bin` and restrict the scan below to that entry's address/size.
-The table points to the module base, not directly to its mailbox. Its presence
-alone does not mean Forge is currently active; still check the mailbox heartbeat.
+PINE follows **0xA0000 -> module table -> Forge -> exports -> mailbox**.
+No memory scan is needed. All pointers are 32-bit little-endian EE addresses.
 
-Read the module arena `[0x000F2F80, 0x00100000)` through PINE in chunks.
-At 16-byte-aligned addresses, look for magic `0x31475246`, version `1`, and
-size `172`. Require the entire structure to fit in the arena. Re-read the header
-and verify that heartbeat at offset `0x18` advances between samples before
-accepting a candidate. Require exactly one live candidate; if none or multiple
-are found, do not write. A paused emulator or inactive Forge will not advance
-its heartbeat: wait until Local Play is running. Then use the availability,
-context and capability checks below before submitting a command.
+1. At `0x000A0000`, verify loader magic `0x444C5955` at +`0x04`, discovery
+   version `1` at +`0x08`, and size `48` at +`0x0C`. Read the module-table
+   pointer from +`0x00`. Its location is linker-selected, not fixed at AF800.
+2. Read the table header: magic `0x554D5442`, version `1`, count (at most 8),
+   and entrySize `124`. Wait if the loader has not initialized it yet.
+   Entries begin at table + `0x10`. Find `forge.ntscu.bin` in the 112-byte
+   NUL-terminated name. Address, size and modes are at entry +`0x70`, +`0x74`,
+   and +`0x78`. Check the table is inside the loader's A0000-B0000 reservation
+   and the full module range is inside EE memory before following it.
+3. At Forge's base, verify module magic `0x444D5955` (`UYMD`) at +`0x04`,
+   version `1` at +`0x08`, and size `16` at +`0x0C`. Read the exports
+   pointer from +`0x00`. Require a nonzero, four-byte-aligned pointer and a
+   complete 16-byte exports structure inside Forge's address/size range.
+4. Forge exports contain magic `0x31584746` (`FGX1`) at +`0x00`, version
+   `1` at +`0x04`, size `16` at +`0x08`, and the mailbox pointer at
+   +`0x0C`. The C declaration is `ForgeExports` in `include/forge.h`.
+5. Require a 16-byte-aligned mailbox entirely within Forge's address/size range.
+   Check mailbox magic `0x31475246` (`FRG1`), version `1`, and size `172`.
+   Re-read discovery pointers and the table entry to detect a restart during
+   discovery. Verify heartbeat at mailbox + `0x18` advances, then check
+   availability, context and capability bits before submitting work.
 
-Cache the discovered address only for the current session. Rediscover after a
-restart, savestate load, module reload, changed header, or stopped heartbeat;
-never fall back to `0x000FFF00`. Forge can move when the module set is rebuilt.
-The command numbers and field offsets are unchanged. Existing clients that
-hard-code the former address must update before using this build.
+The headers and exports table are read-only to the host. The exports and mailbox
+pointers exist as soon as Forge is loaded, but the mailbox header is initialized
+only when Forge first initializes in Local Play. Loaded does not imply active.
+If the header is not ready or the heartbeat is stopped, wait for running Local
+Play instead of writing commands. A paused emulator also stops the heartbeat.
+
+Cache addresses only for the current session. Rediscover after restart,
+savestate load, module reload, changed header, or stopped heartbeat. This
+replaces both the fixed AF800 table location and Forge's former FGP1 entry stub.
+Do not use the old base + 8 mailbox lookup or fall back to `0x000FFF00`.
+Rebuild and deploy the version-4 loader and modules together. The mailbox's
+command numbers and field offsets below remain unchanged.
 
 | Offset | Field | Owner / meaning |
 |---|---|---|

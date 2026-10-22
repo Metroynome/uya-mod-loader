@@ -1,4 +1,4 @@
-/* Convert EE ELF relocation metadata into the small version-3 module trailer.
+/* Convert EE ELF relocation metadata into the small version-4 module trailer.
  * Usage: relocate linked.elf flat.bin output.bin
  * This is packaging, not a size policy: the runtime owns allocation/validation. */
 #include <stdio.h>

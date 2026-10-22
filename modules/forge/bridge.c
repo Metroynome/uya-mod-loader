@@ -2,8 +2,9 @@
 #include "include/forge.h"
 
 /* Part of Forge's BSS and module memory size, not a loader reservation.
- * PINE discovers the aligned FRG1 header; see PINE.md. */
+ * PINE follows the module discovery header and exports table; see PINE.md. */
 volatile ForgeMailbox forgeMailbox __attribute__((aligned(16)));
+const ForgeExports moduleExports UYA_MODULE_EXPORTS = {FORGE_EXPORTS_MAGIC, 1, sizeof(ForgeExports), &forgeMailbox};
 static unsigned int seen, running;
 
 static void message(const char* s)

@@ -1,8 +1,8 @@
 /* UYA host module loader. No heap resizing or game allocator patches.
  * Flow: choose the current game's API -> read modules.txt once -> validate and
  * load each image -> initialize/update only modules matching the active mode.
- * Memory: loader a0000-af800, public table af800-afd00, state afd00-b0000,
- * modules f2f80-100000.
+ * Memory: discovery at a0000; code, table and state follow within a0000-b0000.
+ * Modules occupy f2f80-100000.
  */
 #include "module.h"
 #include "config.h"
@@ -15,12 +15,12 @@
 #endif
 #define MODULE_END   0x00100000U
 #define MODULE_LIMIT UYA_MODULE_LIMIT
-#define LOADER_MAGIC 0x554d4c3aU
+#define LOADER_MAGIC 0x554d4c3bU
 #ifndef STATE
-#define STATE ((struct LoaderState*)0x000afd00)
+#define STATE (&loaderState)
 #endif
 #ifndef MODULE_TABLE
-#define MODULE_TABLE ((ModuleTable*)UYA_MODULE_TABLE_ADDRESS)
+#define MODULE_TABLE (&moduleTable)
 #endif
 #define loaderApi (STATE->api)
 #define printf    loaderApi.print
@@ -53,9 +53,9 @@ struct LoaderState {
 };
 
 #ifdef _EE
-typedef char LoaderStateMustFit[(sizeof(struct LoaderState) <= 0x300) ? 1 : -1];
-
-typedef char ModuleTableMustFit[(sizeof(ModuleTable) <= 0x500) ? 1 : -1];
+/* Linker-placed after the payload, never overwritten by recurring PNACH writes. */
+ModuleTable moduleTable __attribute__((section(".loader.state")));
+static struct LoaderState loaderState __attribute__((section(".loader.state")));
 #endif
 
 const ModuleApi* moduleConfigApi(void)
@@ -223,7 +223,7 @@ static int validPath(const char* path)
 
 static int validEntry(unsigned int offset, unsigned int size)
 {
-	return offset == UYA_MODULE_NO_ENTRY || (!(offset & 3) && offset < size);
+	return offset == UYA_MODULE_NO_ENTRY || (!(offset & 3) && offset >= sizeof(ModuleDiscovery) && offset < size);
 }
 
 /* A small monotonic allocator: successful loads retain their slots until restart.
@@ -240,8 +240,9 @@ static int validHeader(const ModuleHeader* h)
 	unsigned int address = nextModuleAddress();
 	return h->magic == UYA_MODULE_MAGIC && h->version == UYA_MODULE_VERSION &&
 	       (!h->region || h->region == UYA_MODULE_REGION) && h->address == 0x000f0000 && h->modes &&
-	       !(h->modes & ~3U) && h->imageSize && !(h->imageSize & 3) && h->imageSize <= h->memorySize &&
-	       address < MODULE_END && h->memorySize <= MODULE_END - address && h->relocationCount <= h->imageSize / 4 &&
+	       !(h->modes & ~3U) && h->imageSize >= sizeof(ModuleDiscovery) && !(h->imageSize & 3) &&
+	       h->imageSize <= h->memorySize && address < MODULE_END && h->memorySize <= MODULE_END - address &&
+	       h->relocationCount <= (h->imageSize - sizeof(ModuleDiscovery)) / 4 &&
 	       validEntry(h->initOffset, h->imageSize) && validEntry(h->updateOffset, h->imageSize);
 }
 
@@ -250,10 +251,19 @@ static int validHeader(const ModuleHeader* h)
 static int relocateModule(int fd, const ModuleHeader* h, unsigned int address)
 {
 	unsigned int i, previous = 0;
+	ModuleDiscovery* discovery = (void*)address;
+	unsigned int exports = discovery->exports;
+	if (discovery->magic != UYA_MODULE_DISCOVERY_MAGIC || discovery->version != UYA_DISCOVERY_VERSION ||
+	    discovery->size != sizeof(*discovery))
+		return 0;
+	if (exports &&
+	    ((exports & 3) || exports < h->address + sizeof(*discovery) || exports - h->address > h->memorySize - 4))
+		return 0;
 	for (i = 0; i < h->relocationCount; ++i) {
 		ModuleRelocation r;
 		unsigned int *word, value;
-		if (!readExact(fd, &r, sizeof(r)) || (r.offset & 3) || r.offset >= h->imageSize || (i && r.offset <= previous))
+		if (!readExact(fd, &r, sizeof(r)) || (r.offset & 3) || r.offset < sizeof(ModuleDiscovery) ||
+		    r.offset >= h->imageSize || (i && r.offset <= previous))
 			return 0;
 		previous = r.offset;
 		word = (unsigned int*)(address + r.offset);
@@ -275,7 +285,11 @@ static int relocateModule(int fd, const ModuleHeader* h, unsigned int address)
 				return 0;
 		}
 	}
-	return atEnd(fd);
+	if (!atEnd(fd))
+		return 0;
+	/* Linker LONG() has no ELF relocation record; all C exports use normal ones. */
+	discovery->exports = exports ? address + (exports - h->address) : 0;
+	return 1;
 }
 
 static int sameText(const char* a, const char* b)

@@ -3,9 +3,10 @@
 
 #include "module.h"
 
-#define FORGE_SERVICE_ID   0x464f5247U
-#define MAP_HOP_SERVICE_ID 0x484f5053U
-#define FORGE_API_VERSION  1U
+#define FORGE_EXPORTS_MAGIC 0x31584746U
+#define FORGE_SERVICE_ID    0x464f5247U
+#define MAP_HOP_SERVICE_ID  0x484f5053U
+#define FORGE_API_VERSION   1U
 
 /* Module-owned little-endian EE mailbox. Only request fields belong to the host.
  * Write command/name first, requestId last. One request at a time. */
@@ -60,6 +61,11 @@ typedef struct ForgeMailbox {
 	unsigned int acceptedId, completedId, state, error, rejectedId, rejectError;
 	char message[48];
 } ForgeMailbox;
+
+typedef struct ForgeExports {
+	unsigned int magic, version, size;
+	volatile ForgeMailbox* mailbox;
+} ForgeExports;
 
 typedef char ForgeMailboxFits[(sizeof(ForgeMailbox) <= 256) ? 1 : -1];
 

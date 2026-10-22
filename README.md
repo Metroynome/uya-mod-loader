@@ -164,9 +164,9 @@ NTSC-U/PAL multiplayer. NTSC-J multiplayer retains the loader limitation below.
 See [the menu API guide](modules/modmenu/README.md) for integration and validation
 details.
 
-**The loader uses runtime API 4 with binary header version 3. For this upgrade,
+**The loader uses runtime API 4 with binary header version 4. For this upgrade,
 rebuild all modules and deploy them with the new PNACH, then cold-boot.**
-Old version-1/2 binaries are rejected. Subsequent version-3 modules can be replaced independently.
+Old version-1/2/3 binaries are rejected. Subsequent version-4 modules can be replaced independently.
 The loader now supplies `publishService` / `findService` for versioned APIs.
 Service IDs belong to their publishing module; lookup requires an exact API
 version and an allowed owner mode/context. Failed initialization removes that module's
@@ -358,9 +358,8 @@ its own low-memory range only when installed:
 | Range | Use |
 |---|---|
 | `0x000c8000?0x000ce000` | Optional exception handler, 24 KiB including workspace |
-| `0x000a0000-0x000af800` | Loader code/data, 63,488-byte reservation |
-| `0x000af800-0x000afd00` | Read-only public loaded-module table |
-| `0x000afd00-0x000b0000` | Persistent loader state, 768 bytes |
+| `0x000a0000-0x000a0030` | Fixed 48-byte loader discovery block |
+| `0x000a0030-0x000b0000` | Loader code/data, followed by linker-placed module table and persistent state |
 | `0x000f2f80-0x00100000` | Modules, 53,376 bytes including BSS and Forge's mailbox when loaded |
 
 Headers include ABI version, region, mode mask, link address, sizes, and entry
@@ -370,9 +369,9 @@ Memory is cleared before loading; data/instruction caches are synchronized befor
 executing new code. State is outside PNACH-injected bytes so repeated cheat writes
 do not reset it. This area must remain free of other injected patches.
 
-Version-3 module binaries contain a 40-byte header, code/data, then relocation
-records. The loader handles MIPS 32-bit pointers, jumps, and paired high/low
-address instructions; absolute game addresses remain unchanged. Older version-2
+Version-4 module binaries contain a 40-byte file header, a 16-byte discovery
+header at the loaded base, code/data, then relocation records. The loader handles MIPS 32-bit pointers, jumps, and paired high/low
+address instructions; absolute game addresses remain unchanged. Older version-1/2/3
 binaries are rejected: rebuild them once with this version's module Makefiles.
 Unsupported relocation types fail packaging instead of producing broken code.
 
@@ -436,8 +435,74 @@ from discovery while their provider is disabled. Modules must implement their
 own cleanup for persistent changes; skipping updates cannot undo arbitrary code.
 
 Deploy the new loader cheat and rebuilt modules together, then restart emulation.
-The binary header is version 3; the callback API remains version 4.
+The binary header is version 4; the callback API remains version 4.
 Older modules that require runtime version exactly 2 must be rebuilt/updated.
+
+## Discovering modules and exported data
+
+Read the fixed discovery block at `0x000A0000` before following any pointers.
+All fields are unsigned 32-bit little-endian EE values:
+
+| Offset | Loader discovery field |
+|---|---|
+| 0x00 | Pointer to the current module table |
+| 0x04 | Magic `0x444C5955` (`UYLD`) |
+| 0x08 | Discovery version 1 |
+| 0x0C | Size: 48 bytes |
+| 0x10-0x2C | Eight reserved words, zero |
+
+The linker places the table and persistent state after the loader payload.
+Their addresses can change when the loader is rebuilt; never hard-code
+`0xAF800` or `0xAFD00`. In C, use `UYA_MODULE_TABLE` after checking
+`UYA_LOADER_DISCOVERY`. The table retains magic `0x554D5442`, version 1,
+count (maximum 8), and entrySize 124, followed by its existing entries.
+The table is initialized on the loader's first valid tick, so wait for its header.
+Code begins after the discovery block; PNACH hooks use the linked entry symbols.
+The loader, table, and state must still fit below `0xB0000`.
+
+Each entry's address points to a standard 16-byte module discovery header:
+
+| Offset | Module discovery field |
+|---|---|
+| 0x00 | Optional exports pointer; zero when there are no exports |
+| 0x04 | Magic `0x444D5955` (`UYMD`) |
+| 0x08 | Discovery version 1 |
+| 0x0C | Size: 16 bytes |
+
+The existing linker rules generate this header for every module. Its fields
+are read-only to clients. Entry offsets in the file header point past it to code.
+The runtime rebases its exports pointer; C pointers inside an exports structure
+are handled by the existing relocation records.
+
+Creators can optionally define the single global symbol `moduleExports` in
+one C file. Give the structure a mod-specific magic, version and size so clients
+can recognize it, then add the pointers they need. For example:
+
+```c
+#include "module.h"
+
+#define MY_EXPORTS_MAGIC 0x3158454dU
+
+typedef struct MyExports {
+	unsigned int magic, version, size;
+	volatile unsigned int* status;
+} MyExports;
+
+static volatile unsigned int status;
+const MyExports moduleExports UYA_MODULE_EXPORTS = {
+	MY_EXPORTS_MAGIC, 1, sizeof(MyExports), &status};
+```
+
+No extra files, build scripts, assembly, or Mod Menu dependency are needed.
+Omit the definition to leave exports null. Keep exported storage inside the
+module for its entire lifetime; never export a stack address. This discoverable
+data does not replace context-aware `publishService` / `findService` APIs.
+
+Before reading exports, validate the discovery headers and pointer bounds within
+the module's address/size. Loaded does not mean active: a client must follow the
+module's own readiness protocol. Rediscover after restart, module replacement,
+or savestate load; do not retain addresses across sessions. Forge's complete
+lookup and heartbeat protocol is in [PINE.md](modules/forge/PINE.md).
 
 ## Mod configuration files
 
