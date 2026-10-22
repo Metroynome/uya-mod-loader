@@ -27,8 +27,8 @@ PAL and NTSC-U multiplayer SDK signatures and hooks also match all 22 supplied
 `eemem/multiplayer/` lobby/map dumps. These were found in the nested directory
 after the initial implementation. NTSC-J multiplayer is still unverified.
 
-`tools/verify_addresses.py` checks the exact return/delay-slot instructions and
-SDK entry signatures against those source binaries. Runtime checks refuse an
+The exact return/delay-slot instructions and SDK entry signatures were verified
+against those source binaries; the verified tables are checked in as C. Runtime checks refuse an
 unexpected SDK entry layout before file operations. Hook patches require the
 surrounding `ld s0, 0(sp)` and `addiu sp, sp, 32` instructions to match.
 `entry.S` preserves v0/v1, ra, and gp; it leaves the original delay slot intact.
@@ -61,3 +61,21 @@ Two copies of the same AnniNation level check in each region's code.0005 file
 load the regional global above; the verifier decodes their LUI/LW instructions.
 Multiplayer evidence: every supplied NTSC-U/PAL dump reads its filename's level
 ID (39 through 49) at the regional address. No region offset is guessed.
+
+## Local Play teardown versus online profile selection
+
+Live NTSC-U staging-exit trace: NetInfo.state at `0x1a5f70` remained 5 while
+onlyLocalPlayers at `0x1a5fc0` became zero. Active UI slots contained local
+create-game (ID 21) and local staging (ID 23). Treating these network states alone as online
+incorrectly deactivated offline modules and freed their cached map catalog.
+
+A second live trace after quitting a game showed state 10 with onlyLocalPlayers
+clear and local create-game (ID 21) foremost.
+
+With onlyLocalPlayers clear, context detection examines the foremost
+nonzero active menu (slots `0x1c5c110` through `0x1c5c118`, last slot first).
+Local IDs 21, 23, and multiplayer landing ID 24 remain local. Any other foremost
+menu retains the network-state classification, including online profile ID 0;
+a covered/stale Local Play menu cannot override the profile screen. UI pointer
+table `0x1c5c064` and these IDs are shared by NTSC-U/PAL in libuya/ui.h. Native
+regional tests cover this distinction; live PAL qualification remains pending.

@@ -2,7 +2,7 @@
 # Prepare an Alpine PS2DEV container. Run with sh; no executable bit required.
 set -eu
 
-apk add --no-cache python3 make git build-base ca-certificates
+apk add --no-cache make git build-base ca-certificates zip unzip
 : "${PS2SDK:?Use a PS2DEV image with PS2SDK configured}"
 command -v "${EE_PREFIX:-ee-}gcc" >/dev/null
 
@@ -39,7 +39,7 @@ clone_library https://github.com/Metroynome/librac3.git "$LIBRAC3_DIR" "$LIBRAC3
 clone_library https://github.com/Horizon-Private-Server/horizon-uya-patch.git "$(dirname "$LIBUYA_DIR")" "$LIBUYA_REF"
 test -f "$LIBUYA_DIR/Makefile.ntsc"
 
-# build.py compiles isolated copies of these sources for each supported region.
+# Makefile.eeglobal compiles isolated copies of these sources for each supported region.
 # Optional arguments let this script initialize and build in a single invocation.
 if [ "$#" -gt 0 ]; then
     exec "$@"

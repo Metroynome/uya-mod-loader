@@ -3,9 +3,8 @@
 # Published release files are tracked; ZIPs and development outputs are not.
 /release/**
 !/release/README.md
-!/release/modules.json
-!/release/crcs.json
-!/release/files.json
+!/release/modules.txt
+!/release/crcs.txt
 !/release/SC*-*.pnach
 !/release/uya/
 !/release/uya/maploader-online.txt

@@ -114,13 +114,8 @@ using a cached API after a mode transition.
 `main.c` owns registration, input, selection and drawing, including the bordered
 panel, tab strip and selection highlight. `backend.c` selects the appropriate
 controller buffer, font functions and box-rendering context for each overlay.
-The address table is generated from the supplied RAC Levels extraction:
-
-```sh
-python tools/map_menu_renderers.py "D:/PS2/ISOs/RAC Levels/rac3" --check
-```
-
-Ordinary builds use the checked-in table and do not need the extraction.
+The verified address table is checked in as C in `renderers.h`. Ordinary builds
+need no extraction or generator.
 Function and rendering-context fingerprints are checked at runtime before calling the renderer.
 Unrecognized overlays leave the menu closed. Signature matches do not replace
 live testing of every level and region.
@@ -145,8 +140,7 @@ In NTSC-U/PAL multiplayer matches, the pause menu's Continue entry becomes
 the pause screen before opening the mod menu. This is verified against all ten
 base overlays and six local split-screen overlays. Campaign adds a separate **MOD MENU** row to the main pause menu, preserving
 all retail entries. Campaign tables are verified for NTSC-U, PAL, and NTSC-J.
-The shortcut remains available at boot. Regenerate/check addresses with
-`python tools/map_pause_menu.py "D:/PS2/ISOs/RAC Levels/rac3" --check`.
+The shortcut remains available at boot. Verified addresses are stored in the C tables.
 
 Virtual lists mirror Horizon's two-pane layout: nine rows wrap around a fixed
 center highlight on the right, with right-aligned names. Providers can call
@@ -177,7 +171,7 @@ menu->setTabVisibility(tab, MODMENU_SHOW_MAIN_MENU | MODMENU_SHOW_MULTIPLAYER);
 Combine flags with `|`. The setter replaces the tab's legacy mode filter.
 This controls UI visibility, not whether the module executes: keep the module's
 manifest mode and library calls appropriate for the contexts it supports.
-See `tools/map_campaign_pause.py` to regenerate or verify campaign pause anchors.
+Campaign pause anchors are checked in alongside the renderer tables.
 
 ## Input capture
 

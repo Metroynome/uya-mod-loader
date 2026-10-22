@@ -167,10 +167,10 @@ and report added, removed, or updated maps. Invalid scans retain the last valid
 catalog. Keep the loaded map's identity separate from the refreshed list so that
 removing its files does not invalidate live state or accidentally select another map.
 
-The current scanner is staging-only. Supporting in-game refresh requires checking
-that its resident SDK calls and allocations remain valid in every supported
-multiplayer overlay, and separating cancellation/lifetime handling from leaving
-staging. Do not simply remove the staging guard.
+The scanner supports Local Play staging and supported Forge gameplay contexts.
+A successful catalog is reused on later staging visits. Refresh Custom Maps or
+a PINE refresh request explicitly checks for added, removed, or updated files.
+Deactivation releases the catalog; the next activation scans again.
 
 Suggested automatic detection, in order of preference:
 
@@ -180,9 +180,9 @@ Suggested automatic detection, in order of preference:
 3. An optional slow periodic scan for existing map packs without such a marker.
    Do not run a full directory scan every frame or during a map transition.
 
-The integer in our generated `.idx` cache describes our last successful scan;
-it cannot reveal external file changes by itself. An external revision marker
-must be updated by the exporter, or the mod must enumerate/read files again.
+There is no on-disk catalog index. Refresh explicitly enumerates the map files
+and rebuilds the retained catalog. An external revision marker would need to be
+updated by the exporter to detect changes without another scan.
 
 Version/name/asset-size comparisons detect normal map-pack updates, but can miss
 an edit with unchanged version and byte lengths. Recommend a distinct build ID

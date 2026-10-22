@@ -12,7 +12,7 @@
 #define UYA_CONTEXT_ONLINE 4U
 #define UYA_CONTEXT_ALL 7U
 typedef void (*ModuleLifecycle)(void);
-/* REGION is set by build.py: 1=NTSC-U, 2=PAL, 3=NTSC-J. */
+/* REGION is set by Makefile.eeglobal: 1=NTSC-U, 2=PAL, 3=NTSC-J. */
 typedef struct ModuleHeader {
     unsigned int magic, version, region, address;
     unsigned int imageSize, memorySize, initOffset, updateOffset;

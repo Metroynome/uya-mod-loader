@@ -58,7 +58,7 @@ static unsigned int findRequest(void)
         WORD(a+8)==0xffbf0010 && WORD(a+40)==0xaf82a934?a:0;
 }
 int mapHopAvailable(void)
-{return mapForgeActive() && mapHopInGame() && !phase && !mapLoading() && !mapScanActive() && mapHooksReady() && findRequest()!=0;}
+{return mapCatalogReady && mapForgeActive() && mapHopInGame() && !phase && !mapLoading() && !mapScanActive() && mapHooksReady() && findRequest()!=0;}
 int mapHopRequest(int index)
 {
     if(!mapHopAvailable() || (index<0?(index>-40 || index<-49):index>=mapCount))return 0;

@@ -11,8 +11,6 @@ Keep the Horizon map pack in the `uya/` root, separate from module binaries:
 ```text
 host0:uya/
   config/modules.txt
-  maps.ntscu.idx
-  maps.pal.idx
   aquadome.version
   aquadome.wad
   aquadome.world
@@ -30,26 +28,28 @@ host0:uya/
     modmenu.pal.bin
 ```
 
-Maps are discovered automatically when entering **Local Play staging**. Neither
+Maps are discovered automatically on the first **Local Play staging** visit
+after activation. Neither
 entering multiplayer menus nor entering online staging triggers a scan. The
 bundled `mods/utils/mapscan.irx` helper enumerates `host0:uya/` offline; it needs no
 Horizon connection, USB drivers, or Python command.
 
 The modal popup shows discovery activity, followed by metadata-processing
 progress. Work is split across update calls. Input is captured until scanning
-finishes or fails. Every staging entry triggers exactly one scan. Filename,
-display name, base ID, version and regional asset sizes produce a 32-bit fingerprint; merely
-counting files would miss replacing one map with another.
+finishes or fails. After a successful scan, later staging visits reuse the
+heap-resident catalog, including after quitting a game. An empty catalog also
+counts as successful. Deactivation releases the catalog and resets this state.
+Use **Refresh Custom Maps** or a PINE refresh command after adding, removing,
+or updating maps. No `.idx` files are read or written; old index files can be
+removed. Each refresh refills the same allocation in place, with no backup
+catalog. Selection is retained by filename if the selected map still exists.
+A failed scan leaves the list unavailable and clears its selection; retry with
+Refresh Custom Maps or by re-entering staging. Select a map again after retrying.
+Do not change map assets while scanning or loading a game.
 
-The loader creates `maps.ntscu.idx` / `maps.pal.idx` itself. A version-2 cache
-stores magic, count, fingerprint and record checksum followed by 120-byte map
-records. Missing, old or corrupt caches are rebuilt. Unchanged scans reuse the
-current list and avoid rewriting the cache. A failed scan keeps the prior list;
-selection still validates asset sizes before loading. Re-enter staging to retry.
-Do not change map assets while scanning or loading a match.
-
-Map records and scan workspaces use multiplayer `malloc/free`. On a change to
-the campaign ELF, old multiplayer pointers are discarded rather than passed to
+The catalog uses one multiplayer `malloc` allocation, retained until deactivation.
+On a change to the campaign ELF, old multiplayer pointers are discarded rather
+than passed to
 the campaign allocator. The helper stays resident until the IOP resets and is
 reused on later scans. Map payloads are not modified by discovery. NTSC-U uses
 `.wad`, `.world`, `.sound`, `.map`; PAL uses `.pal.wad`, etc., with shared `.version`
@@ -77,7 +77,8 @@ still in staging. Browse the entire catalog with Up/Down; X commits the
 highlighted entry and closes the menu. The highlighted map stays centered in
 the right-hand list; the left pane shows the author and description from the
 map pack's `.version` metadata when available. There are no pages, and up to 96 maps per region are supported.
-Leave and re-enter Local Play staging after adding/removing maps.
+Use Forge -> Refresh Custom Maps (or its PINE refresh command) after adding or
+removing maps. Without Forge, restart the game to discover changes.
 
 All retail bases 40–49 remain selectable in Local Play. The backend accepts
 the base ID directly or its split-screen counterpart where the game uses one;
@@ -116,7 +117,7 @@ Selection checks file sizes again. TOC replacement checks the target base and
 files before modifying allocations. Reads handle short transfers and verify
 the expected file length. A failed read **after replacement starts stalls the
 load** instead of allowing partially replaced map data to run. Fix the files,
-leave and re-enter Local Play staging. Do not change payload files during a match/load.
+use Forge -> Refresh Custom Maps or restart the game. Do not change payload files during a match/load.
 Sound RPC waits are bounded; failure also stops the load.
 
 The backend does not resize the heap. It reads into buffers allocated by the
@@ -128,12 +129,9 @@ game from the updated TOC. Catalog and loader state live in module BSS.
 - `files.c`: catalog validation and bounded hostfs reads.
 - `multiplayer.c`: regional staging access and guarded loading hooks.
 - `directory.c` and `iop/mapscan/`: offline directory RPC support.
-- `tools/verify_maploader.py`: checks loading/seek anchors and radar signatures
-  against the supplied retail extraction.
 
-```powershell
-python tools/verify_maploader.py "D:/PS2/ISOs/RAC Levels/rac3"
-```
+Loading/seek anchors and radar signatures were verified against the supplied
+retail extraction. They are retained in C with runtime hook guards.
 
 NTSC-U/PAL builds and native tests pass. Both regional loading-hook sets,
 resident seek anchors, ten online radar hooks and six local radar hooks were
@@ -174,3 +172,7 @@ maps. The transition clears custom WAD/world, sound and radar overrides before
 retail loading, and restores the stock loading name. `None` remains staging-only.
 PAL/split-screen hopping restrictions are unchanged. See
 [Forge PINE commands](../forge/PINE.md) for command 6 and supported base IDs.
+
+Local staging also updates its retail preview texture when the selected base
+changes, including retail selections and restoring the baseline with `None`.
+Custom maps show their retail base preview; custom artwork is not loaded.

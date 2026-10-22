@@ -49,7 +49,9 @@ Binary names and explicit regional suffixes are unchanged.
 `local` includes the multiplayer main menu, Local Play staging, and offline
 matches, including custom maps using online overlay IDs. `online` starts at the
 post-DNAS profile-selection screen, before login: NetInfo reaches
-`NETREGISTERED` (5), with `onlyLocalPlayers` clear. Returning to the multiplayer
+`NETREGISTERED` (5), with `onlyLocalPlayers` clear. Local Play teardown can
+also leave network state 5 or 10; the foremost active Local Play/landing menu keeps it
+classified as local, while the online profile screen still disables offline modules. Returning to the multiplayer
 main menu returns to `local`. Campaign includes its boot menu and Veldin (0).
 
 Configuration narrows a binary's campaign/multiplayer library support; it cannot
@@ -87,36 +89,53 @@ skipped. Restart after repairing one.
 
 ## Create a module
 
-From this directory, with Python 3.8 or newer:
+From a shell with GNU Make (or inside the Docker build container):
 
 ```sh
-python tools/build.py new my-mod
-python tools/build.py new campaign-mod --library librac3
-python tools/build.py new multiplayer-mod --library libuya
-python tools/build.py new shared-mod --library both
+make new-module NAME=my-mod
+make new-module NAME=campaign-mod LIBRARY=librac3
+make new-module NAME=multiplayer-mod LIBRARY=libuya
+make new-module NAME=shared-mod LIBRARY=both
 ```
 
-Or use `make new-module NAME=my-mod LIBRARY=none` (`PYTHON=python` on systems
-without a `python3` command).
-
-Each command creates `modules/<name>/module.json` and commented starter C code,
-and appends entries set to **`0` (disabled)** to `modules.txt`, with comments
-showing the appropriate enable value. Existing folders are never
+Each command creates `modules/<name>/Makefile.defs` and commented starter C code,
+and appends entries set to **`disabled`** to `modules.txt`, with comments
+showing the available contexts. Existing folders are never
 overwritten. The `hello` sample is enabled by default and only prints a message.
 
 - `none`: one `main.c`, usable in both modes through the loader API.
 - `librac3`: campaign-only `main.c`, with `<librac3/...h>` headers available.
 - `libuya`: multiplayer-only `main.c`, with `<libuya/...h>` headers available.
 - `both`: **one folder**, with `campaign.c` and `multiplayer.c`. These become
-  `<name>-campaign.<region>.bin` and `<name>-multiplayer.<region>.bin`. Set the campaign entry to `1` and the multiplayer entry to `2`.
+  `<name>-campaign.<region>.bin` and `<name>-multiplayer.<region>.bin`. Enable the campaign entry with `campaign` and the multiplayer entry with `local` or `online`.
   Each image links the correct library, avoiding collisions between identically
   named library functions and types. Do not link both archives into one image.
 
-For a one-image module, `module.json` can specify `sources` (a list of relative
-`.c` / `.S` paths), `mode` (`campaign`, `multiplayer`, or `both`), and `regions`.
-For a `both` library module, use `campaign_sources` and `multiplayer_sources`
+For a one-image module, `Makefile.defs` can specify `EE_OBJS` (space-separated relative
+`.o` paths, built from `.c` or `.S`), `MODE` (`campaign`, `multiplayer`, or `both`), and `REGIONS`.
+For a `both` library module, use `CAMPAIGN_OBJS` and `MULTIPLAYER_OBJS`
 to add more files to each image. The generated multiplayer callback includes
 `uyaPreUpdate()` / `uyaPostUpdate()` to maintain library input state.
+
+Each module uses ordinary Make variables, matching the cheat repositories:
+
+```make
+LIBRARY = none
+MODE = both
+REGIONS = ntscu pal ntscj
+EE_OBJS = main.o settings.o
+```
+
+Its `Makefile` contains only `include ../../Makefile.eeglobal`. Add C/assembly
+files to `EE_OBJS`; shared rules handle compiling, library linking and regions.
+`LIBRARY=both` uses `CAMPAIGN_OBJS` and `MULTIPLAYER_OBJS` for the two images.
+Private modules using the former `module.json` or `module.conf` should move their
+settings to `Makefile.defs` and rebuild the complete module set once.
+
+The root `Makefile` provides the build commands and allocates module addresses.
+`Makefile.eeglobal` contains the shared EE compiler, library and linker rules.
+Only module creation and release packaging use shell helpers; `tools/image.c`
+checks binary headers and writes PNACH files. No Python or config parser is needed.
 
 `moduleInit(const ModuleApi *)` runs once, the first time its mode is active.
 A negative result disables its update callback while retaining its memory.
@@ -156,19 +175,18 @@ list with None and X to select. Maploader disables itself on an online lobby
 connection by default; `maploader-online.txt` provides an explicit future-server
 opt-in. Campaign replacement is not yet implemented.
 
-Requires Python 3.8+, GNU make, and the PS2 EE toolchain. Set `PS2SDK` and put
+Requires a POSIX shell, GNU Make, a host C compiler, and the PS2 EE/IOP toolchain. Release packaging also uses zip/unzip and sha256sum. No Python is needed. Set `PS2SDK` and put
 `ee-gcc`, `ee-nm`, and `ee-objcopy` on PATH. `EE_PREFIX` overrides `ee-`.
 
 ```sh
-python tools/build.py build                  # all three regions
-python tools/build.py build --region ntscu   # one region
-make                                        # same as all-region build
+make                                       # all three regions
+make REGION=ntscu                          # one region
 ```
 
 Modules receive automatic, nonoverlapping, 64-byte-aligned addresses. No manual
 layout file or address selection is needed. All declared modules are built;
 `modules.txt` selects which ones load and the modes in which they run. The layout is recorded in
-`build/<region>/layout.json`. Rebuild/deploy the complete module set together:
+`build/<region>/layout.txt`. Rebuild/deploy the complete module set together:
 adding or resizing a module can change later modules' linked addresses.
 
 Library defaults match this workspace:
@@ -190,7 +208,7 @@ docker build -t uya-mod-loader .
 docker run --rm -v "${PWD}:/workspace" uya-mod-loader
 ```
 
-The Dockerfile runs `docker-init.sh` to install Python/make and clone pinned
+The Dockerfile runs `docker-init.sh` to install Make, host C/build utilities, and clone pinned
 revisions of `Metroynome/librac3` and `Horizon-Private-Server/horizon-uya-patch (libuya)` into the image. The
 container's default command builds both the loader cheat and all configured
 modules for all three regions. Outputs remain in this repository's `build/`,
@@ -346,20 +364,13 @@ Memory is cleared before loading; data/instruction caches are synchronized befor
 executing new code. State is outside PNACH-injected bytes so repeated cheat writes
 do not reset it. This area must remain free of other injected patches.
 
-The test commands below use local test sources, which are excluded from version
-control by this project's `.gitignore`. The manifest and address checks are shipped.
-
-```sh
-python tools/build.py check
-make test                         # Python scaffolder tests + native C runtime tests
-python3 tests/integration.py       # requires EE compiler and both library sources
-python tools/verify_addresses.py 'D:/PS2/ISOs/RAC Levels/rac3'
-```
-
-Native tests cover partial reads, BSS clearing, malformed headers, bad paths,
-overlap rejection, oversized/truncated files, list parsing, and mode/reentry
-checks. Integration tests actually link `padGetButton` from each library in
-separate module images, including the NTSC-J campaign library.
+`make check` validates module definitions. `make release` builds every region,
+checks module headers and reservations, and validates the generated ZIPs.
+Local native C regression tests run with `make test`; local tests remain excluded
+from version control by this project's `.gitignore`. The game runtime and
+binary-image utility are C; compilation and linking use shared Make rules.
+Verified regional address tables are checked in and require no generation step.
+Runtime signature guards remain enabled.
 
 Library-backed modules can include `<librac3/stdio.h>` or `<libuya/stdio.h>`
 and call `printf` for PCSX2 console output. Campaign `printf` uses the verified
@@ -428,7 +439,7 @@ The combined ZIP uses explicit region suffixes to skip unsupported binaries.
 NTSC-J includes campaign Mod Menu; Map Loader is available for NTSC-U/PAL.
 
 The tracked [release guide](release/README.md) explains installation. Published PNACHs and production host files are tracked in `release/`;
-development binaries and ZIPs remain ignored. [release/modules.json](release/modules.json) controls
+development binaries and ZIPs remain ignored. [release/modules.txt](release/modules.txt) controls
 which modules enter the ZIPs; tests/examples remain available in source but are
 excluded from the release defaults and archives. Local INIs and downloaded map
 packs are never included in ZIPs. `make clean` preserves all release files; `make clean-release` removes generated

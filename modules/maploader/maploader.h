@@ -2,8 +2,6 @@
 #define UYA_HOST_MAPLOADER_H
 #include "module.h"
 #define MAP_LIMIT 96
-#define MAP_INDEX_MAGIC 0x3250414dU
-/* Version-2 cache: generated at runtime on Local Play staging entry. */
 typedef struct MapRecord {
     char filename[64], name[32];
     unsigned int version, base, wad, world, sound, radar;
@@ -17,11 +15,9 @@ int mapReadInfo(const MapRecord *map,char *author,char *description);
 int mapReadExact(int fd, void *dest, unsigned int size);
 int mapOpenPart(const MapRecord *map, const char *extension);
 int mapReadPart(const MapRecord *map, const char *extension, void *dest, unsigned int size);
-int mapLoadCatalog(void);
 void *memset(void *dest,int value,unsigned int size);
 void *mapAlloc(unsigned int size);
 void mapFree(void *p);
-int mapWrite(int fd,const void *p,int size);
 int mapDirectoryIdle(void);
 void mapDirectoryReset(void);
 int mapDirectoryReady(void);

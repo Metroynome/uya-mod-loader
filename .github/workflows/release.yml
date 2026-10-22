@@ -21,7 +21,7 @@ jobs:
       - name: Build and package all regions
         run: docker run --rm --network none -v "$PWD:/workspace" uya-mod-loader make release
       - name: Validate release archives
-        run: python3 tools/check_release.py
+        run: docker run --rm --network none -v "$PWD:/workspace" uya-mod-loader make check-release
       - uses: actions/upload-artifact@v4
         with:
           name: uya-mod-loader-release

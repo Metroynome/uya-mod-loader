@@ -71,5 +71,3 @@ int mapDirectoryPoll(char *name)
     if(name) {for(i=0;i<128;++i)name[i]=reply.name[i];name[127]=0;}
     return reply.status;
 }
-int mapWrite(int fd,const void *p,int size)
-{return CALL(0x12b2f0,int (*)(int,const void *,int))(fd,p,size);}

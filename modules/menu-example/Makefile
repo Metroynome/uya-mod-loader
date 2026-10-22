@@ -1,1 +1,1 @@
-include ../../tools/module.mk
+include ../../Makefile.eeglobal

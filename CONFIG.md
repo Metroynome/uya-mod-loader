@@ -69,6 +69,5 @@ Existing Mod Menu configuration calls forward to this API. New mods should use
 `ModuleConfigField`, `UYA_CONFIG_*`, and the loader functions directly.
 
 Campaign's private SDK writer is mapped to resident support routines for each
-region. Verify its assembly with
-`python tools/map_config_writer.py <rac3-extraction> --check`.
+region. Its verified assembly is checked in as `campaign-write.S`.
 Multiplayer uses the resident SDK writer. Neither path changes the game heap.

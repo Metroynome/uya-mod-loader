@@ -1,0 +1,7 @@
+# region serial CRC mode supported
+ntscu SCUS-97353 45FE0CC4 campaign yes
+ntscu SCUS-97353 49536F3F multiplayer yes
+pal SCES-52456 17125698 campaign yes
+pal SCES-52456 EDE8B391 multiplayer yes
+ntscj SCPS-15084 64DC6000 campaign yes
+ntscj SCPS-15084 68FD292A multiplayer no

@@ -90,17 +90,10 @@ int mapReadInfo(const MapRecord *map,char *author,char *description)
 }
 
 /* Scan state is driven one entry/RPC at a time from Local Play staging. */
-static MapRecord *work;
+/* One retained allocation, refilled in place on explicit refresh. */
+static char selected[64];
 static int phase,candidates,current,kept,waitTicks;
-static unsigned int cachedFingerprint;
 unsigned int mapCatalogRevision;
-#if UYA_MODULE_REGION == 2
-#define CACHE "host0:uya/maps.pal.idx"
-#else
-#define CACHE "host0:uya/maps.ntscu.idx"
-#endif
-static unsigned int hash(const void *data,unsigned int n)
-{const unsigned char *p=data;unsigned int h=2166136261U;while(n--)h=(h^*p++)*16777619U;return h;}
 int mapCompareText(const char *a,const char *b)
 {while(*a && *a==*b){++a;++b;}return (unsigned char)*a-(unsigned char)*b;}
 static void copyName(char *to,const char *from)
@@ -108,33 +101,6 @@ static void copyName(char *to,const char *from)
 static int validRecord(const MapRecord *m)
 {return validName(m->filename,64) && validName(m->name,32) && m->base>=40 && m->base<=49 &&
     (m->wad||m->world) && m->wad<=0x1000000 && m->world<=0x400000 && m->sound<=0x400000 && m->radar<=0x10800;}
-int mapLoadCatalog(void)
-{
-    unsigned int header[4],i;unsigned char tail;int fd,ok;
-    mapCount=0;cachedFingerprint=0;
-    fd=mapApi->open(CACHE,1,0);if(fd<0)return 0;
-    ok=mapReadExact(fd,header,sizeof(header)) && header[0]==MAP_INDEX_MAGIC && header[1]<=MAP_LIMIT;
-    if(ok && header[1]) {mapRecords=mapAlloc(header[1]*sizeof(MapRecord));if(!mapRecords)ok=0;}
-    if(ok)ok=mapReadExact(fd,mapRecords,header[1]*sizeof(MapRecord)) && mapApi->read(fd,&tail,1)==0;
-    if(mapApi->close(fd)<0)ok=0;
-    if(ok)ok=hash(mapRecords,header[1]*sizeof(MapRecord))==header[3];
-    if(ok)for(i=0;i<header[1];++i)if(!validRecord(&mapRecords[i])){ok=0;break;}
-    if(!ok){mapFree(mapRecords);mapRecords=0;return 0;}
-    mapCount=header[1];cachedFingerprint=header[2];++mapCatalogRevision;return 1;
-}
-static int writeAll(int fd,const void *data,unsigned int size)
-{
-    const char *p=data;int n;
-    while(size){n=mapWrite(fd,p,size);if(n<=0 || (unsigned int)n>size)return 0;p+=n;size-=n;}return 1;
-}
-static int saveCache(unsigned int fingerprint)
-{
-    unsigned int header[4]={MAP_INDEX_MAGIC,0,0,0};int fd,ok;
-    header[1]=mapCount;header[2]=fingerprint;header[3]=hash(mapRecords,mapCount*sizeof(MapRecord));
-    fd=mapApi->open(CACHE,0x602,0666);if(fd<0)return 0;
-    ok=writeAll(fd,header,sizeof(header)) && writeAll(fd,mapRecords,mapCount*sizeof(MapRecord));
-    if(mapApi->close(fd)<0)ok=0;return ok;
-}
 static int partSize(const MapRecord *m,const char *ext)
 {
     int fd=mapOpenPart(m,ext),size;
@@ -167,18 +133,25 @@ static int inspect(MapRecord *m)
 }
 static void finish(int error)
 {
-    mapFree(work);work=0;phase=0;
-    if(error)mapMessage("Map scan failed; retry by re-entering staging");
+    phase=0;
+    if(error) {
+        mapCount=0;mapCatalogReady=0;
+        if(selected[0]){mapRestoreBase();mapClearLoad();}
+        selected[0]=0;
+        mapMessage("Map scan failed; use Refresh Custom Maps to retry");
+    }
     else mapCatalogReady=1;
 }
 void mapScanStart(void)
 {
     if(phase || !mapMultiplayerReady())return;
     if(!mapDirectoryIdle()){mapMessage("Directory service is still busy");return;}
-    if(!mapRecords)mapLoadCatalog();
-    work=mapAlloc(MAP_LIMIT*sizeof(MapRecord));
-    if(!work){mapMessage("Not enough memory to scan custom maps");return;}
-    memset(work,0,MAP_LIMIT*sizeof(MapRecord));candidates=current=kept=waitTicks=0;
+    if(!mapRecords)mapRecords=mapAlloc(MAP_LIMIT*sizeof(MapRecord));
+    if(!mapRecords){mapMessage("Not enough memory to scan custom maps");return;}
+    selected[0]=0;
+    if(mapSelection>=0 && mapSelection<mapCount)copyName(selected,mapRecords[mapSelection].filename);
+    mapCount=0;mapSelection=-1;mapCatalogReady=0;
+    memset(mapRecords,0,MAP_LIMIT*sizeof(MapRecord));candidates=current=kept=waitTicks=0;
     ++mapCatalogRevision; /* Re-read descriptions even when the catalog is unchanged. */
     mapDirectoryReset();phase=1;
 }
@@ -191,7 +164,7 @@ void mapCopyRecord(MapRecord *to,const MapRecord *from)
 {unsigned int i;unsigned char *d=(unsigned char *)to;const unsigned char *s=(const unsigned char *)from;for(i=0;i<sizeof(*to);++i)d[i]=s[i];}
 int mapScanTick(void)
 {
-    int r,n,i;char name[128],selected[64];MapRecord temp;unsigned int fingerprint;
+    int r,n,i;char name[128];MapRecord temp;
     if(!phase)return 0;
     if(++waitTicks>6000){finish(1);return -1;}
     if(phase==1){
@@ -209,33 +182,28 @@ int mapScanTick(void)
                 name[n-8]=0;
                 if(validName(name,64)){
                     if(candidates==MAP_LIMIT){mapDirectoryRequest(3);finish(1);return -1;}
-                    copyName(work[candidates++].filename,name);
+                    copyName(mapRecords[candidates++].filename,name);
                 }
             }
         }
         if(!mapDirectoryRequest(2)){finish(1);return -1;}phase=3;return 0;
     }
     if(phase==4 && current<candidates){
-        r=inspect(&work[current]);if(r<0){finish(1);return -1;}
-        if(r)mapCopyRecord(&work[kept++],&work[current]);++current;waitTicks=0;return 0;
+        r=inspect(&mapRecords[current]);if(r<0){finish(1);return -1;}
+        if(r)mapCopyRecord(&mapRecords[kept++],&mapRecords[current]);++current;waitTicks=0;return 0;
     }
-    /* Stable ordering makes the fingerprint independent of directory order. */
-    for(n=1;n<kept;++n){mapCopyRecord(&temp,&work[n]);i=n;while(i && mapCompareText(work[i-1].filename,temp.filename)>0){mapCopyRecord(&work[i],&work[i-1]);--i;}mapCopyRecord(&work[i],&temp);}
-    fingerprint=hash(work,kept*sizeof(MapRecord));
-    if(fingerprint==cachedFingerprint && kept==mapCount){mapMessage("Custom maps are up to date");finish(0);return 1;}
-    selected[0]=0;if(mapSelection>=0 && mapSelection<mapCount)copyName(selected,mapRecords[mapSelection].filename);
-    /* Sort the displayed list by name after hashing the canonical file order. */
-    for(n=1;n<kept;++n){mapCopyRecord(&temp,&work[n]);i=n;while(i && mapCompareText(work[i-1].name,temp.name)>0){mapCopyRecord(&work[i],&work[i-1]);--i;}mapCopyRecord(&work[i],&temp);}
-    mapFree(mapRecords);mapRecords=work;work=0;mapCount=kept;mapSelection=-1;
+    /* Sort the completed catalog by display name. */
+    for(n=1;n<kept;++n){mapCopyRecord(&temp,&mapRecords[n]);i=n;while(i && mapCompareText(mapRecords[i-1].name,temp.name)>0){mapCopyRecord(&mapRecords[i],&mapRecords[i-1]);--i;}mapCopyRecord(&mapRecords[i],&temp);}
+    mapCount=kept;
     for(i=0;i<mapCount;++i)if(!mapCompareText(selected,mapRecords[i].filename))mapSelection=i;
     if(selected[0] && mapSelection<0){mapRestoreBase();mapClearLoad();}
     ++mapCatalogRevision;
-    r=saveCache(fingerprint);cachedFingerprint=r?fingerprint:0;
-    mapMessage(r?"Custom maps refreshed":"Maps ready; saving index failed");finish(0);return 1;
+    selected[0]=0;
+    mapMessage("Custom maps refreshed");finish(0);return 1;
 }
 void mapScanRelease(void)
 {
     /* Never free an old multiplayer pointer through the campaign allocator. */
     if(phase && mapApi->mode==UYA_MODE_MULTIPLAYER && mapDirectoryIdle())mapDirectoryRequest(3);
-    finish(0);mapFree(mapRecords);mapRecords=0;mapCount=0;mapSelection=-1;cachedFingerprint=0;mapCatalogReady=0;
+    phase=0;selected[0]=0;mapFree(mapRecords);mapRecords=0;mapCount=0;mapSelection=-1;mapCatalogReady=0;
 }

@@ -80,13 +80,26 @@ unsigned int platformContext(unsigned int mode)
 #else
     const unsigned int net=0x1a5e40;
 #endif
-    unsigned int state;
+    unsigned int state,menu;int i;
 #endif
     if(mode==UYA_MODE_CAMPAIGN) return UYA_CONTEXT_CAMPAIGN;
 #if UYA_MODULE_REGION != 3
     if(mode!=UYA_MODE_MULTIPLAYER) return 0;
     if(*(volatile unsigned int *)(net+0x180)) return UYA_CONTEXT_LOCAL;
     state=*(volatile unsigned int *)(net+0x130);
+    /* Local Play teardown leaves network states 5 or 10 with onlyLocalPlayers
+     * cleared. The foremost active menu distinguishes it from online login.
+     * Never use a covered Local Play menu underneath the profile screen. */
+    {
+        for(i=2;i>=0;--i){
+            menu=*(volatile unsigned int *)(0x1c5c110+i*4);
+            if(!menu)continue;
+            if(menu==*(volatile unsigned int *)0x1c5c0b8 ||
+               menu==*(volatile unsigned int *)0x1c5c0c0 ||
+               menu==*(volatile unsigned int *)0x1c5c0c4)return UYA_CONTEXT_LOCAL;
+            break;
+        }
+    }
     return state>=5 && state<=12?UYA_CONTEXT_ONLINE:UYA_CONTEXT_LOCAL;
 #else
     return 0;

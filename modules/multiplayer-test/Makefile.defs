@@ -1,0 +1,4 @@
+# Module settings; shared build rules are in ../../Makefile.eeglobal.
+LIBRARY = libuya
+REGIONS = ntscu pal
+EE_OBJS = main.o
