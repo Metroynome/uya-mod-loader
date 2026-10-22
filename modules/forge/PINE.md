@@ -22,14 +22,14 @@ Offsets are relative to the discovered mailbox address. The C declaration is
 PINE follows **0xA0000 -> module table -> Forge -> exports -> mailbox**.
 No memory scan is needed. All pointers are 32-bit little-endian EE addresses.
 
-1. At `0x000A0000`, verify loader magic `0x444C5955` at +`0x04`, discovery
+1. At `0x000a0000`, verify loader magic `0x444C5955` at +`0x04`, discovery
    version `1` at +`0x08`, and size `48` at +`0x0C`. Read the module-table
    pointer from +`0x00`. Its location is linker-selected, not fixed at AF800.
 2. Read the table header: magic `0x554D5442`, version `1`, count (at most 8),
    and entrySize `124`. Wait if the loader has not initialized it yet.
    Entries begin at table + `0x10`. Find `forge.ntscu.bin` or `forge.pal.bin` in the 112-byte
    NUL-terminated name. Address, size and modes are at entry +`0x70`, +`0x74`,
-   and +`0x78`. Check the table is inside the loader's A0000-B0000 reservation
+   and +`0x78`. Check the table is inside the loader/module A0000-100000 range
    and the full module range is inside EE memory before following it.
 3. At Forge's base, verify module magic `0x444D5955` (`UYMD`) at +`0x04`,
    version `1` at +`0x08`, and size `16` at +`0x0C`. Read the exports

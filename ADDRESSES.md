@@ -84,10 +84,39 @@ regional tests cover this distinction; live PAL qualification remains pending.
 
 The fixed loader discovery block occupies A0000-A0030. Its first word points
 to the linker-placed module table; the table and persistent state follow the
-payload in a NOLOAD section. Their addresses are not an ABI. The linked
-`_loader_end` must remain below B0000. The PNACH generator gets hook targets
+payload in a NOLOAD section. Their addresses are not an ABI.
+Modules start at `_loader_end` rounded up to 64 bytes and extend to 100000,
+with the optional exception handler separately reserved at 98000-9E000. The PNACH generator gets hook targets
 from `campaignEntry` and `multiplayerEntry`, now after the discovery block.
 
 Version-4 modules begin with a 16-byte discovery header containing an optional
 exports pointer. See README.md for layouts and the C declaration convention,
 and modules/forge/PINE.md for the complete mailbox pointer chain.
+
+## Relocated exception handler
+
+The SM/Horizon 10,356-byte payload is relocated from C8000 to 98000.
+Its 24 KiB reservation ends at 9E000, leaving 8 KiB before the loader at A0000.
+PAL staging contains syscall/startup code and stack storage near 81DD0-83FFF.
+Campaign dumps (Starship1 and Annihilation Nation) also contain code/data in
+84000-95FFF. PAL cold boot confirmed 84000 was occupied and installation was
+correctly skipped. The handler must not use either proposed 80000/84000 location,
+and the loader must not use 90000. The inspected dumps are clear at 98000-A0000.
+
+The original SHA-256 is `3c5685ab443a26216fef1b18cf549e437aa0d4586cd7ba0d869100155b854366`.
+The relocated SHA-256 is `4929cf42067affb1b2e2610243e133c360a9c9a1b91cef3f885627098afd241b`.
+59 internal JAL targets and 20 LUI/ORI address pairs shift by -30000 hex.
+PC-relative branches, external kernel/GS addresses, strings, and font data are unchanged.
+The original source reference is Horizon `misc/Exception_Display.cds`; its imported
+CodeDesigner classes are not present locally. No new build tool is required.
+
+The original drawing buffer at 90000 overlaps campaign memory. The existing
+LUI s1,9 at binary offset 17C is retained; offset 184 now contains ORI s1,s1,C000
+to select 9C000 in GetDisplay's previously empty delay slot. At offsets 470, 510,
+and 520, text batching changes from 17 glyphs to one. Each glyph has at most
+8 x 11 pixels with an 80-byte packet per pixel (7,040 bytes), fitting within
+9C000-9E000. The payload and text scratch end before 9C000. The 9E000-A0000
+gap is unused. PAL cold boot verified the installed bytes and all 11 kernel
+exception vectors targeting 98088. A controlled fault reached that entry, saved
+registers, and ran the renderer using 9C000. The loader payload and 9E000-A0000
+gap remained unchanged. The user confirmed a readable exception/register screen.

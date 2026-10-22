@@ -1,8 +1,8 @@
 /* UYA host module loader. No heap resizing or game allocator patches.
  * Flow: choose the current game's API -> read modules.txt once -> validate and
  * load each image -> initialize/update only modules matching the active mode.
- * Memory: discovery at a0000; code, table and state follow within a0000-b0000.
- * Modules occupy f2f80-100000.
+ * Memory: discovery at a0000; code, table and state follow. Modules start at
+ * the aligned loader end and extend to 100000, skipping an installed handler.
  */
 #include "module.h"
 #include "config.h"
@@ -11,11 +11,11 @@
 #include "strings.h"
 
 #ifndef MODULE_START
-#define MODULE_START 0x000f2f80U
+#define MODULE_START (((unsigned int)_loader_end + 63U) & ~63U)
 #endif
 #define MODULE_END   0x00100000U
 #define MODULE_LIMIT UYA_MODULE_LIMIT
-#define LOADER_MAGIC 0x554d4c3bU
+#define LOADER_MAGIC 0x554d4c3eU
 #ifndef STATE
 #define STATE (&loaderState)
 #endif
@@ -44,13 +44,15 @@ struct ModuleService {
 };
 
 struct LoaderState {
-	unsigned int magic, busy, count, mode, listLoaded, retryTicks, exceptionAttempted;
+	unsigned int magic, busy, count, mode, listLoaded, retryTicks, exceptionAttempted, exceptionReserved;
 	struct LoadedModule modules[MODULE_LIMIT];
 	ModuleApi api;
 	int configBusy;
 	unsigned int currentModule; /* index + 1; zero outside callbacks */
 	struct ModuleService services[8];
 };
+
+extern unsigned char _loader_end[];
 
 #ifdef _EE
 /* Linker-placed after the payload, never overwritten by recurring PNACH writes. */
@@ -172,6 +174,8 @@ static void installExceptionHandler(void)
 	if (STATE->exceptionAttempted)
 		return;
 	STATE->exceptionAttempted = 1;
+	if (UYA_LOADER_DISCOVERY_ADDRESS < EXCEPTION_ADDRESS + EXCEPTION_MEMORY_SIZE && MODULE_START > EXCEPTION_ADDRESS)
+		return; /* The loader itself must never overlap the fixed handler. */
 	fd = fileOpen("host0:uya/mods/debug/exceptionhandler.bin", 1, 0);
 	if (fd < 0) {
 		printf("loader: optional exception handler unavailable (%d)\n", fd);
@@ -179,6 +183,7 @@ static void installExceptionHandler(void)
 	}
 	for (i = 0; i < EXCEPTION_MEMORY_SIZE; ++i) {
 		if (memory[i]) {
+			STATE->exceptionReserved = 1; /* Preserve existing code/workspace too. */
 			printf("loader: exception handler area is occupied\n");
 			fileClose(fd);
 			return;
@@ -196,6 +201,7 @@ static void installExceptionHandler(void)
 	}
 	syncCode();
 	printf("loader: installing exception handler at %08x\n", EXCEPTION_ADDRESS);
+	STATE->exceptionReserved = 1;
 	EXCEPTION_INSTALL();
 	syncCode();
 	printf("loader: exception handler installed\n");
@@ -228,16 +234,22 @@ static int validEntry(unsigned int offset, unsigned int size)
 
 /* A small monotonic allocator: successful loads retain their slots until restart.
  * Failed loads never consume space. No game heap edits or per-module addresses. */
-static unsigned int nextModuleAddress(void)
+static unsigned int nextModuleAddress(unsigned int size)
 {
-	if (!STATE->count)
-		return MODULE_START;
-	return (STATE->modules[STATE->count - 1].address + STATE->modules[STATE->count - 1].size + 63U) & ~63U;
+	unsigned int address = MODULE_START;
+	if (STATE->count)
+		address = (STATE->modules[STATE->count - 1].address + STATE->modules[STATE->count - 1].size + 63U) & ~63U;
+	/* Keep each module contiguous. A module crossing the handler starts after
+	 * its workspace; absent/rejected handlers leave the whole pool available. */
+	if (STATE->exceptionReserved && address < EXCEPTION_ADDRESS + EXCEPTION_MEMORY_SIZE &&
+	    (address >= EXCEPTION_ADDRESS || size > EXCEPTION_ADDRESS - address))
+		address = EXCEPTION_ADDRESS + EXCEPTION_MEMORY_SIZE;
+	return address;
 }
 
 static int validHeader(const ModuleHeader* h)
 {
-	unsigned int address = nextModuleAddress();
+	unsigned int address = nextModuleAddress(h->memorySize);
 	return h->magic == UYA_MODULE_MAGIC && h->version == UYA_MODULE_VERSION &&
 	       (!h->region || h->region == UYA_MODULE_REGION) && h->address == 0x000f0000 && h->modes &&
 	       !(h->modes & ~3U) && h->imageSize >= sizeof(ModuleDiscovery) && !(h->imageSize & 3) &&
@@ -402,7 +414,7 @@ static void loadModule(const char* name, unsigned int modes, char names[MODULE_L
 		fileClose(fd);
 		return;
 	}
-	address = nextModuleAddress();
+	address = nextModuleAddress(header.memorySize);
 	memset((void*)address, 0, header.memorySize);
 	valid = readExact(fd, (void*)address, header.imageSize) && relocateModule(fd, &header, address);
 	if (fileClose(fd) < 0)

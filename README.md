@@ -194,7 +194,11 @@ Modules receive nonoverlapping, 64-byte-aligned addresses at runtime, in
 the loader adjusts its internal references after assigning space. Creators do
 not coordinate addresses or rebuild each other's modules. All declared modules
 are built; only enabled entries consume runtime memory. The limit remains eight
-modules and the existing 53,376-byte arena. Allocations last until restart;
+modules. Space starts at the next 64-byte boundary after `_loader_end` (code,
+module table, and persistent state) and ends at `0x00100000`. An installed
+exception handler lives separately at `0x00098000-0x0009e000`, below the loader,
+so enabling it does not change the module pool.
+Allocations last until restart;
 individual unloading, compaction, and heap resizing are not implemented.
 
 Library defaults match this workspace:
@@ -305,8 +309,7 @@ patches need to be enabled.
 
 ## Optional exception handler
 
-`hostfs/uya/mods/debug/exceptionhandler.bin` is an exact copy of the SM loader's
-payload (10,356 bytes). When present, the build copies it to
+`hostfs/uya/mods/debug/exceptionhandler.bin` is the SM/Horizon payload relocated to `0x98000` (10,356 bytes), with drawing scratch inside its reservation. When present, the build copies it to
 `build/dist/hostfs/uya/mods/debug/exceptionhandler.bin`. The loader attempts installation
 once per boot, on its first valid menu/gameplay/lobby hook, before initializing modules.
 It is separate from `modules.txt` and does not consume a module slot.
@@ -316,11 +319,11 @@ To keep it disabled across builds, remove/rename the source file too; the next
 build removes any stale packaged copy. Missing files simply log a message and
 normal module loading continues. Restart after adding it to enable it again.
 
-Installation requires the whole `0x000c8000?0x000ce000` range to be empty and
+Installation requires the whole `0x00098000-0x0009e000` range to be empty and
 checks the exact file size and FNV-1a hash before executing it. Corrupt, truncated,
 oversized, or unreadable payloads are skipped; occupied memory is left untouched.
-The binary patches kernel exception handlers, as in SM. Installation and crash
-output in UYA have not yet been tested in a live emulator.
+The binary patches kernel exception handlers, as in SM. PAL cold boot and a controlled exception verified installation, register capture,
+and bounded rendering. The user confirmed the exception/register screen is readable.
 
 ## Regions and validation status
 
@@ -357,10 +360,11 @@ its own low-memory range only when installed:
 
 | Range | Use |
 |---|---|
-| `0x000c8000?0x000ce000` | Optional exception handler, 24 KiB including workspace |
+| `0x00098000-0x0009e000` | Optional exception handler, 24 KiB including workspace |
 | `0x000a0000-0x000a0030` | Fixed 48-byte loader discovery block |
-| `0x000a0030-0x000b0000` | Loader code/data, followed by linker-placed module table and persistent state |
-| `0x000f2f80-0x00100000` | Modules, 53,376 bytes including BSS and Forge's mailbox when loaded |
+| `0x000a0030` to `_loader_end` | Loader code/data, module table, and persistent state |
+| `0x0009e000-0x000a0000` | Unused 8 KiB gap |
+| Aligned `_loader_end` to `0x00100000` | Modules, including BSS and Forge's mailbox |
 
 Headers include ABI version, region, mode mask, link address, sizes, and entry
 point offsets. The loader rejects invalid ranges, oversized/truncated images,
@@ -375,7 +379,8 @@ address instructions; absolute game addresses remain unchanged. Older version-1/
 binaries are rejected: rebuild them once with this version's module Makefiles.
 Unsupported relocation types fail packaging instead of producing broken code.
 
-Other modules can inspect `UYA_MODULE_TABLE` from `module.h`, at `0x000AF800`.
+Other modules can inspect `UYA_MODULE_TABLE` from `module.h`, discovered through
+the pointer at `0x000a0000`. The table itself is linker-placed.
 Check `magic == UYA_MODULE_TABLE_MAGIC`, `version == 1`, `entrySize == sizeof(ModuleInfo)`,
 and `count <= UYA_MODULE_LIMIT` before reading `entries[0..count-1]`. Each entry
 has a canonical filename, base `address`, allocated `size` (including BSS), and
@@ -383,7 +388,10 @@ configured `modes`. These are loaded modules, not necessarily currently active.
 Never modify this table. Use the existing service APIs to call another mod's
 published functions; a module base address is not a function pointer.
 
-The loader and its state reserve the full 64 KiB at `0x000a0000-0x000affff`.
+The loader and modules share `0x000a0000-0x000fffff` (384 KiB total).
+The loader reserves only its actual linked size; rebuilding a larger or smaller
+loader automatically shifts module placements on the next cold boot.
+The optional handler remains fixed below the loader. Failed loads do not consume module space. See ADDRESSES.md for its relocation and drawing workspace.
 Rebuild the Docker image after updating: the pinned libuya revision moves its
 network callback pointer out of this block. Older Horizon patch/downloader/game
 mode binaries still using `0x000a0000` must also be replaced before coexistence.
@@ -440,7 +448,7 @@ Older modules that require runtime version exactly 2 must be rebuilt/updated.
 
 ## Discovering modules and exported data
 
-Read the fixed discovery block at `0x000A0000` before following any pointers.
+Read the fixed discovery block at `0x000a0000` before following any pointers.
 All fields are unsigned 32-bit little-endian EE values:
 
 | Offset | Loader discovery field |
