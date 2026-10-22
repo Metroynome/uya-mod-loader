@@ -41,9 +41,9 @@ int main(int argc,char **argv) {
         printf("%u\n",bytes);
     } else if(!strcmp(argv[1],"pnach")) {
         long i;
-        if(argc<4 || argc>5 || size>0x2f80) fail("Loader overlaps module arena");
+        if(argc<4 || argc>5 || size>0xfd00) fail("Loader overlaps persistent state");
         puts("// UYA Mod Loader: campaign + multiplayer; no heap edits.");
-        for(i=0;i<size;i+=4) printf("patch=1,EE,%08X,word,%08X\n",0xf0000+(unsigned)i,word(data+i));
+        for(i=0;i<size;i+=4) printf("patch=1,EE,%08X,word,%08X\n",0xa0000+(unsigned)i,word(data+i));
         hook(0x12c994,number(argv[3]));
         if(argc==5) hook(0x139e94,number(argv[4]));
     } else fail("Unknown image command");

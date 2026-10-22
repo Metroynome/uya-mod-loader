@@ -1,6 +1,7 @@
 # Forge PINE interface v1
 
-The loader reserves **EE address `0x000FFF00`**, 256 bytes, below 1 MiB.
+Forge owns a **172-byte, 16-byte-aligned mailbox in its module BSS**.
+There is no fixed mailbox address or loader-owned reservation.
 Use PINE EE memory reads/writes; this is not a host-process pointer. Forge v2
 needs no plugin-specific transport. The Forge mod consumes commands on its
 normal game-thread update. No editor source changes are included here.
@@ -13,7 +14,25 @@ and transitions do not accept new map commands.
 ## Layout
 
 All integers are unsigned 32-bit little-endian. Strings are NUL-terminated ASCII.
-Offsets are relative to `0x000FFF00`. The C declaration is `include/forge.h`.
+Offsets are relative to the discovered mailbox address. The C declaration is
+`include/forge.h`; the ELF symbol is `forgeMailbox`.
+
+### Discovery (replaces the old fixed address)
+
+Read the module arena `[0x000F2F80, 0x00100000)` through PINE in chunks.
+At 16-byte-aligned addresses, look for magic `0x31475246`, version `1`, and
+size `172`. Require the entire structure to fit in the arena. Re-read the header
+and verify that heartbeat at offset `0x18` advances between samples before
+accepting a candidate. Require exactly one live candidate; if none or multiple
+are found, do not write. A paused emulator or inactive Forge will not advance
+its heartbeat: wait until Local Play is running. Then use the availability,
+context and capability checks below before submitting a command.
+
+Cache the discovered address only for the current session. Rediscover after a
+restart, savestate load, module reload, changed header, or stopped heartbeat;
+never fall back to `0x000FFF00`. Forge can move when the module set is rebuilt.
+The command numbers and field offsets are unchanged. Existing clients that
+hard-code the former address must update before using this build.
 
 | Offset | Field | Owner / meaning |
 |---|---|---|
@@ -34,7 +53,6 @@ Offsets are relative to `0x000FFF00`. The C declaration is `include/forge.h`.
 | 0x74 | rejectedId | Game: most recently rejected request |
 | 0x78 | rejectError | Game: rejection reason |
 | 0x7C | message[48] | Game: advisory progress text; use numeric fields for logic |
-| 0xAC-0xFF | reserved | Do not write |
 
 ## Commands
 

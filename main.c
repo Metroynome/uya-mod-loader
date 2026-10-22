@@ -1,19 +1,18 @@
 /* UYA host module loader. No heap resizing or game allocator patches.
  * Flow: choose the current game's API -> read modules.txt once -> validate and
  * load each image -> initialize/update only modules matching the active mode.
- * Memory: loader f0000-f2f80, modules f2f80-ffc00, state ffc00-fff00, Forge mailbox fff00-100000.
+ * Memory: loader a0000-afd00, state afd00-b0000, modules f2f80-100000.
  */
 #include "module.h"
 #include "config.h"
 #include "exception.h"
 #include "platform.h"
 #include "strings.h"
-#include "include/forge.h"
 
 #ifndef MODULE_START
 #define MODULE_START 0x000f2f80U
 #endif
-#define MODULE_END 0x000ffc00U
+#define MODULE_END 0x00100000U
 #define MODULE_LIMIT 8
 #define LOADER_MAGIC 0x554d4c39U
 
@@ -39,7 +38,7 @@ struct LoaderState {
 };
 
 #ifndef STATE
-#define STATE ((struct LoaderState *)0x000ffc00)
+#define STATE ((struct LoaderState *)0x000afd00)
 #endif
 #ifdef _EE
 typedef char LoaderStateMustFit[(sizeof(struct LoaderState) <= 0x300) ? 1 : -1];
@@ -454,7 +453,6 @@ void loaderTick(unsigned int layout)
         return;
     if (STATE->magic != LOADER_MAGIC) {
         memset(STATE, 0, sizeof(*STATE));
-        memset((void *)FORGE_MAILBOX,0,256);
         STATE->magic = LOADER_MAGIC;
     }
     if (!platformReady(layout))

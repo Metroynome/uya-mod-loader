@@ -139,7 +139,7 @@ image: $(ELF)
 	@set -eu; \
 	  payload=$$($(EE_NM) $(ELF) | awk '$$3=="_payload_end" {print "0x"$$1}'); \
 	  bss=$$($(EE_NM) $(ELF) | awk '$$3=="_bss_start" {print "0x"$$1}'); \
-	  test -n "$$payload" && test "$$payload" = "$$bss" && test $$((payload)) -le $$((0xf2f80))
+	  test -n "$$payload" && test "$$payload" = "$$bss" && test $$((payload)) -le $$((0xafd00))
 	$(EE_OBJCOPY) -O binary $(ELF) $(BIN)
 	@set -eu; campaign=$$($(EE_NM) $(ELF) | awk '$$3=="campaignEntry" {print "0x"$$1}'); \
 	  multiplayer=$$($(EE_NM) $(ELF) | awk '$$3=="multiplayerEntry" {print "0x"$$1}'); \

@@ -352,10 +352,9 @@ its own low-memory range only when installed:
 | Range | Use |
 |---|---|
 | `0x000c8000?0x000ce000` | Optional exception handler, 24 KiB including workspace |
-| `0x000f0000?0x000f2f80` | Loader, maximum 12,160 bytes |
-| `0x000f2f80-0x000ffc00` | Modules, 52,352 bytes including BSS |
-| `0x000ffc00-0x000fff00` | Persistent loader state
-| `0x000fff00-0x00100000` | Reserved Forge PINE mailbox |
+| `0x000a0000-0x000afd00` | Loader code/data, maximum 64,768 bytes |
+| `0x000afd00-0x000b0000` | Persistent loader state, 768 bytes |
+| `0x000f2f80-0x00100000` | Modules, 53,376 bytes including BSS and Forge's mailbox when loaded |
 
 Headers include ABI version, region, mode mask, link address, sizes, and entry
 point offsets. The loader rejects invalid ranges, oversized/truncated images,
@@ -363,6 +362,13 @@ wrong regions, overlapping modules, invalid entry points, and path traversal.
 Memory is cleared before loading; data/instruction caches are synchronized before
 executing new code. State is outside PNACH-injected bytes so repeated cheat writes
 do not reset it. This area must remain free of other injected patches.
+
+The loader and its state reserve the full 64 KiB at `0x000a0000-0x000affff`.
+Rebuild the Docker image after updating: the pinned libuya revision moves its
+network callback pointer out of this block. Older Horizon patch/downloader/game
+mode binaries still using `0x000a0000` must also be replaced before coexistence.
+Relocation alone does not resolve shared hooks or implement online unloading.
+Replace the old PNACH files and fully restart the game; do not load an old savestate.
 
 `make check` validates module definitions. `make release` builds every region,
 checks module headers and reservations, and validates the generated ZIPs.

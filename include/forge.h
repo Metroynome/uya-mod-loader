@@ -18,9 +18,8 @@ typedef struct MapHopApi {
     unsigned int (*state)(void);
     unsigned int (*error)(void);
 } MapHopApi;
-/* Fixed little-endian EE mailbox. Only the request fields belong to the host.
+/* Module-owned little-endian EE mailbox. Only request fields belong to the host.
  * Write command/name first, requestId last. One request at a time. */
-#define FORGE_MAILBOX_ADDRESS 0x000fff00U
 #define FORGE_MAILBOX_MAGIC 0x31475246U
 #define FORGE_RELOAD 1U
 #define FORGE_REFRESH 2U
@@ -49,7 +48,8 @@ typedef struct ForgeMailbox {
     char message[48];
 } ForgeMailbox;
 #ifndef FORGE_MAILBOX
-#define FORGE_MAILBOX ((volatile ForgeMailbox *)FORGE_MAILBOX_ADDRESS)
+extern volatile ForgeMailbox forgeMailbox;
+#define FORGE_MAILBOX (&forgeMailbox)
 #endif
 typedef char ForgeMailboxFits[(sizeof(ForgeMailbox)<=256)?1:-1];
 #endif

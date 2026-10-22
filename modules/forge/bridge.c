@@ -1,5 +1,8 @@
 /* PINE only writes data; commands execute here on the normal module tick. */
 #include "include/forge.h"
+/* Part of Forge's BSS and module memory size, not a loader reservation.
+ * PINE discovers the aligned FRG1 header; see PINE.md. */
+volatile ForgeMailbox forgeMailbox __attribute__((aligned(16)));
 static unsigned int seen,running;
 static void message(const char *s)
 {unsigned int i;for(i=0;i<47 && s && s[i];++i)FORGE_MAILBOX->message[i]=s[i];FORGE_MAILBOX->message[i]=0;}

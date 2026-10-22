@@ -72,3 +72,6 @@ Thumbs.db
 
 /hostfs/uya/mods/utils/mapscan.irx
 /hostfs/uya/mods/mapscan.irx
+
+# Local design notes and investigations; not part of releases.
+/ideas/

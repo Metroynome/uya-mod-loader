@@ -143,9 +143,10 @@ sound upload completed, no loader failure flag, and the radar hook installed.
 The user confirmed that Aquatos Aquadome loaded. PAL and multi-controller
 split-screen loads have not been tested live.
 
-The standalone loader also occupies Horizon's `CUSTOM_GAME_MODE` range,
+The standalone modules still occupy part of Horizon's `CUSTOM_GAME_MODE` range,
 `0x000f0000`–`0x00100000`. Full Horizon-patch coexistence needs an explicit
-memory/hook integration; simply enabling both is not supported.
+memory/hook integration; simply enabling both is not supported. The resident
+loader and its persistent state now live at `0x000a0000` through `0x000affff`.
 
 ## Execution contexts
 

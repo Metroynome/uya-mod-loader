@@ -9,7 +9,7 @@ command -v "${EE_PREFIX:-ee-}gcc" >/dev/null
 LIBRAC3_DIR=${LIBRAC3_DIR:-/opt/uya-mod-loader-deps/librac3}
 LIBUYA_DIR=${LIBUYA_DIR:-/opt/uya-mod-loader-deps/horizon-uya-patch/libuya}
 LIBRAC3_REF=${LIBRAC3_REF:-b14f8259e6072d8a770d86b08895ad33fb398dc8}
-LIBUYA_REF=${LIBUYA_REF:-7966d2d2c2bc9a7e6d3b69f7cc0bfd5261875ba3}
+LIBUYA_REF=${LIBUYA_REF:-737dd562c7ea142de3e708594f74c239f19af4b0}
 export LIBRAC3_DIR LIBUYA_DIR
 
 clone_library() {

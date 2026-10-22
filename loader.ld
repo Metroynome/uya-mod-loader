@@ -1,6 +1,6 @@
 ENTRY(campaignEntry)
 SECTIONS {
-    . = 0x000f0000;
+    . = 0x000a0000;
     .text : { KEEP(*(.entry)) *(.text .text.*) }
     .rodata ALIGN(16) : { *(.rodata .rodata.*) }
     .data ALIGN(16) : { *(.data .data.*) *(.sdata .sdata.*) . = ALIGN(16); }
