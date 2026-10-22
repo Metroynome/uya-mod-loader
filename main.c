@@ -2,7 +2,7 @@
  * Flow: choose the current game's API -> read modules.txt once -> validate and
  * load each image -> initialize/update only modules matching the active mode.
  * Memory: discovery at a0000; code, table and state follow. Modules start at
- * the aligned loader end and extend to 100000, skipping an installed handler.
+ * the aligned loader end, or at 02000000 when expanded EE RAM is available.
  */
 #include "module.h"
 #include "config.h"
@@ -13,9 +13,11 @@
 #ifndef MODULE_START
 #define MODULE_START (((unsigned int)_loader_end + 63U) & ~63U)
 #endif
-#define MODULE_END   0x00100000U
-#define MODULE_LIMIT UYA_MODULE_LIMIT
-#define LOADER_MAGIC 0x554d4c3eU
+#define MODULE_END      0x00100000U
+#define EXTRA_RAM_START 0x02000000U
+#define EXTRA_RAM_END   0x08000000U
+#define MODULE_LIMIT    UYA_MODULE_LIMIT
+#define LOADER_MAGIC    0x554d4c40U
 #ifndef STATE
 #define STATE (&loaderState)
 #endif
@@ -50,9 +52,11 @@ struct LoaderState {
 	int configBusy;
 	unsigned int currentModule; /* index + 1; zero outside callbacks */
 	struct ModuleService services[8];
+	unsigned int poolStart, poolEnd;
 };
 
 extern unsigned char _loader_end[];
+extern void* GetSyscallHandler(int syscall);
 
 #ifdef _EE
 /* Linker-placed after the payload, never overwritten by recurring PNACH writes. */
@@ -63,6 +67,24 @@ static struct LoaderState loaderState __attribute__((section(".loader.state")));
 const ModuleApi* moduleConfigApi(void)
 {
 	return &STATE->api;
+}
+
+/* Choose once per boot. Never probe unavailable RAM or move live modules.
+ * PCSX2 reports expanded RAM through the normal GetMemorySize syscall.
+ */
+static void selectModulePool(unsigned int memorySize)
+{
+	STATE->poolStart = MODULE_START;
+	STATE->poolEnd = MODULE_END;
+	if (memorySize == EXTRA_RAM_END) {
+		/* Inspect the handler, never invoke an unsupported BIOS syscall. */
+		if (GetSyscallHandler(0x82)) {
+			STATE->poolStart = EXTRA_RAM_START;
+			STATE->poolEnd = EXTRA_RAM_END;
+		} else {
+			loaderApi.warnings |= UYA_WARNING_EXTRA_RAM_BIOS;
+		}
+	}
 }
 
 int* moduleConfigBusy(void)
@@ -236,7 +258,7 @@ static int validEntry(unsigned int offset, unsigned int size)
  * Failed loads never consume space. No game heap edits or per-module addresses. */
 static unsigned int nextModuleAddress(unsigned int size)
 {
-	unsigned int address = MODULE_START;
+	unsigned int address = STATE->poolStart;
 	if (STATE->count)
 		address = (STATE->modules[STATE->count - 1].address + STATE->modules[STATE->count - 1].size + 63U) & ~63U;
 	/* Keep each module contiguous. A module crossing the handler starts after
@@ -253,7 +275,7 @@ static int validHeader(const ModuleHeader* h)
 	return h->magic == UYA_MODULE_MAGIC && h->version == UYA_MODULE_VERSION &&
 	       (!h->region || h->region == UYA_MODULE_REGION) && h->address == 0x000f0000 && h->modes &&
 	       !(h->modes & ~3U) && h->imageSize >= sizeof(ModuleDiscovery) && !(h->imageSize & 3) &&
-	       h->imageSize <= h->memorySize && address < MODULE_END && h->memorySize <= MODULE_END - address &&
+	       h->imageSize <= h->memorySize && address < STATE->poolEnd && h->memorySize <= STATE->poolEnd - address &&
 	       h->relocationCount <= (h->imageSize - sizeof(ModuleDiscovery)) / 4 &&
 	       validEntry(h->initOffset, h->imageSize) && validEntry(h->updateOffset, h->imageSize);
 }
@@ -587,6 +609,7 @@ void loaderTick(unsigned int layout)
 		MODULE_TABLE->version = 1;
 		MODULE_TABLE->entrySize = sizeof(ModuleInfo);
 		MODULE_TABLE->magic = UYA_MODULE_TABLE_MAGIC;
+		selectModulePool(platformMemorySize());
 		STATE->magic = LOADER_MAGIC;
 	}
 	if (!platformReady(layout))
@@ -615,6 +638,10 @@ void loaderTick(unsigned int layout)
      */
 	if (!STATE->listLoaded && !STATE->retryTicks) {
 		printf("loader: starting region %u, mode %u\n", loaderApi.region, mode);
+		printf("loader: module pool %08x-%08x\n", STATE->poolStart, STATE->poolEnd - 1);
+		if (loaderApi.warnings & UYA_WARNING_EXTRA_RAM_BIOS)
+			printf("loader: incompatible BIOS for expanded RAM. Disable 128 MiB RAM or select a newer BIOS and "
+			       "restart; ELF switching can still crash with modules in normal RAM.\n");
 		STATE->listLoaded = loadModuleList();
 		STATE->retryTicks = 300;
 	}

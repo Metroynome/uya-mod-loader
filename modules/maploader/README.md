@@ -145,7 +145,9 @@ Bakisi Isles. Temple of Shaar crashes on PAL during normal starts and hops;
 that loading case remains unresolved. Multi-controller split-screen loads
 have not been tested live.
 
-The loader and modules share `0x000a0000-0x000fffff`. Modules start immediately
+With normal RAM, the loader and modules share `0x000a0000-0x000fffff`.
+With PCSX2's 128 MiB RAM enabled, modules instead start at `0x02000000`;
+the loader stays at `0x000a0000`. Normal-RAM modules start immediately
 after the aligned loader end and may reach Horizon's `CUSTOM_GAME_MODE` range
 (`0x000f0000-0x00100000`). Full Horizon-patch coexistence still needs explicit
 memory/hook integration; simply enabling both is not supported.

@@ -59,6 +59,7 @@ else
 IMAGE := mod-loader
 IMAGE_LIBRARY := none
 EE_OBJS := entry.o main.o platform.o strings.o config.o campaign-write.o
+EE_LIBS := -L$(PS2SDK)/ee/lib -lkernel
 SOURCE_DIR := .
 OBJDIR := $(WORK)
 LINKFILE := loader.ld
@@ -123,7 +124,7 @@ $(OBJDIR)/%.o: $(SOURCE_DIR)/%.S $(LIB_ARCHIVE) Makefile.eeglobal $(wildcard $(M
 # Relink to honor the address selected by the root build, even if objects are unchanged.
 .PHONY: image FORCE
 $(ELF): $(OBJECTS) $(LIB_ARCHIVE) $(LINKFILE) FORCE
-	$(EE_CC) $(EE_LDFLAGS) -Wl,-Map,$(@:.elf=.map) -o $@ $(OBJECTS) $(LIB_ARCHIVE) -lgcc
+	$(EE_CC) $(EE_LDFLAGS) -Wl,-Map,$(@:.elf=.map) -o $@ $(OBJECTS) $(LIB_ARCHIVE) $(EE_LIBS) -lgcc
 
 ifeq ($(MODULE),)
 BIN2CODE ?= bin2code

@@ -93,6 +93,47 @@ Version-4 modules begin with a 16-byte discovery header containing an optional
 exports pointer. See README.md for layouts and the C declaration convention,
 and modules/forge/PINE.md for the complete mailbox pointer chain.
 
+### Expanded EE RAM
+
+The loader calls BIOS syscall 0x7F (`GetMemorySize`) once at initialization.
+PCSX2 overrides this syscall when extra RAM is enabled. A result of 08000000
+selects the module pool 02000000-08000000 (exclusive end); otherwise the normal
+aligned-loader-end pool is used. No speculative memory writes are used to
+detect RAM. Handler, loader, discovery block, and module table stay in low RAM.
+
+All supported regions build. Existing native checks pass, and 18 regional
+module images match independently linked reference images at six placements,
+including 02000000, 02018040, and 07F00000. PAL cold boot with normal RAM placed
+modules at A3900; with expanded RAM it placed all seven installed modules at
+02000000-0200C980. The sampled game stack remained at 01FFFB00. Full-pool
+occupancy, campaign gameplay, and NTSC-U/NTSC-J expanded-RAM execution remain
+untested; successful relocation checks do not prove those cases.
+
+The first PAL multiplayer-entry test stopped in the BIOS syscall dispatcher
+at 80000280 after the game's `_InitTLB` syscall stub at 0011F290 (syscall 82).
+The selected BIOS was ps2-0120a-20000902.bin. This matches PCSX2 issue 11234:
+old BIOS versions lack the syscall used by SDK InitTLB when GetMemorySize
+reports expanded RAM. The module table and sampled module code were intact.
+With the already-installed ps2-0230a-20080220.bin, the user confirmed entry to
+Local Play staging. The existing Forge discovery chain found its mailbox at
+0200C8A0. Select Aquatos Aquadome, Start Game, reload, hop to retail Bakisi Isles,
+and hop back to Aquadome each completed with state 3/error 0 and the expected
+level/context. The user confirmed gameplay, HUD, and Mod Menu opening and
+navigation all work correctly. No game or
+BIOS code workaround has been added.
+
+The loader now also checks syscall 82 with the existing PS2SDK
+GetSyscallHandler helper. With BIOS 1.20 and 128 MiB enabled, the check selected
+the normal pool and set UYA_WARNING_EXTRA_RAM_BIOS. The optional bios-warning
+module renders this flag through Mod Menu's module-owned modal callback;
+the user confirmed the warning was visible. Initial dismissal testing exposed
+an early-boot/movie timing issue. Automatic modals now wait until the boot
+menu's idle counter becomes nonzero before capturing input. The user confirmed
+the initial 30-frame wait allowed Cross dismissal and normal controls; the
+wait is now shortened to the first idle tick. The user confirmed the popup
+appears immediately after pressing Start to skip the intro/preview, with
+working dismissal and restored controls.
+
 ## Relocated exception handler
 
 The SM/Horizon 10,356-byte payload is relocated from C8000 to 98000.

@@ -6,6 +6,7 @@
 /* A hook identifies an SDK layout, not necessarily a playable game mode. */
 unsigned int platformMode(unsigned int layout);
 unsigned int platformContext(unsigned int mode);
+unsigned int platformMemorySize(void);
 int platformReady(unsigned int mode);
 void platformApi(ModuleApi* api, unsigned int mode);
 #endif

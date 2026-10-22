@@ -364,7 +364,34 @@ its own low-memory range only when installed:
 | `0x000a0000-0x000a0030` | Fixed 48-byte loader discovery block |
 | `0x000a0030` to `_loader_end` | Loader code/data, module table, and persistent state |
 | `0x0009e000-0x000a0000` | Unused 8 KiB gap |
-| Aligned `_loader_end` to `0x00100000` | Modules, including BSS and Forge's mailbox |
+| Aligned `_loader_end` to `0x00100000` | Module pool with normal RAM |
+| `0x02000000` to `0x08000000` | Module pool when PCSX2 exposes 128 MiB RAM |
+
+Ranges above have exclusive ends. At startup, the loader calls the BIOS
+`GetMemorySize` syscall. A 128 MiB result selects the expanded pool; other
+results keep the normal pool. The loader and exception handler stay at their
+fixed addresses. Module code, data, BSS, and Forge's mailbox move together;
+the same binaries work in either pool. Game `malloc` allocations are unchanged.
+Restart emulation after changing PCSX2's extra-memory setting. Discover module
+addresses through the table rather than assuming they remain below 1 MiB.
+The existing eight-module limit is unchanged.
+
+Expanded RAM requires a BIOS with the `_InitTLB` syscall for UYA's ELF
+transitions. The loader uses PS2SDK's `GetSyscallHandler(0x82)` to check for it
+without calling it. If absent, modules stay in normal RAM and the loader logs
+a warning. This fallback does not prevent the game's ELF-switch crash.
+BIOS 1.20 failed when entering multiplayer during testing; use a newer
+compatible BIOS. This is a known PCSX2 extra-memory/old-BIOS
+[compatibility issue](https://github.com/PCSX2/pcsx2/issues/11234), not something
+the module allocator patches around.
+
+The optional `bios-warning` module displays that warning once per boot using
+Mod Menu's UI. Enable it with `bios-warning campaign,local` in `modules.txt`;
+use `bios-warning disabled` to omit its code, text, and state from RAM. It
+requires `modmenu` and is enabled in release defaults. Cross or Triangle dismisses the
+popup; it does not fix the incompatible setting. Disable PCSX2's 128 MiB RAM
+option or select a compatible BIOS, then restart. The small loader check and
+console warning remain available without either UI module.
 
 Headers include ABI version, region, mode mask, link address, sizes, and entry
 point offsets. The loader rejects invalid ranges, oversized/truncated images,

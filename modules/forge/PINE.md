@@ -31,6 +31,9 @@ No memory scan is needed. All pointers are 32-bit little-endian EE addresses.
    NUL-terminated name. Address, size and modes are at entry +`0x70`, +`0x74`,
    and +`0x78`. Check the table is inside the loader/module A0000-100000 range
    and the full module range is inside EE memory before following it.
+   With PCSX2's 128 MiB RAM enabled, modules can be in
+   `0x02000000-0x07FFFFFF`; the loader/table remain in low memory.
+   Do not reject Forge solely because its address is above the normal 32 MiB.
 3. At Forge's base, verify module magic `0x444D5955` (`UYMD`) at +`0x04`,
    version `1` at +`0x08`, and size `16` at +`0x0C`. Read the exports
    pointer from +`0x00`. Require a nonzero, four-byte-aligned pointer and a

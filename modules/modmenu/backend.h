@@ -10,5 +10,6 @@ void menuBackendBox(float x, float y, float width, float height, unsigned int co
 void menuBackendText(float x, float y, unsigned int color, const char* text);
 float menuBackendWidth(const char* text);
 int menuBackendLevel(void);
+int menuBackendPopupReady(unsigned int mode);
 void menuBackendPause(unsigned int mode, void (*openMenu)(void));
 #endif

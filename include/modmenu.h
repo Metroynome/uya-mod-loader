@@ -40,6 +40,8 @@ typedef ModuleConfigField ModMenuConfigField;
 
 typedef const char* (*ModMenuListLabel)(void* context, int index);
 typedef void (*ModMenuListSelect)(void* context, int index);
+/* Draw once per UI update; return zero to dismiss. Buttons are new presses. */
+typedef int (*ModMenuModal)(unsigned int pressed);
 
 typedef struct ModMenuApi {
 	unsigned int version, size;
@@ -68,6 +70,11 @@ typedef struct ModMenuApi {
 	/* Modal progress overlay. total<=0 shows indeterminate discovery;
      * label=NULL dismisses it. Caller must dismiss on deactivation. */
 	void (*setProgress)(const char* label, int current, int total);
+	/* Optional module-owned popup. Returns zero if another popup owns it.
+	 * Owner must clear it with NULL on deactivation; content is not copied. */
+	int (*setModal)(ModMenuModal draw);
+	void (*drawBox)(float x, float y, float width, float height, unsigned int color);
+	void (*drawText)(float x, float y, unsigned int color, const char* text);
 } ModMenuApi;
 
 /* Look this up again after mode changes; absence is normal, not fatal.

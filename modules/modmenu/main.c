@@ -35,6 +35,7 @@ static int setListInfo(int tab, ModMenuListLabel info);
 static int menuConfigLoad(const char* mod, const ModMenuConfigField* f, int n);
 static int menuConfigSave(const char* mod, const ModMenuConfigField* f, int n);
 static void setProgress(const char* label, int current, int total);
+static int setModal(ModMenuModal draw);
 
 static struct Tab tabs[MODMENU_MAX_TABS];
 static struct Item items[MODMENU_MAX_ITEMS];
@@ -44,26 +45,15 @@ static char progressLabel[64];
 static int progressCurrent, progressTotal, progressPulse;
 static int nextHandle = 1, opened, selectedTab, selectedItem, lastLevel = -999;
 static unsigned int previousButtons, previousMode, closingButtons;
-static const ModMenuApi menuApi = {MODMENU_API_VERSION,
-                                   sizeof(ModMenuApi),
-                                   addTab,
-                                   addItem,
-                                   removeTab,
-                                   setItemEnabled,
-                                   isOpen,
-                                   closeMenu,
-                                   getActiveTab,
-                                   focusTab,
-                                   setList,
-                                   setListInfo,
-                                   setTabVisibility,
-                                   setTabContexts,
-                                   menuConfigLoad,
-                                   menuConfigSave,
-                                   setProgress};
+static const ModMenuApi menuApi = {
+    MODMENU_API_VERSION, sizeof(ModMenuApi), addTab,      addItem,  removeTab,      setItemEnabled,   isOpen,
+    closeMenu,           getActiveTab,       focusTab,    setList,  setListInfo,    setTabVisibility, setTabContexts,
+    menuConfigLoad,      menuConfigSave,     setProgress, setModal, menuBackendBox, menuBackendText};
 /* A window of whole tabs: measured text plus Horizon-style padding. Scroll
  * the first visible tab only when the focused tab would fall outside it. */
 static int firstTab;
+static ModMenuModal modal;
+static int modalStarted;
 
 static int copyText(char* dst, const char* src, unsigned int cap)
 {
@@ -294,6 +284,16 @@ static void drawProgress(void)
 		portion = .25f;
 	}
 	menuBackendBox(x, .52f, .4f * portion, .025f, 0x803880af);
+}
+
+/* The owning module supplies the content and dismisses on deactivation. */
+static int setModal(ModMenuModal draw)
+{
+	if (draw && modal && modal != draw)
+		return 0;
+	modal = draw;
+	modalStarted = 0;
+	return 1;
 }
 
 static void selectTab(int direction)
@@ -639,6 +639,16 @@ void moduleUpdate(void)
 		lastLevel = level;
 	}
 	menuBackendPause(loader->mode, openFromPause);
+	if (modal && (modalStarted || menuBackendPopupReady(loader->mode))) {
+		modalStarted = 1;
+		menuBackendCapture(loader->mode);
+		if (!modal(buttons & ~previousButtons)) {
+			modal = 0;
+			closingButtons = buttons;
+		}
+		previousButtons = buttons;
+		return;
+	}
 	if (progressLabel[0]) {
 		menuBackendCapture(loader->mode);
 		previousButtons = buttons;

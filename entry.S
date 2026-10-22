@@ -31,3 +31,11 @@ restore:
     lq $ra, 0($sp)
     jr $ra
     addiu $sp, $sp, 64
+
+/* BIOS syscall 0x7f; PCSX2 returns its exposed EE RAM size here. */
+.globl platformMemorySize
+platformMemorySize:
+	addiu $v1, $zero, 0x7f
+	syscall
+	jr $ra
+	nop

@@ -224,6 +224,17 @@ static void resetBootIdle(unsigned int mode)
 	*(volatile unsigned int*)BOOT_IDLE_TIMER = 0;
 }
 
+/* Rendering is available before the boot intro finishes. Automatic popups
+ * must wait until the actual menu is counting idle frames, or they capture
+ * input just before a movie takes over and stops our update hook.
+ */
+int menuBackendPopupReady(unsigned int mode)
+{
+	if (mode == UYA_MODE_CAMPAIGN && levelId == -1)
+		return *(volatile unsigned int*)BOOT_IDLE_TIMER > 0;
+	return 1;
+}
+
 void menuBackendCapture(unsigned int mode)
 {
 	unsigned int i, address = 0, original = 0;

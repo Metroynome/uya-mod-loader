@@ -26,11 +26,12 @@
 #define UYA_MODULE_TABLE     ((const volatile ModuleTable*)UYA_LOADER_DISCOVERY->moduleTable)
 /* Flat INI integer bindings: booleans use 0..1, choices use their index range.
  * Missing keys preserve defaults. Loading is transactional on parse failure. */
-#define UYA_CONFIG_MAX_FIELDS 32
-#define UYA_CONFIG_OK         1
-#define UYA_CONFIG_MISSING    0
-#define UYA_CONFIG_INVALID    (-1)
-#define UYA_CONFIG_IO         (-2)
+#define UYA_CONFIG_MAX_FIELDS      32
+#define UYA_CONFIG_OK              1
+#define UYA_CONFIG_MISSING         0
+#define UYA_CONFIG_INVALID         (-1)
+#define UYA_CONFIG_IO              (-2)
+#define UYA_WARNING_EXTRA_RAM_BIOS 1U
 
 typedef void (*ModuleLifecycle)(void);
 
@@ -98,6 +99,8 @@ typedef struct ModuleApi {
      * host0:uya/config/<mod>.<region>.ini; explicit synchronous operations. */
 	int (*loadConfig)(const char* mod, const ModuleConfigField* fields, int count);
 	int (*saveConfig)(const char* mod, const ModuleConfigField* fields, int count);
+	/* Optional trailing field: check size before reading on older loaders. */
+	unsigned int warnings;
 } ModuleApi;
 
 /* Retain the pointer, not a copy: mode and function pointers change on a
