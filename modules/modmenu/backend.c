@@ -11,6 +11,22 @@
 #ifndef MENU_FLUSH
 #define MENU_FLUSH(operation) ((void (*)(int))0x1264e0)(operation)
 #endif
+#if UYA_MODULE_REGION == 3
+#define BOOT_IDLE_CHECK 0x38b988
+#define BOOT_IDLE_TIMER 0x1de988
+#define BOOT_IDLE_LIMIT 0x28631c21
+#define BOOT_IDLE_STORE 0xaf828e1c
+#elif UYA_MODULE_REGION == 2
+#define BOOT_IDLE_CHECK 0x381734
+#define BOOT_IDLE_TIMER 0x1d5688
+#define BOOT_IDLE_LIMIT 0x28631771
+#define BOOT_IDLE_STORE 0xaf828dd8
+#else
+#define BOOT_IDLE_CHECK 0x38175c
+#define BOOT_IDLE_TIMER 0x1d5688
+#define BOOT_IDLE_LIMIT 0x28631c21
+#define BOOT_IDLE_STORE 0xaf828dd8
+#endif
 #define PAUSE_WORD(a) (*(volatile unsigned int*)(a))
 #if UYA_MODULE_REGION == 3
 #define CAMPAIGN_SHIFT (-4)
@@ -193,12 +209,28 @@ static volatile unsigned char* captureLocalPlayers(unsigned int mode)
 	return 0;
 }
 
+/* Boot counts neutral frames even while our input callback is suppressing them.
+ * Keep its two-minute preview countdown fresh while a menu/popup owns input.
+ * Nothing is patched: normal idle timing resumes automatically after release. */
+static void resetBootIdle(unsigned int mode)
+{
+	const volatile unsigned int* check = (void*)BOOT_IDLE_CHECK;
+	if (mode != UYA_MODE_CAMPAIGN || levelId != -1)
+		return;
+	/* Match the regional increment, limit, branch and GP-relative store. */
+	if (check[0] != 0x0040182d || check[1] != 0x24420001 || check[2] != BOOT_IDLE_LIMIT || check[3] != 0x14600007 ||
+	    check[4] != BOOT_IDLE_STORE)
+		return;
+	*(volatile unsigned int*)BOOT_IDLE_TIMER = 0;
+}
+
 void menuBackendCapture(unsigned int mode)
 {
 	unsigned int i, address = 0, original = 0;
 	volatile unsigned char* controller;
 	if (!active)
 		return;
+	resetBootIdle(mode);
 	controller = mode == UYA_MODE_CAMPAIGN ? pad : captureLocalPlayers(mode);
 	if (controller && !capturedPad) {
 		for (i = 0; i < 32; ++i)
