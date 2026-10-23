@@ -4,9 +4,9 @@
 #include "module.h"
 
 /* A hook identifies an SDK layout, not necessarily a playable game mode. */
-unsigned int platformMode(unsigned int layout);
-unsigned int platformContext(unsigned int mode);
-unsigned int platformMemorySize(void);
-int platformReady(unsigned int mode);
-void platformApi(ModuleApi* api, unsigned int mode);
+u32 platformMode(u32 layout);
+u32 platformContext(u32 mode);
+u32 platformMemorySize(void);
+int platformReady(u32 mode);
+void platformApi(ModuleApi_t* api, u32 mode);
 #endif

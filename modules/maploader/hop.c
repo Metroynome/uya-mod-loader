@@ -29,7 +29,7 @@
 #define HUD_LOAD_SETTINGS 0x8c6312a0
 #endif
 
-#define WORD(a) (*(volatile unsigned int*)(a))
+#define WORD(a) (*(volatile u32*)(a))
 #ifndef MAP_HOP_CALL
 #define MAP_HOP_CALL(address, base) ((void (*)(int))(address))(base)
 #endif
@@ -40,10 +40,10 @@
  * Start Game action. Reuse retail roster/settings initialization unchanged.
  * Hash the whole callback before calling code from the staging overlay. */
 #ifndef MAP_START_GAME_CALL
-#define MAP_START_GAME_CALL(menu) ((void (*)(unsigned int))START_GAME)(menu)
+#define MAP_START_GAME_CALL(menu) ((void (*)(u32))START_GAME)(menu)
 #endif
 
-static unsigned int targetBase;
+static u32 targetBase;
 static int queued = -1, phase, ticks;
 int mapHopSawLoading;
 int mapHopResult;
@@ -52,16 +52,16 @@ int mapHopResult;
  * was staging (39). Reloads can clear the registrations even on the same base.
  * Run retail setup once after every completed Forge transition; its individual
  * registration routines guard their own initialization. */
-static int restoreHud(unsigned int level)
+static int restoreHud(u32 level)
 {
 #if UYA_MODULE_REGION == 2
-	static const unsigned int addresses[] = {
+	static const u32 addresses[] = {
 	    0x4a8f48, 0x4ab060, 0x4a0938, 0x49e0d0, 0x49d420, 0x49acb8, 0x49acb0, 0x49d530, 0x49c830, 0x49c1b0};
 #else
-	static const unsigned int addresses[] = {
+	static const u32 addresses[] = {
 	    0x4a6a30, 0x4a8a88, 0x49e3a0, 0x49bbb8, 0x49af08, 0x498720, 0x4988d8, 0x49b118, 0x49a458, 0x499d98};
 #endif
-	static const unsigned int signature[] = {0x27bdffe0,
+	static const u32 signature[] = {0x27bdffe0,
 	                                         0x3c030024,
 	                                         HUD_LOAD_SETTINGS,
 	                                         0xffb00000,
@@ -72,7 +72,7 @@ static int restoreHud(unsigned int level)
 	                                         0x0000882d,
 	                                         0x8c620000,
 	                                         0x28420002};
-	unsigned int a, i;
+	u32 a, i;
 	if (level < 40 || level > 49)
 		return 0;
 	a = addresses[level - 40];
@@ -85,20 +85,20 @@ static int restoreHud(unsigned int level)
 
 int mapForgeActive(void)
 {
-	const ForgeApi* p = mapApi->findService(FORGE_SERVICE_ID, FORGE_API_VERSION);
+	const ForgeApi_t* p = mapApi->findService(FORGE_SERVICE_ID, FORGE_API_VERSION);
 	return p && p->version == FORGE_API_VERSION && p->size >= sizeof(*p) && p->active();
 }
 
 int mapHopInGame(void)
 {
-	unsigned int level = WORD(LEVEL_ID);
+	u32 level = WORD(LEVEL_ID);
 	return mapApi->context == UYA_CONTEXT_LOCAL && mapMultiplayerReady() && level >= 40 && level <= 49 &&
 	       WORD(GAME_ACTIVE) == 1 && WORD(SCENE_READY) == 1;
 }
 
-static unsigned int findRequest(void)
+static u32 findRequest(void)
 {
-	unsigned int a = mapSceneRequest;
+	u32 a = mapSceneRequest;
 	return a && WORD(a) == 0x27bdffe0 && WORD(a + 4) == 0xafa40000 && WORD(a + 8) == 0xffbf0010 &&
 	               WORD(a + 40) == 0xaf82a934
 	           ? a
@@ -128,16 +128,16 @@ int mapHopRequest(int index)
 	return 1;
 }
 
-static unsigned int startGameMenu(void)
+static u32 startGameMenu(void)
 {
-	unsigned int menu, hash = 2166136261U, i;
+	u32 menu, hash = 2166136261U, i;
 	if (mapApi->context != UYA_CONTEXT_LOCAL || mapStaging() != 1)
 		return 0;
 	menu = WORD(STAGING_MENU);
 	if (menu < 0x100000 || menu > 0x1fffc00 || (menu & 3) || WORD(menu + 0x60) != STAGING_VTABLE)
 		return 0;
 	for (i = 0; i < 240; ++i)
-		hash = (hash ^ *(volatile unsigned char*)(START_GAME + i)) * 16777619U;
+		hash = (hash ^ *(volatile u8*)(START_GAME + i)) * 16777619U;
 	return hash == START_GAME_HASH ? menu : 0;
 }
 
@@ -161,11 +161,11 @@ int mapStartGame(void)
  * The game recreates these records from the existing match settings. */
 void mapHopOnLoad(void)
 {
-	unsigned int i, j;
+	u32 i, j;
 	if (phase != 2 || mapHopSawLoading || mapApi->context != UYA_CONTEXT_LOCAL)
 		return;
 	for (i = 0; i < 8; ++i) {
-		volatile unsigned int* p = (volatile unsigned int*)(NET_PLAYERS + i * 0xc70);
+		volatile u32* p = (volatile u32*)(NET_PLAYERS + i * 0xc70);
 		for (j = 0; j < 0xc70 / 4; ++j)
 			p[j] = 0;
 		p[0] = 0xffffffff;
@@ -176,11 +176,11 @@ void mapHopOnLoad(void)
 
 void mapHopTick(void)
 {
-	unsigned int settings, base, requestAddress;
+	u32 settings, base, requestAddress;
 	if (!phase)
 		return;
 	if (phase == 3) {
-		unsigned int menu = startGameMenu();
+		u32 menu = startGameMenu();
 		if (!menu || !mapForgeActive() || mapLoading()) {
 			mapHopCancel();
 			return;

@@ -4,9 +4,9 @@
 /* Include <librac3/...h> for this mode's game functions. */
 
 /* This pointer is updated by the loader on mode transitions. */
-static const ModuleApi* loader;
+static const ModuleApi_t* loader;
 
-int moduleInit(const ModuleApi* api)
+int moduleInit(const ModuleApi_t* api)
 {
 	loader = api;
 	printf("campaign-test: initialized (region %u, mode %u)\n", api->region, api->mode);

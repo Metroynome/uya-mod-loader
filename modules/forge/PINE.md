@@ -1,6 +1,6 @@
-# Forge PINE interface v1
+# Forge PINE interface v2
 
-Forge owns a **172-byte, 16-byte-aligned mailbox in its module BSS**.
+Forge owns a **168-byte, 16-byte-aligned mailbox in its module BSS**.
 There is no fixed mailbox address or loader-owned reservation.
 Use PINE EE memory reads/writes; this is not a host-process pointer. Forge v2
 needs no plugin-specific transport. The Forge mod consumes commands on its
@@ -13,7 +13,7 @@ and transitions do not accept new map commands.
 
 ## Layout
 
-All integers are unsigned 32-bit little-endian. Strings are NUL-terminated ASCII.
+Fields use the widths listed below; multibyte integers are little-endian. Strings are NUL-terminated ASCII.
 Offsets are relative to the discovered mailbox address. The C declaration is
 `include/forge.h`; the ELF symbol is `forgeMailbox`.
 
@@ -40,11 +40,11 @@ No memory scan is needed. All pointers are 32-bit little-endian EE addresses.
    complete 16-byte exports structure inside Forge's address/size range.
 4. Forge exports contain magic `0x31584746` (`FGX1`) at +`0x00`, version
    `1` at +`0x04`, size `16` at +`0x08`, and the mailbox pointer at
-   +`0x0C`. The C declaration is `ForgeExports` in `include/forge.h`.
+   +`0x0C`. The C declaration is `ForgeExports_t` in `include/forge.h`.
 5. Require a 16-byte-aligned mailbox entirely within Forge's address/size range.
-   Check mailbox magic `0x31475246` (`FRG1`), version `1`, and size `172`.
+   Check mailbox magic `0x32475246` (`FRG2`), 16-bit version `2`, and 16-bit size `168`.
    Re-read discovery pointers and the table entry to detect a restart during
-   discovery. Verify heartbeat at mailbox + `0x18` advances, then check
+   discovery. Verify heartbeat at mailbox + `0x08` advances, then check
    availability, context and capability bits before submitting work.
 
 The headers and exports table are read-only to the host. The exports and mailbox
@@ -54,31 +54,42 @@ If the header is not ready or the heartbeat is stopped, wait for running Local
 Play instead of writing commands. A paused emulator also stops the heartbeat.
 
 Cache addresses only for the current session. Rediscover after restart,
-savestate load, module reload, changed header, or stopped heartbeat. This
-replaces both the fixed AF800 table location and Forge's former FGP1 entry stub.
-Do not use the old base + 8 mailbox lookup or fall back to `0x000FFF00`.
-Rebuild and deploy the version-4 loader and modules together. The mailbox's
-command numbers and field offsets below remain unchanged.
+savestate load, module replacement, changed header, or stopped heartbeat.
 
-| Offset | Field | Owner / meaning |
-|---|---|---|
-| 0x00 | magic | Game: `0x31475246` (`FRG1`) |
-| 0x04 | version | Game: 1 |
-| 0x08 | size | Game: 172 bytes |
-| 0x0C | available | Game: Forge and compatible Map Loader active |
-| 0x10 | context | Game: 0 unavailable, 1 staging, 2 match |
-| 0x14 | capabilities | Game: bit `(1 << command)` indicates context support |
-| 0x18 | heartbeat | Game: advances on Forge updates; not a frame clock |
-| 0x1C | requestId | **Host: write LAST to submit**, nonzero |
-| 0x20 | command | **Host**: command number below |
-| 0x24 | filename[64] | **Host**: map-pack filename stem, not display name |
-| 0x64 | acceptedId | Game: most recently accepted request |
-| 0x68 | completedId | Game: most recently finished accepted request |
-| 0x6C | state | Game: state of accepted work |
-| 0x70 | error | Game: terminal error for accepted work |
-| 0x74 | rejectedId | Game: most recently rejected request |
-| 0x78 | rejectError | Game: rejection reason |
-| 0x7C | message[48] | Game: advisory progress text; use numeric fields for logic |
+**Protocol v2 is incompatible with v1.** Rebuild/deploy Forge, Map Loader, and
+`mods/utils/mapscan.irx` together and cold-boot. Update external clients before
+sending commands. The loader and exports discovery headers remain version 1;
+the mailbox uses a new magic and version. Forge/Map Loader service ABI is now 2
+so mismatched modules cannot silently truncate filenames.
+
+The 48-byte advisory message was removed. Display status from `state`, `error`,
+and `rejectError`; command numbers and numeric results are unchanged. IDs and
+heartbeat remain 32-bit to avoid short-counter rollover during editor sessions.
+The mailbox is 168 bytes (was 172) while accepting 128 filename characters.
+
+| Offset | Bytes | Field | Owner / meaning |
+| --- | --- | --- | --- |
+| 0x00 | 4 | magic | Game: `0x32475246` (`FRG2`) |
+| 0x04 | 2 | version | Game: 2 |
+| 0x06 | 2 | size | Game: 168 |
+| 0x08 | 4 | heartbeat | Game: advances on Forge updates |
+| 0x0C | 4 | requestId | **Host: write LAST**, nonzero |
+| 0x10 | 4 | acceptedId | Game: most recently accepted request |
+| 0x14 | 4 | completedId | Game: most recently completed request |
+| 0x18 | 4 | rejectedId | Game: most recently rejected request |
+| 0x1C | 1 | available | Game: compatible Map Loader available |
+| 0x1D | 1 | context | Game: 0 unavailable, 1 staging, 2 game |
+| 0x1E | 1 | capabilities | Game: bit `(1 << command)` |
+| 0x1F | 1 | command | Host: command number |
+| 0x20 | 1 | state | Game: accepted operation state |
+| 0x21 | 1 | error | Game: accepted operation error |
+| 0x22 | 1 | rejectError | Game: rejected operation error |
+| 0x23 | 1 | reserved | Zero; do not write |
+| 0x24 | 129 | filename | Host: up to 128 ASCII characters plus NUL |
+| 0xA5 | 3 | padding | Zero; do not write |
+
+Write `command` as **one byte**, not a 32-bit word: adjacent bytes belong to the
+game. Write filename separately, then the aligned 32-bit request ID last.
 
 ## Commands
 
@@ -124,7 +135,7 @@ retail map; commands 3/4 can switch back to custom maps.
 | 49 | Marcadia Palace |
 
 Example filename: `minikisi`, not `Bakisi Mini`, `minikisi.wad`, or a host path.
-Names are case-sensitive, 1-63 printable ASCII bytes. Separators, traversal,
+Names are case-sensitive, 1-128 printable ASCII bytes. Separators, traversal,
 colons, wildcards, leading dots and unterminated strings are rejected. Files must
 pass Map Loader's usual map-pack validation. A missing map is an explicit error.
 Refresh preserves selection by filename when present; removed maps lose selection.
@@ -137,7 +148,7 @@ catalog only: use command 1 or 4 to load changed map content.
    advances when emulation is running. A stopped heartbeat may simply mean pause.
 2. Wait for earlier accepted work to complete. Choose a fresh nonzero request ID;
    never reuse an ID in a session (skip zero on wraparound).
-3. Write command and a zero-padded 64-byte filename field. For commands 1/2/5,
+3. Write command and a zero-padded 129-byte filename field. For commands 1/2/5,
    an empty filename is sufficient. Wait for these PINE writes to complete.
 4. Write requestId **last**, in a separate completed write.
 5. Poll: `rejectedId == id` reports rejection; `acceptedId == id` acknowledges
@@ -154,7 +165,7 @@ completion marker again around status reads if submitting consecutive requests.
 States: 0 idle, 1 scanning, 2 loading/queued transition, 3 complete, 4 failed.
 Errors: 0 none, 1 wrong context, 2 busy, 3 unknown command, 4 invalid filename,
 5 map not found, 6 scan failure, 7 selection/loading/HUD failure, 8 inactive.
-The text field is advisory and may reflect the previous operation on rejection.
+Rejected requests have separate ID/error fields and do not replace the accepted operation.
 
 Leaving Local Play marks Forge unavailable and cancels its pending response.
 Requests posted while inactive are discarded on reactivation. Restarting the
@@ -164,6 +175,11 @@ and establish a new session after loading a savestate. No network authentication
 is implemented here; access control belongs to the emulator's PINE endpoint.
 
 ## Verification
+
+Protocol-v2 layout, 128-character names, and unterminated-name rejection are
+covered by native checks. The live gameplay results below are from protocol v1;
+v2 has not yet been exercised through PCSX2/PINE.
+
 
 Native tests cover request ordering, duplicate IDs, busy rejection, inactivity,
 invalid filenames, context restrictions, and scan failures. Live NTSC-U checks

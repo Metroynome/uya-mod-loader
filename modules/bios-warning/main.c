@@ -1,10 +1,10 @@
 #include "include/modmenu.h"
 
-static const ModuleApi* loader;
-static const ModMenuApi* menu;
+static const ModuleApi_t* loader;
+static const ModMenuApi_t* menu;
 static int shown, ownsPopup;
 
-static int drawWarning(unsigned int pressed)
+static int drawWarning(u32 pressed)
 {
 	menu->drawBox(0, 0, 1, 1, 0x50000000);
 	menu->drawBox(.10f, .27f, .80f, .46f, 0x8018608f);
@@ -32,7 +32,7 @@ static void deactivate(void)
 	menu = 0;
 }
 
-int moduleInit(const ModuleApi* api)
+int moduleInit(const ModuleApi_t* api)
 {
 	if (api->version < UYA_API_VERSION || api->size < sizeof(*api))
 		return -1;

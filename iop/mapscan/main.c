@@ -5,19 +5,19 @@
 #include <thbase.h>
 #include <sysclib.h>
 
-#define SERVICE 0x554d4150
+#define SERVICE 0x554d4151
 
-struct MapScanReply {
+typedef struct MapScanReply {
 	int status;
-	char name[128];
+	char name[256];
 	char pad[60];
-};
+} MapScanReply_t;
 
-IRX_ID("uya_mapscan", 1, 0);
+IRX_ID("uya_mapscan", 2, 0);
 static SifRpcDataQueue_t queue;
 static SifRpcServerData_t server;
 static int request[16] __attribute__((aligned(64)));
-static struct MapScanReply reply __attribute__((aligned(64)));
+static MapScanReply_t reply __attribute__((aligned(64)));
 static int directory = -1;
 
 static void* dispatch(int command, void* data, int size)
@@ -39,7 +39,7 @@ static void* dispatch(int command, void* data, int size)
 		memset(&entry, 0, sizeof(entry));
 		reply.status = dread(directory, &entry);
 		if (reply.status > 0) {
-			for (n = 0; n < 127 && entry.name[n]; ++n)
+			for (n = 0; n < sizeof(reply.name) - 1 && entry.name[n]; ++n)
 				reply.name[n] = entry.name[n];
 			/* Long filenames cannot fit our map ABI; ignore them safely. */
 			if (entry.name[n])

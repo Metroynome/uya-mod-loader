@@ -28,25 +28,25 @@ typedef void (*ModMenuCallback)(void* context);
 
 typedef struct ModMenuItem {
 	const char* label;
-	unsigned int type;
+	u32 type;
 	int* value;
 	int minimum, maximum, step;
 	ModMenuCallback callback;
 	void* context;
-} ModMenuItem;
+} ModMenuItem_t;
 
 /* Compatibility aliases; persistence is owned by the loader. */
-typedef ModuleConfigField ModMenuConfigField;
+typedef ModuleConfigField_t ModMenuConfigField_t;
 
 typedef const char* (*ModMenuListLabel)(void* context, int index);
 typedef void (*ModMenuListSelect)(void* context, int index);
 /* Draw once per UI update; return zero to dismiss. Buttons are new presses. */
-typedef int (*ModMenuModal)(unsigned int pressed);
+typedef int (*ModMenuModal)(u32 pressed);
 
 typedef struct ModMenuApi {
-	unsigned int version, size;
-	int (*addTab)(const char* key, const char* label, unsigned int modes);
-	int (*addItem)(int tab, const ModMenuItem* item);
+	u32 version, size;
+	int (*addTab)(const char* key, const char* label, u32 modes);
+	int (*addItem)(int tab, const ModMenuItem_t* item);
 	int (*removeTab)(int tab);
 	int (*setItemEnabled)(int item, int enabled);
 	int (*isOpen)(void);
@@ -59,32 +59,32 @@ typedef struct ModMenuApi {
 	/* Optional information for the highlighted row, displayed on the left. */
 	int (*setListInfo)(int tab, ModMenuListLabel info);
 	/* Contexts are independent of module execution modes; combine with |. */
-	int (*setTabVisibility)(int tab, unsigned int contexts);
+	int (*setTabVisibility)(int tab, u32 contexts);
 	/* API-1 extension: execution contexts ANDed with the existing screen
      * visibility filter. Thus LOCAL + MAIN_MENU means Local Play menus only. */
-	int (*setTabContexts)(int tab, unsigned int contexts);
+	int (*setTabContexts)(int tab, u32 contexts);
 	/* host0:uya/config/<mod>.<region>.ini. Explicit calls, never per frame.
      * Save replaces the file; comments/unknown keys are not preserved. */
-	int (*loadConfig)(const char* mod, const ModMenuConfigField* fields, int count);
-	int (*saveConfig)(const char* mod, const ModMenuConfigField* fields, int count);
+	int (*loadConfig)(const char* mod, const ModMenuConfigField_t* fields, int count);
+	int (*saveConfig)(const char* mod, const ModMenuConfigField_t* fields, int count);
 	/* Modal progress overlay. total<=0 shows indeterminate discovery;
      * label=NULL dismisses it. Caller must dismiss on deactivation. */
 	void (*setProgress)(const char* label, int current, int total);
 	/* Optional module-owned popup. Returns zero if another popup owns it.
 	 * Owner must clear it with NULL on deactivation; content is not copied. */
 	int (*setModal)(ModMenuModal draw);
-	void (*drawBox)(float x, float y, float width, float height, unsigned int color);
-	void (*drawText)(float x, float y, unsigned int color, const char* text);
-} ModMenuApi;
+	void (*drawBox)(float x, float y, float width, float height, u32 color);
+	void (*drawText)(float x, float y, u32 color, const char* text);
+} ModMenuApi_t;
 
 /* Look this up again after mode changes; absence is normal, not fatal.
  * Retry registration from moduleUpdate until the provider is available. */
-static const ModMenuApi* modmenuFind(const ModuleApi* loader)
+static const ModMenuApi_t* modmenuFind(const ModuleApi_t* loader)
 {
-	const ModMenuApi* menu;
+	const ModMenuApi_t* menu;
 	if (!loader || loader->version < 2 || !loader->findService)
 		return 0;
-	menu = (const ModMenuApi*)loader->findService(MODMENU_SERVICE_ID, MODMENU_API_VERSION);
+	menu = (const ModMenuApi_t*)loader->findService(MODMENU_SERVICE_ID, MODMENU_API_VERSION);
 	return menu && menu->version == MODMENU_API_VERSION && menu->size >= sizeof(*menu) ? menu : 0;
 }
 #endif

@@ -4,26 +4,26 @@
 #include "backend.h"
 #include "version.h"
 
-struct Tab {
+typedef struct Tab {
 	int handle;
-	unsigned int modes, contexts, executionContexts;
+	u32 modes, contexts, executionContexts;
 	char key[32], label[32];
 	int count, cursor;
 	ModMenuListLabel listLabel, listInfo;
 	ModMenuListSelect listSelect;
 	void* context;
-};
+} Tab_t;
 
-struct Item {
+typedef struct Item {
 	int handle, tab, enabled;
 	char label[48];
-	ModMenuItem definition;
-};
+	ModMenuItem_t definition;
+} Item_t;
 
-static int setTabVisibility(int tab, unsigned int contexts);
-static int setTabContexts(int tab, unsigned int contexts);
-static int addTab(const char* key, const char* label, unsigned int modes);
-static int addItem(int tab, const ModMenuItem* d);
+static int setTabVisibility(int tab, u32 contexts);
+static int setTabContexts(int tab, u32 contexts);
+static int addTab(const char* key, const char* label, u32 modes);
+static int addItem(int tab, const ModMenuItem_t* d);
 static int removeTab(int tab);
 static int setItemEnabled(int handle, int enabled);
 static int isOpen(void);
@@ -32,21 +32,21 @@ static int getActiveTab(void);
 static int focusTab(int tab);
 static int setList(int tab, int count, ModMenuListLabel label, ModMenuListSelect select, void* context, int initial);
 static int setListInfo(int tab, ModMenuListLabel info);
-static int menuConfigLoad(const char* mod, const ModMenuConfigField* f, int n);
-static int menuConfigSave(const char* mod, const ModMenuConfigField* f, int n);
+static int menuConfigLoad(const char* mod, const ModMenuConfigField_t* f, int n);
+static int menuConfigSave(const char* mod, const ModMenuConfigField_t* f, int n);
 static void setProgress(const char* label, int current, int total);
 static int setModal(ModMenuModal draw);
 
-static struct Tab tabs[MODMENU_MAX_TABS];
-static struct Item items[MODMENU_MAX_ITEMS];
-static const ModuleApi* loader;
+static Tab_t tabs[MODMENU_MAX_TABS];
+static Item_t items[MODMENU_MAX_ITEMS];
+static const ModuleApi_t* loader;
 static int homeTab;
 static char progressLabel[64];
 static int progressCurrent, progressTotal, progressPulse;
 static int nextHandle = 1, opened, selectedTab, selectedItem, lastLevel = -999;
-static unsigned int previousButtons, previousMode, closingButtons;
-static const ModMenuApi menuApi = {
-    MODMENU_API_VERSION, sizeof(ModMenuApi), addTab,      addItem,  removeTab,      setItemEnabled,   isOpen,
+static u32 previousButtons, previousMode, closingButtons;
+static const ModMenuApi_t menuApi = {
+    MODMENU_API_VERSION, sizeof(ModMenuApi_t), addTab,      addItem,  removeTab,      setItemEnabled,   isOpen,
     closeMenu,           getActiveTab,       focusTab,    setList,  setListInfo,    setTabVisibility, setTabContexts,
     menuConfigLoad,      menuConfigSave,     setProgress, setModal, menuBackendBox, menuBackendText};
 /* A window of whole tabs: measured text plus Horizon-style padding. Scroll
@@ -55,9 +55,9 @@ static int firstTab;
 static ModMenuModal modal;
 static int modalStarted;
 
-static int copyText(char* dst, const char* src, unsigned int cap)
+static int copyText(char* dst, const char* src, u32 cap)
 {
-	unsigned int i = 0;
+	u32 i = 0;
 	if (!src || !*src)
 		return 0;
 	while (src[i] && i + 1 < cap) {
@@ -89,14 +89,14 @@ static int tabIndex(int handle)
 static int visible(int tab)
 {
 	int i = tabIndex(tab), level = menuBackendLevel();
-	unsigned int context = loader->mode == UYA_MODE_MULTIPLAYER
+	u32 context = loader->mode == UYA_MODE_MULTIPLAYER
 	                           ? (level == 39 ? MODMENU_SHOW_MAIN_MENU : MODMENU_SHOW_MULTIPLAYER)
 	                           : (level < 0 ? MODMENU_SHOW_MAIN_MENU : MODMENU_SHOW_CAMPAIGN);
 	return i >= 0 && (tabs[i].modes & loader->mode) && (tabs[i].contexts & context) &&
 	       (tabs[i].executionContexts & loader->context);
 }
 
-static int setTabVisibility(int tab, unsigned int contexts)
+static int setTabVisibility(int tab, u32 contexts)
 {
 	int i = tabIndex(tab);
 	if (i < 0 || (contexts & ~MODMENU_SHOW_EVERYWHERE))
@@ -106,7 +106,7 @@ static int setTabVisibility(int tab, unsigned int contexts)
 	return 0;
 }
 
-static int setTabContexts(int tab, unsigned int contexts)
+static int setTabContexts(int tab, u32 contexts)
 {
 	int i = tabIndex(tab);
 	if (i < 0 || (contexts & ~UYA_CONTEXT_ALL))
@@ -115,7 +115,7 @@ static int setTabContexts(int tab, unsigned int contexts)
 	return 0;
 }
 
-static int addTab(const char* key, const char* label, unsigned int modes)
+static int addTab(const char* key, const char* label, u32 modes)
 {
 	int i, freeSlot = -1;
 	char k[32], l[32];
@@ -138,7 +138,7 @@ static int addTab(const char* key, const char* label, unsigned int modes)
 	return tabs[freeSlot].handle;
 }
 
-static int addItem(int tab, const ModMenuItem* d)
+static int addItem(int tab, const ModMenuItem_t* d)
 {
 	int i;
 	char label[48];
@@ -244,12 +244,12 @@ static int setListInfo(int tab, ModMenuListLabel info)
 }
 
 /* Retain the original menu API as forwarding helpers for existing clients. */
-static int menuConfigLoad(const char* mod, const ModMenuConfigField* f, int n)
+static int menuConfigLoad(const char* mod, const ModMenuConfigField_t* f, int n)
 {
 	return loader->loadConfig(mod, f, n);
 }
 
-static int menuConfigSave(const char* mod, const ModMenuConfigField* f, int n)
+static int menuConfigSave(const char* mod, const ModMenuConfigField_t* f, int n)
 {
 	return loader->saveConfig(mod, f, n);
 }
@@ -317,7 +317,7 @@ static void selectItem(int direction)
 {
 	int i, index = tabIndex(selectedTab);
 	if (index >= 0 && tabs[index].count) {
-		struct Tab* t = &tabs[index];
+		Tab_t* t = &tabs[index];
 		t->cursor = (t->cursor + direction + t->count) % t->count;
 		return;
 	}
@@ -350,7 +350,7 @@ static void activate(int direction)
 	}
 	for (i = 0; i < MODMENU_MAX_ITEMS; ++i)
 		if (items[i].handle == selectedItem && selectedItem) {
-			ModMenuItem* d = &items[i].definition;
+			ModMenuItem_t* d = &items[i].definition;
 			int value;
 			if (!items[i].enabled || !visible(items[i].tab))
 				return;
@@ -374,7 +374,7 @@ static void activate(int direction)
 static void number(char* dst, int value)
 {
 	char rev[12];
-	unsigned int n = value < 0 ? 0U - (unsigned int)value : (unsigned int)value;
+	u32 n = value < 0 ? 0U - (u32)value : (u32)value;
 	int i = 0, j = 0;
 	if (value < 0)
 		dst[j++] = '-';
@@ -499,7 +499,7 @@ static void draw(void)
 		return;
 	}
 	if (index >= 0 && tabs[index].count) {
-		struct Tab* t = &tabs[index];
+		Tab_t* t = &tabs[index];
 		/* Odd row count keeps the highlighted entry in the exact center.
          * Wrap neighbors at both ends, as Horizon's vertical list does. */
 		menuBackendBox(.11f, .3f, .365f, .5f, 0x800c2241);
@@ -545,7 +545,7 @@ static void draw(void)
 	for (i = 0; i < MODMENU_MAX_ITEMS; ++i)
 		if (items[i].handle && items[i].tab == selectedTab) {
 			float y;
-			unsigned int color = items[i].enabled ? 0x8069cbf2 : 0x80606060;
+			u32 color = items[i].enabled ? 0x8069cbf2 : 0x80606060;
 			if (row++ < start)
 				continue;
 			if (row > start + 8)
@@ -590,7 +590,7 @@ static void deactivate(void)
 	lastLevel = -999;
 }
 
-int moduleInit(const ModuleApi* api)
+int moduleInit(const ModuleApi_t* api)
 {
 
 	if (api->version < UYA_API_VERSION || api->size < sizeof(*api))
@@ -618,7 +618,7 @@ static void openFromPause(void)
 
 void moduleUpdate(void)
 {
-	unsigned int buttons, pressed;
+	u32 buttons, pressed;
 	int level;
 	if (!menuBackendReady(loader->mode)) {
 		closeMenu();
@@ -703,10 +703,10 @@ void moduleUpdate(void)
 }
 
 /* GCC may lower aggregate initialization to memset even in freestanding code. */
-void* memset(void* dst, int value, unsigned int size)
+void* memset(void* dst, int value, u32 size)
 {
-	unsigned char* p = dst;
+	u8* p = dst;
 	while (size--)
-		*p++ = (unsigned char)value;
+		*p++ = (u8)value;
 	return dst;
 }

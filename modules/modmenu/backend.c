@@ -27,7 +27,7 @@
 #define BOOT_IDLE_LIMIT 0x28631c21
 #define BOOT_IDLE_STORE 0xaf828dd8
 #endif
-#define PAUSE_WORD(a) (*(volatile unsigned int*)(a))
+#define PAUSE_WORD(a) (*(volatile u32*)(a))
 #if UYA_MODULE_REGION == 3
 #define CAMPAIGN_SHIFT (-4)
 #else
@@ -37,24 +37,24 @@
 /* Campaign: intercept each fresh poll before retail code builds gameplay input. Keep a
  * private physical sample for menu navigation; the game receives neutral input.
  * The raw callback ABI is shared by librac3 and libuya's PAD structure. */
-typedef void (*RawPadCallback)(void*, unsigned char*, int, void*);
+typedef void (*RawPadCallback)(void*, u8*, int, void*);
 
-static const struct MenuRenderer* active;
-static volatile unsigned char* pad;
+static const MenuRenderer_t* active;
+static volatile u8* pad;
 static int levelId;
-static unsigned int inputHook, inputOriginal;
+static u32 inputHook, inputOriginal;
 static void (*pauseOpen)(void);
-static volatile unsigned char *capturedPad, *capturedRaw;
+static volatile u8 *capturedPad, *capturedRaw;
 static RawPadCallback previousRawCallback;
-static unsigned char menuSample[32];
+static u8 menuSample[32];
 /* Campaign has no Continue row. Preserve every retail option and append a
  * new row to private copies of its three main-menu table variants. */
-static unsigned int campaignTables[3][50], campaignSources[3];
-static const struct CampaignPause* campaignActive;
+static u32 campaignTables[3][50], campaignSources[3];
+static const CampaignPause_t* campaignActive;
 static void (*campaignOpen)(void);
 
 /* Regional font differences are verified by the renderer-table generator. */
-static unsigned int rendererFont(const struct MenuRenderer* r)
+static u32 rendererFont(const MenuRenderer_t* r)
 {
 #if UYA_MODULE_REGION == 3
 	return r->print - (r->level >= 39 ? 1720 : 1696);
@@ -63,7 +63,7 @@ static unsigned int rendererFont(const struct MenuRenderer* r)
 #endif
 }
 
-static unsigned int rendererFontHash(const struct MenuRenderer* r)
+static u32 rendererFontHash(const MenuRenderer_t* r)
 {
 #if UYA_MODULE_REGION == 3
 	return r->level >= 39 ? 0x13484292U : 0xbe9688deU;
@@ -74,7 +74,7 @@ static unsigned int rendererFontHash(const struct MenuRenderer* r)
 #endif
 }
 
-static void captureRawPad(void* controller, unsigned char* sample, int size, void* context)
+static void captureRawPad(void* controller, u8* sample, int size, void* context)
 {
 	int i;
 	for (i = 0; i < 32; ++i)
@@ -87,32 +87,32 @@ static void captureRawPad(void* controller, unsigned char* sample, int size, voi
 		previousRawCallback(controller, sample, size, context);
 }
 
-static void clearProcessedPad(volatile unsigned char* pad)
+static void clearProcessedPad(volatile u8* pad)
 {
-	unsigned int i;
+	u32 i;
 	for (i = 0x100; i < 0x180; i += 4)
-		*(volatile unsigned int*)(pad + i) = 0;
+		*(volatile u32*)(pad + i) = 0;
 	for (i = 0x1a0; i < 0x1cc; i += 4)
-		*(volatile unsigned int*)(pad + i) = 0;
+		*(volatile u32*)(pad + i) = 0;
 	/* Buffered/lagged input must not replay a shot or jump after capture. */
 	for (i = 0x1e0; i < 0x34c; i += 4)
-		*(volatile unsigned int*)(pad + i) = 0;
+		*(volatile u32*)(pad + i) = 0;
 	for (i = 0x354; i < 0x54c; i += 4)
-		*(volatile unsigned int*)(pad + i) = 0;
+		*(volatile u32*)(pad + i) = 0;
 }
 
-static unsigned int hash(const volatile unsigned char* p, unsigned int size)
+static u32 hash(const volatile u8* p, u32 size)
 {
-	unsigned int h = 2166136261U;
+	u32 h = 2166136261U;
 	while (size--)
 		h = (h ^ *p++) * 16777619U;
 	return h;
 }
 
-int menuBackendReady(unsigned int mode)
+int menuBackendReady(u32 mode)
 {
-	unsigned int i;
-	const struct MenuRenderer* r;
+	u32 i;
+	const MenuRenderer_t* r;
 	active = 0;
 	if (mode == UYA_MODE_CAMPAIGN) {
 #if UYA_MODULE_REGION == 3
@@ -158,9 +158,9 @@ int menuBackendLevel(void)
 	return levelId;
 }
 
-unsigned int menuBackendButtons(unsigned int mode)
+u32 menuBackendButtons(u32 mode)
 {
-	const volatile unsigned char* sample = capturedRaw == pad ? menuSample : pad;
+	const volatile u8* sample = capturedRaw == pad ? menuSample : pad;
 	(void)mode;
 	if (!active || sample[0] != 0 || (sample[1] != 0x41 && sample[1] != 0x73 && sample[1] != 0x79))
 		return 0;
@@ -170,16 +170,16 @@ unsigned int menuBackendButtons(unsigned int mode)
 /* Match libuya padDisableInput: suppress every local/split-screen player,
  * including players whose input does not come from the menu controller.
  * Keep longer retail locks intact; the short timer expires after release. */
-static volatile unsigned char* captureLocalPlayers(unsigned int mode)
+static volatile u8* captureLocalPlayers(u32 mode)
 {
 #if UYA_MODULE_REGION != 3
-	unsigned int i, j;
-	volatile unsigned char* controller = 0;
+	u32 i, j;
+	volatile u8* controller = 0;
 	if (mode != UYA_MODE_MULTIPLAYER)
 		return 0;
 	for (i = 0; i < sizeof(menuPlayers) / sizeof(menuPlayers[0]); ++i) {
-		const struct MenuPlayers* p = &menuPlayers[i];
-		const volatile unsigned int* ref = (void*)p->reference;
+		const MenuPlayers_t* p = &menuPlayers[i];
+		const volatile u32* ref = (void*)p->reference;
 		if (p->level != levelId)
 			continue;
 		/* Verify this overlay still references the expected player array. */
@@ -187,15 +187,15 @@ static volatile unsigned char* captureLocalPlayers(unsigned int mode)
 		    ref[2] != (0x24420000 | (p->array & 65535)) || ref[3] != 0xffb10038)
 			return 0;
 		for (j = 0; j < 8; ++j) {
-			unsigned int player = ((volatile unsigned int*)p->array)[j];
+			u32 player = ((volatile u32*)p->array)[j];
 			volatile short* timer;
 			if (player < 0x100000 || player > 0x1ffd000 || (player & 15))
 				continue;
-			if (!*(volatile unsigned char*)(player + 0x1a14))
+			if (!*(volatile u8*)(player + 0x1a14))
 				continue;
 			/* P1_PAD is the raw/history sample at PAD + 0x80 in MP.
              * Require the local player's own pPad to confirm the structure. */
-			if (*(volatile unsigned int*)(player + 0x2534) == (unsigned int)(pad - 0x80))
+			if (*(volatile u32*)(player + 0x2534) == (u32)(pad - 0x80))
 				controller = pad - 0x80;
 			timer = (void*)(player + 0x320); /* HeroTimers at 0x2f0 + noInput 0x30 */
 			if (*timer < 3)
@@ -212,33 +212,33 @@ static volatile unsigned char* captureLocalPlayers(unsigned int mode)
 /* Boot counts neutral frames even while our input callback is suppressing them.
  * Keep its two-minute preview countdown fresh while a menu/popup owns input.
  * Nothing is patched: normal idle timing resumes automatically after release. */
-static void resetBootIdle(unsigned int mode)
+static void resetBootIdle(u32 mode)
 {
-	const volatile unsigned int* check = (void*)BOOT_IDLE_CHECK;
+	const volatile u32* check = (void*)BOOT_IDLE_CHECK;
 	if (mode != UYA_MODE_CAMPAIGN || levelId != -1)
 		return;
 	/* Match the regional increment, limit, branch and GP-relative store. */
 	if (check[0] != 0x0040182d || check[1] != 0x24420001 || check[2] != BOOT_IDLE_LIMIT || check[3] != 0x14600007 ||
 	    check[4] != BOOT_IDLE_STORE)
 		return;
-	*(volatile unsigned int*)BOOT_IDLE_TIMER = 0;
+	*(volatile u32*)BOOT_IDLE_TIMER = 0;
 }
 
 /* Rendering is available before the boot intro finishes. Automatic popups
  * must wait until the actual menu is counting idle frames, or they capture
  * input just before a movie takes over and stops our update hook.
  */
-int menuBackendPopupReady(unsigned int mode)
+int menuBackendPopupReady(u32 mode)
 {
 	if (mode == UYA_MODE_CAMPAIGN && levelId == -1)
-		return *(volatile unsigned int*)BOOT_IDLE_TIMER > 0;
+		return *(volatile u32*)BOOT_IDLE_TIMER > 0;
 	return 1;
 }
 
-void menuBackendCapture(unsigned int mode)
+void menuBackendCapture(u32 mode)
 {
-	unsigned int i, address = 0, original = 0;
-	volatile unsigned char* controller;
+	u32 i, address = 0, original = 0;
+	volatile u8* controller;
 	if (!active)
 		return;
 	resetBootIdle(mode);
@@ -266,10 +266,10 @@ void menuBackendCapture(unsigned int mode)
 		original = 0x0c1a0d86;
 #endif
 	}
-	if (address && !inputHook && *(volatile unsigned int*)address == original) {
+	if (address && !inputHook && *(volatile u32*)address == original) {
 		inputHook = address;
 		inputOriginal = original;
-		*(volatile unsigned int*)address = 0x24020000;
+		*(volatile u32*)address = 0x24020000;
 		MENU_FLUSH(0);
 		MENU_FLUSH(2);
 	}
@@ -287,10 +287,10 @@ void menuBackendRelease(void)
 	if (inputHook) {
 		/* The delay slot identifies the same lobby call site even if an
          * overlay was replaced while closing the menu. */
-		if (*(volatile unsigned int*)inputHook == 0x24020000 &&
-		    *(volatile unsigned int*)(inputHook + 4) == 0x0240202d) {
-			*(volatile unsigned int*)inputHook = inputOriginal;
-			if (*(volatile unsigned int*)0x1264e0 == 0x24030064) {
+		if (*(volatile u32*)inputHook == 0x24020000 &&
+		    *(volatile u32*)(inputHook + 4) == 0x0240202d) {
+			*(volatile u32*)inputHook = inputOriginal;
+			if (*(volatile u32*)0x1264e0 == 0x24030064) {
 				MENU_FLUSH(0);
 				MENU_FLUSH(2);
 			}
@@ -299,14 +299,14 @@ void menuBackendRelease(void)
 	}
 }
 
-void menuBackendBox(float x, float y, float width, float height, unsigned int color)
+void menuBackendBox(float x, float y, float width, float height, u32 color)
 {
-	unsigned int buffer[25] __attribute__((aligned(16))) = {0};
+	u32 buffer[25] __attribute__((aligned(16))) = {0};
 	float crop[4] __attribute__((aligned(16))) = {0, 0, 1, 1};
 
 	union {
 		float f;
-		unsigned int u;
+		u32 u;
 	} value;
 
 	if (!active)
@@ -328,7 +328,7 @@ void menuBackendBox(float x, float y, float width, float height, unsigned int co
 	((void (*)(void*, void*))active->box)(buffer, crop);
 }
 
-void menuBackendText(float x, float y, unsigned int color, const char* text)
+void menuBackendText(float x, float y, u32 color, const char* text)
 {
 	typedef int (*Print)(float,
 	                     float,
@@ -336,12 +336,12 @@ void menuBackendText(float x, float y, unsigned int color, const char* text)
 	                     float,
 	                     float,
 	                     float,
-	                     unsigned int,
+	                     u32,
 	                     const char*,
 	                     unsigned long long,
 	                     unsigned long long,
 	                     int,
-	                     unsigned int);
+	                     u32);
 	float height;
 	if (!active)
 		return;
@@ -368,9 +368,9 @@ static void campaignMenuSelected(void)
 
 static void campaignPause(void (*openMenu)(void))
 {
-	static const unsigned int hi[3] = {0x78, 0xb8, 0xd4}, lo[3] = {0x80, 0xc0, 0xdc}, counts[3] = {9, 9, 8};
-	const struct CampaignPause* p = 0;
-	unsigned int i, j, setup, installed = 1;
+	static const u32 hi[3] = {0x78, 0xb8, 0xd4}, lo[3] = {0x80, 0xc0, 0xdc}, counts[3] = {9, 9, 8};
+	const CampaignPause_t* p = 0;
+	u32 i, j, setup, installed = 1;
 	char* label;
 	if (!active || levelId < 0 || levelId >= 39)
 		return;
@@ -383,7 +383,7 @@ static void campaignPause(void (*openMenu)(void))
 		return;
 	setup = p->setup + CAMPAIGN_SHIFT;
 	for (i = 0; i < 3; ++i) {
-		unsigned int addr = (unsigned int)campaignTables[i];
+		u32 addr = (u32)campaignTables[i];
 		if (PAUSE_WORD(setup + hi[i]) != (0x3c020000 | ((addr + 0x8000) >> 16)) ||
 		    PAUSE_WORD(setup + lo[i]) != (0x24420000 | (addr & 0xffff)) ||
 		    PAUSE_WORD(setup + lo[i] + 4) != (0x24030000 | (counts[i] + 1)))
@@ -395,14 +395,14 @@ static void campaignPause(void (*openMenu)(void))
 		if (hash((void*)p->setup, 0x100) != p->setupHash)
 			return;
 		for (i = 0; i < 3; ++i) {
-			unsigned int address = (PAUSE_WORD(setup + hi[i]) & 0xffff) << 16;
+			u32 address = (PAUSE_WORD(setup + hi[i]) & 0xffff) << 16;
 			address += (short)(PAUSE_WORD(setup + lo[i]) & 0xffff);
 			if (address < 0x100000 || address > 0x1fff000 || (address & 3))
 				return;
 			campaignSources[i] = address;
 		}
 		label = ((char* (*)(int))p->message)(0x1115);
-		if ((unsigned int)label < 0x100000 || (unsigned int)label > 0x1fffff0)
+		if ((u32)label < 0x100000 || (u32)label > 0x1fffff0)
 			return;
 		for (j = 0; j < 8 && label[j]; ++j) {
 		}
@@ -414,20 +414,20 @@ static void campaignPause(void (*openMenu)(void))
 	campaignActive = p;
 	campaignOpen = openMenu;
 	for (i = 0; i < 3; ++i) {
-		unsigned int* row = campaignTables[i] + counts[i] * 5;
+		u32* row = campaignTables[i] + counts[i] * 5;
 		/* Retail code can change row availability after obtaining gadgets. */
 		for (j = 0; j < counts[i] * 5; ++j)
 			campaignTables[i][j] = PAUSE_WORD(campaignSources[i] + j * 4);
 		row[0] = 0xd0015;
 		row[1] = 0x1115;
 		row[2] = 1;
-		row[3] = (unsigned int)campaignMenuSelected;
+		row[3] = (u32)campaignMenuSelected;
 		row[4] = 1;
 	}
 	if (installed)
 		return;
 	for (i = 0; i < 3; ++i) {
-		unsigned int address = (unsigned int)campaignTables[i];
+		u32 address = (u32)campaignTables[i];
 		PAUSE_WORD(setup + hi[i]) = 0x3c020000 | ((address + 0x8000) >> 16);
 		PAUSE_WORD(setup + lo[i]) = 0x24420000 | (address & 0xffff);
 		PAUSE_WORD(setup + lo[i] + 4) = 0x24030000 | (counts[i] + 1);
@@ -440,7 +440,7 @@ static void campaignPause(void (*openMenu)(void))
 
 /* Same Continue tail-hook as Horizon main.c, separately verified for local
  * overlays. The retail callback closes the pause screen before opening us. */
-void menuBackendPause(unsigned int mode, void (*openMenu)(void))
+void menuBackendPause(u32 mode, void (*openMenu)(void))
 {
 	pauseOpen = openMenu;
 	if (mode == UYA_MODE_CAMPAIGN) {
@@ -448,14 +448,14 @@ void menuBackendPause(unsigned int mode, void (*openMenu)(void))
 		return;
 	}
 #if UYA_MODULE_REGION != 3
-	unsigned int i, j;
+	u32 i, j;
 	if (!active || mode != UYA_MODE_MULTIPLAYER)
 		return;
 	for (i = 0; i < sizeof(pauseEntries) / sizeof(pauseEntries[0]); ++i) {
-		const struct PauseEntry* p = &pauseEntries[i];
+		const PauseEntry_t* p = &pauseEntries[i];
 		char* label;
-		unsigned int jump = 0x08000000U | ((unsigned int)openMenu >> 2);
-		volatile unsigned int *entry = (void*)p->entry, *tail = (void*)(p->callback + 0x54);
+		u32 jump = 0x08000000U | ((u32)openMenu >> 2);
+		volatile u32 *entry = (void*)p->entry, *tail = (void*)(p->callback + 0x54);
 		if (p->level != levelId)
 			continue;
 		if (entry[2] != p->callback || entry[1] != 1 || (entry[0] != 0x2cc && entry[0] != 0x1115) ||
@@ -465,7 +465,7 @@ void menuBackendPause(unsigned int mode, void (*openMenu)(void))
 		if (*tail == jump && entry[0] == 0x1115)
 			return;
 		label = ((char* (*)(int))p->message)(0x1115);
-		if ((unsigned int)label < 0x100000 || (unsigned int)label > 0x1fffff0)
+		if ((u32)label < 0x100000 || (u32)label > 0x1fffff0)
 			return;
 		/* The spare city string must have room for the replacement. */
 		for (j = 0; j < 8 && label[j]; ++j) {
@@ -489,12 +489,12 @@ void menuBackendPause(unsigned int mode, void (*openMenu)(void))
 /* Undo only still-owned pause entries before this module stops updating. */
 void menuBackendDeactivate(void)
 {
-	unsigned int i, changed = 0;
+	u32 i, changed = 0;
 	menuBackendRelease();
 #if UYA_MODULE_REGION != 3
 	for (i = 0; i < sizeof(pauseEntries) / sizeof(pauseEntries[0]); ++i) {
-		const struct PauseEntry* p = &pauseEntries[i];
-		unsigned int jump = 0x08000000U | ((unsigned int)pauseOpen >> 2);
+		const PauseEntry_t* p = &pauseEntries[i];
+		u32 jump = 0x08000000U | ((u32)pauseOpen >> 2);
 		if (PAUSE_WORD(p->callback + 0x54) == jump && PAUSE_WORD(p->callback + 0x58) == 0x27bd0010 &&
 		    hash((void*)p->callback, 84) == p->callbackHash) {
 			PAUSE_WORD(p->callback + 0x54) = 0x03e00008;
@@ -509,11 +509,11 @@ void menuBackendDeactivate(void)
 	}
 #endif
 	if (campaignActive) {
-		static const unsigned int hi[3] = {0x78, 0xb8, 0xd4}, lo[3] = {0x80, 0xc0, 0xdc}, count[3] = {9, 9, 8};
-		unsigned int setup = campaignActive->setup + CAMPAIGN_SHIFT;
+		static const u32 hi[3] = {0x78, 0xb8, 0xd4}, lo[3] = {0x80, 0xc0, 0xdc}, count[3] = {9, 9, 8};
+		u32 setup = campaignActive->setup + CAMPAIGN_SHIFT;
 		changed = 0;
 		for (i = 0; i < 3; ++i) {
-			unsigned int owned = (unsigned int)campaignTables[i], original = campaignSources[i];
+			u32 owned = (u32)campaignTables[i], original = campaignSources[i];
 			if (PAUSE_WORD(setup + hi[i]) != (0x3c020000 | ((owned + 0x8000) >> 16)) ||
 			    PAUSE_WORD(setup + lo[i]) != (0x24420000 | (owned & 65535)))
 				continue;

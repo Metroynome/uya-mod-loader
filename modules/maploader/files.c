@@ -4,26 +4,26 @@
 #define MAP_SEEK ((int (*)(int, int, int))0x12ae40)
 #endif
 
-/* Keep repeated 120-byte catalog moves out of the scan state machine. */
-void mapCopyRecord(MapRecord* to, const MapRecord* from) __attribute__((noinline));
+/* Keep repeated catalog moves out of the scan state machine. */
+void mapCopyRecord(MapRecord_t* to, const MapRecord_t* from) __attribute__((noinline));
 
-const ModuleApi* mapApi;
-MapRecord* mapRecords;
+const ModuleApi_t* mapApi;
+MapRecord_t* mapRecords;
 int mapCount, mapSelection = -1;
 int mapCatalogReady;
 /* Scan state is driven one entry/RPC at a time from Local Play staging. */
 /* One retained allocation, refilled in place on explicit refresh. */
-static char selected[64];
+static char selected[FORGE_FILENAME_SIZE];
 static int phase, candidates, current, kept, waitTicks;
-unsigned int mapCatalogRevision;
+u32 mapCatalogRevision;
 
-static int validName(const char* text, unsigned int size)
+static int validName(const char* text, u32 size)
 {
-	unsigned int i;
+	u32 i;
 	if (!text[0] || text[0] == '.')
 		return 0;
 	for (i = 0; i < size; ++i) {
-		unsigned char c = text[i];
+		u8 c = text[i];
 		if (!c)
 			return 1;
 		if (c < 32 || c > 126 || c == '/' || c == '\\' || c == ':' || c == '"' || c == '*' || c == '?')
@@ -32,20 +32,20 @@ static int validName(const char* text, unsigned int size)
 	return 0;
 }
 
-static void append(char* dst, unsigned int* pos, const char* src)
+static void append(char* dst, u32* pos, const char* src)
 {
 	while (*src)
 		dst[(*pos)++] = *src++;
 	dst[*pos] = 0;
 }
 
-int mapReadExact(int fd, void* dest, unsigned int size)
+int mapReadExact(int fd, void* dest, u32 size)
 {
-	unsigned char* p = dest;
+	u8* p = dest;
 	while (size) {
-		unsigned int chunk = size > 0x10000 ? 0x10000 : size;
+		u32 chunk = size > 0x10000 ? 0x10000 : size;
 		int n = mapApi->read(fd, p, chunk);
-		if (n <= 0 || (unsigned int)n > chunk)
+		if (n <= 0 || (u32)n > chunk)
 			return 0;
 		p += n;
 		size -= n;
@@ -53,10 +53,10 @@ int mapReadExact(int fd, void* dest, unsigned int size)
 	return 1;
 }
 
-int mapOpenPart(const MapRecord* map, const char* extension)
+int mapOpenPart(const MapRecord_t* map, const char* extension)
 {
-	char path[112];
-	unsigned int pos = 0;
+	char path[176];
+	u32 pos = 0;
 	if (!validName(map->filename, sizeof(map->filename)))
 		return -1;
 	append(path, &pos, "host0:uya/");
@@ -68,10 +68,10 @@ int mapOpenPart(const MapRecord* map, const char* extension)
 	return mapApi->open(path, 1, 0);
 }
 
-int mapReadPart(const MapRecord* map, const char* extension, void* dest, unsigned int size)
+int mapReadPart(const MapRecord_t* map, const char* extension, void* dest, u32 size)
 {
 	int fd = mapOpenPart(map, extension), ok;
-	unsigned char tail;
+	u8 tail;
 	if (fd < 0)
 		return 0;
 	ok = mapReadExact(fd, dest, size) && mapApi->read(fd, &tail, 1) == 0;
@@ -80,8 +80,8 @@ int mapReadPart(const MapRecord* map, const char* extension, void* dest, unsigne
 }
 
 /* MP's resident seek has been checked in both regional SDK images. Campaign
- * catalogs can be read via ModuleApi, but no campaign game-code hooks are used. */
-static int sizeMatches(const MapRecord* map, const char* extension, unsigned int size)
+ * catalogs can be read via ModuleApi_t, but no campaign game-code hooks are used. */
+static int sizeMatches(const MapRecord_t* map, const char* extension, u32 size)
 {
 	int fd, result;
 	if (!size)
@@ -94,7 +94,7 @@ static int sizeMatches(const MapRecord* map, const char* extension, unsigned int
 	return result == (int)size;
 }
 
-int mapValidate(const MapRecord* map)
+int mapValidate(const MapRecord_t* map)
 {
 	if (!mapMultiplayerReady())
 		return 0;
@@ -102,20 +102,20 @@ int mapValidate(const MapRecord* map)
 	       sizeMatches(map, ".sound", map->sound) && sizeMatches(map, ".map", map->radar);
 }
 
-void* memset(void* dest, int value, unsigned int size)
+void* memset(void* dest, int value, u32 size)
 {
-	unsigned char* p = dest;
+	u8* p = dest;
 	while (size--)
-		*p++ = (unsigned char)value;
+		*p++ = (u8)value;
 	return dest;
 }
 
 /* .version metadata is shared by both regions: 48-byte header, author[32],
  * description[256]. Older packs may contain just the header. */
-int mapReadInfo(const MapRecord* map, char* author, char* description)
+int mapReadInfo(const MapRecord_t* map, char* author, char* description)
 {
-	char path[112], header[48];
-	unsigned int pos = 0, i;
+	char path[176], header[48];
+	u32 pos = 0, i;
 	int fd, ok;
 	author[0] = description[0] = 0;
 	if (!validName(map->filename, sizeof(map->filename)))
@@ -135,10 +135,10 @@ int mapReadInfo(const MapRecord* map, char* author, char* description)
 	author[31] = 0;
 	description[255] = 0;
 	for (i = 0; author[i]; ++i)
-		if ((unsigned char)author[i] < 32)
+		if ((u8)author[i] < 32)
 			author[i] = ' ';
 	for (i = 0; description[i]; ++i)
-		if ((unsigned char)description[i] < 32 && description[i] != '\n')
+		if ((u8)description[i] < 32 && description[i] != '\n')
 			description[i] = ' ';
 	return 1;
 }
@@ -149,7 +149,7 @@ int mapCompareText(const char* a, const char* b)
 		++a;
 		++b;
 	}
-	return (unsigned char)*a - (unsigned char)*b;
+	return (u8)*a - (u8)*b;
 }
 
 static void copyName(char* to, const char* from)
@@ -158,14 +158,14 @@ static void copyName(char* to, const char* from)
 		;
 }
 
-static int validRecord(const MapRecord* m)
+static int validRecord(const MapRecord_t* m)
 {
-	return validName(m->filename, 64) && validName(m->name, 32) && m->base >= 40 && m->base <= 49 &&
+	return validName(m->filename, sizeof(m->filename)) && validName(m->name, 32) && m->base >= 40 && m->base <= 49 &&
 	       (m->wad || m->world) && m->wad <= 0x1000000 && m->world <= 0x400000 && m->sound <= 0x400000 &&
 	       m->radar <= 0x10800;
 }
 
-static int partSize(const MapRecord* m, const char* ext)
+static int partSize(const MapRecord_t* m, const char* ext)
 {
 	int fd = mapOpenPart(m, ext), size;
 	if (fd < 0)
@@ -176,11 +176,11 @@ static int partSize(const MapRecord* m, const char* ext)
 	return size;
 }
 
-static int inspect(MapRecord* m)
+static int inspect(MapRecord_t* m)
 {
-	unsigned char data[384] __attribute__((aligned(64)));
-	char path[112];
-	unsigned int pos = 0;
+	u8 data[384] __attribute__((aligned(64)));
+	char path[176];
+	u32 pos = 0;
 	int fd, n, total = 0, code;
 	append(path, &pos, "host0:uya/");
 	append(path, &pos, m->filename);
@@ -203,8 +203,8 @@ static int inspect(MapRecord* m)
 		return -1;
 	if (total < 48 || *(int*)data < 0 || *(short*)(data + 8))
 		return 0;
-	m->version = *(unsigned int*)data;
-	m->base = *(unsigned int*)(data + 4);
+	m->version = *(u32*)data;
+	m->base = *(u32*)(data + 4);
 	for (n = 0; n < 32 && data[16 + n]; ++n)
 		m->name[n] = data[16 + n];
 	code = mapOpenPart(m, ".code");
@@ -258,7 +258,7 @@ void mapScanStart(void)
 		return;
 	}
 	if (!mapRecords)
-		mapRecords = mapAlloc(MAP_LIMIT * sizeof(MapRecord));
+		mapRecords = mapAlloc(MAP_LIMIT * sizeof(MapRecord_t));
 	if (!mapRecords) {
 		mapMessage("Not enough memory to scan custom maps");
 		return;
@@ -269,7 +269,7 @@ void mapScanStart(void)
 	mapCount = 0;
 	mapSelection = -1;
 	mapCatalogReady = 0;
-	memset(mapRecords, 0, MAP_LIMIT * sizeof(MapRecord));
+	memset(mapRecords, 0, MAP_LIMIT * sizeof(MapRecord_t));
 	candidates = current = kept = waitTicks = 0;
 	++mapCatalogRevision; /* Re-read descriptions even when the catalog is unchanged. */
 	mapDirectoryReset();
@@ -291,11 +291,11 @@ int mapScanTotal(void)
 	return phase == 4 ? candidates : 0;
 }
 
-void mapCopyRecord(MapRecord* to, const MapRecord* from)
+void mapCopyRecord(MapRecord_t* to, const MapRecord_t* from)
 {
-	unsigned int i;
-	unsigned char* d = (unsigned char*)to;
-	const unsigned char* s = (const unsigned char*)from;
+	u32 i;
+	u8* d = (u8*)to;
+	const u8* s = (const u8*)from;
 	for (i = 0; i < sizeof(*to); ++i)
 		d[i] = s[i];
 }
@@ -303,8 +303,8 @@ void mapCopyRecord(MapRecord* to, const MapRecord* from)
 int mapScanTick(void)
 {
 	int r, n, i;
-	char name[128];
-	MapRecord temp;
+	char name[256];
+	MapRecord_t temp;
 	if (!phase)
 		return 0;
 	if (++waitTicks > 6000) {
@@ -356,9 +356,9 @@ int mapScanTick(void)
 		if (phase == 3) {
 			for (n = 0; name[n]; ++n)
 				;
-			if (n > 8 && n < 72 && !mapCompareText(name + n - 8, ".version")) {
+			if (n > 8 && n < (int)FORGE_FILENAME_SIZE + 8 && !mapCompareText(name + n - 8, ".version")) {
 				name[n - 8] = 0;
-				if (validName(name, 64)) {
+				if (validName(name, FORGE_FILENAME_SIZE)) {
 					if (candidates == MAP_LIMIT) {
 						mapDirectoryRequest(3);
 						finish(1);

@@ -9,20 +9,20 @@
 #define callRpc    CALL(0x129e18, int (*)(SifRpcClientData_t*, int, int, void*, int, void*, int, void*, void*))
 #define rpcBusy    CALL(0x12a018, int (*)(SifRpcClientData_t*))
 
-struct MapScanReply {
+typedef struct MapScanReply {
 	int status;
-	char name[128];
+	char name[256];
 	char pad[60];
-};
+} MapScanReply_t;
 
 static SifRpcClientData_t client __attribute__((aligned(64)));
 static int request[16] __attribute__((aligned(64)));
-static struct MapScanReply reply __attribute__((aligned(64)));
+static MapScanReply_t reply __attribute__((aligned(64)));
 static int pending, loading, attempted, bindRetries;
 
-void* mapAlloc(unsigned int size)
+void* mapAlloc(u32 size)
 {
-	return CALL(0x11c7b8, void* (*)(unsigned int))(size);
+	return CALL(0x11c7b8, void* (*)(u32))(size);
 }
 
 void mapFree(void* p)
@@ -46,7 +46,7 @@ static int install(void)
 	raw = mapAlloc(size + 79);
 	if (!raw)
 		goto done;
-	aligned = (void*)(((unsigned int)raw + 63) & ~63U);
+	aligned = (void*)(((u32)raw + 63) & ~63U);
 	memset(aligned, 0, (size + 15) & ~15);
 	if (!mapReadExact(fd, aligned, size))
 		goto done;
@@ -116,7 +116,7 @@ int mapDirectoryReady(void)
 			return -1;
 	}
 	memset(&client, 0, sizeof(client));
-	if (bindRpc(&client, 0x554d4150, SIF_RPC_M_NOWAIT) < 0)
+	if (bindRpc(&client, 0x554d4151, SIF_RPC_M_NOWAIT) < 0)
 		return -1;
 	pending = 1;
 	return 0;
@@ -131,13 +131,13 @@ int mapDirectoryRequest(int command)
 
 int mapDirectoryPoll(char* name)
 {
-	int i;
+	u32 i;
 	if (rpcBusy(&client))
 		return -999;
 	if (name) {
-		for (i = 0; i < 128; ++i)
+		for (i = 0; i < sizeof(reply.name); ++i)
 			name[i] = reply.name[i];
-		name[127] = 0;
+		name[255] = 0;
 	}
 	return reply.status;
 }

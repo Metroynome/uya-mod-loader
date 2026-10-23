@@ -9,6 +9,8 @@ These rules apply throughout this repository. Follow the user's current instruct
 - Keep code readable with descriptive names, blank lines between functions and logical sections, and comments explaining hooks, addresses, and non-obvious behavior.
 - C file order: includes, defines, types/structs, function prototypes, global variables, functions.
 - Header order: includes, defines, types/structs, global variables, function prototypes/external functions. Keep include guards around the contents.
+- Use `u8`, `u16`, and `u32` for unsigned 8/16/32-bit values. Include `types.h` where needed; it uses PS2SDK types on target and fixed-width host types for tools/tests.
+- Declare project structs as `typedef struct Name { ... } Name_t;`: plain struct tags, `_t` typedef names. Keep external SDK/library types unchanged.
 - Preserve type dependencies and conditional compilation when reordering. Omit empty sections; do not add placeholder declarations or section boilerplate.
 
 ## Keep the project simple

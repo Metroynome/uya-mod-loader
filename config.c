@@ -25,7 +25,7 @@ static int same(const char* a, const char* b)
 static int identifier(const char* s, int max)
 {
 	int n = 0;
-	unsigned char c;
+	u8 c;
 	if (!s || !*s)
 		return 0;
 	while ((c = *s++)) {
@@ -44,7 +44,7 @@ static char* append(char* p, const char* s)
 	return p;
 }
 
-static int prepare(const char* mod, const ModuleConfigField* f, int n, char* path, int saving)
+static int prepare(const char* mod, const ModuleConfigField_t* f, int n, char* path, int saving)
 {
 	int i, j;
 	char* p;
@@ -90,7 +90,7 @@ static char* trim(char* s)
 
 static int integer(const char* s, int* value)
 {
-	unsigned int v = 0, limit = 0x7fffffffU, d;
+	u32 v = 0, limit = 0x7fffffffU, d;
 	int negative = 0;
 	if (*s == '-' || *s == '+') {
 		negative = *s == '-';
@@ -112,10 +112,10 @@ static int integer(const char* s, int* value)
 	return 1;
 }
 
-static int parse(char* text, const ModuleConfigField* f, int n)
+static int parse(char* text, const ModuleConfigField_t* f, int n)
 {
 	int values[UYA_CONFIG_MAX_FIELDS], i;
-	unsigned int seen = 0;
+	u32 seen = 0;
 	char *line = text, *next, *key, *value, *p;
 	for (i = 0; i < n; ++i)
 		values[i] = *f[i].value;
@@ -158,7 +158,7 @@ static int parse(char* text, const ModuleConfigField* f, int n)
 	return UYA_CONFIG_OK;
 }
 
-int moduleConfigLoad(const char* mod, const ModuleConfigField* f, int n)
+int moduleConfigLoad(const char* mod, const ModuleConfigField_t* f, int n)
 {
 	char path[96], text[2048], extra;
 	int fd, got, size = 0, result = UYA_CONFIG_IO, i;
@@ -203,16 +203,16 @@ static int configWrite(int fd, const void* data, int size)
 {
 	if (io->mode == UYA_MODE_CAMPAIGN)
 		return campaignConfigWrite(fd, data, size);
-	if (*(volatile unsigned int*)0x12b2f0 != 0x27bdff20)
+	if (*(volatile u32*)0x12b2f0 != 0x27bdff20)
 		return -1;
 	return ((int (*)(int, const void*, int))0x12b2f0)(fd, data, size);
 }
 #endif
 
-int moduleConfigSave(const char* mod, const ModuleConfigField* f, int n)
+int moduleConfigSave(const char* mod, const ModuleConfigField_t* f, int n)
 {
 	char path[96], text[2048], digits[11], *p;
-	unsigned int v;
+	u32 v;
 	int i, j, fd, size, written = 0, result = UYA_CONFIG_OK;
 	if (inConfig || !prepare(mod, f, n, path, 1))
 		return UYA_CONFIG_INVALID;
@@ -220,7 +220,7 @@ int moduleConfigSave(const char* mod, const ModuleConfigField* f, int n)
 	for (i = 0; i < n; ++i) {
 		p = append(p, f[i].key);
 		*p++ = '=';
-		v = (unsigned int)*f[i].value;
+		v = (u32)*f[i].value;
 		if (*f[i].value < 0) {
 			*p++ = '-';
 			v = 0U - v;

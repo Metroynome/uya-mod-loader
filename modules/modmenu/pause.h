@@ -1,10 +1,10 @@
 /* Generated from verified retail pause entries; do not guess offsets. */
-struct PauseEntry {
+typedef struct PauseEntry {
 	int level;
-	unsigned int entry, callback, message, callbackHash, messageHash;
-};
+	u32 entry, callback, message, callbackHash, messageHash;
+} PauseEntry_t;
 #if UYA_MODULE_REGION == 1
-static const struct PauseEntry pauseEntries[] = {
+static const PauseEntry_t pauseEntries[] = {
     {40, 0x3c087c, 0x4b3be0, 0x466108, 0xfb40936U, 0x728c9a12U},
     {41, 0x3bfebc, 0x4b5c38, 0x467bf8, 0xf3e69136U, 0xa9cb2f62U},
     {42, 0x3b7dbc, 0x4ab550, 0x45ea38, 0xd732cc63U, 0x9f6a63edU},
@@ -24,7 +24,7 @@ static const struct PauseEntry pauseEntries[] = {
 };
 #endif
 #if UYA_MODULE_REGION == 2
-static const struct PauseEntry pauseEntries[] = {
+static const PauseEntry_t pauseEntries[] = {
     {40, 0x3c073c, 0x4b60f8, 0x467360, 0x7e41669bU, 0x105a3bdeU},
     {41, 0x3bfd7c, 0x4b8210, 0x468f10, 0xefdadd09U, 0x3f9b63f1U},
     {42, 0x3b7c7c, 0x4adae8, 0x45fd10, 0xa0b39ceeU, 0x10c9485eU},

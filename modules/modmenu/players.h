@@ -1,10 +1,10 @@
 /* Verified player-array references for online and Local Play overlays. */
-struct MenuPlayers {
+typedef struct MenuPlayers {
 	int level;
-	unsigned int reference, array;
-};
+	u32 reference, array;
+} MenuPlayers_t;
 #if UYA_MODULE_REGION == 1
-static const struct MenuPlayers menuPlayers[] = {
+static const MenuPlayers_t menuPlayers[] = {
     {40, 0x3c9020, 0x2494b0},
     {41, 0x3c86a0, 0x2496b0},
     {42, 0x3c05a0, 0x2495a0},
@@ -24,7 +24,7 @@ static const struct MenuPlayers menuPlayers[] = {
 };
 #endif
 #if UYA_MODULE_REGION == 2
-static const struct MenuPlayers menuPlayers[] = {
+static const MenuPlayers_t menuPlayers[] = {
     {40, 0x3c8ff0, 0x249330},
     {41, 0x3c86f0, 0x249530},
     {42, 0x3c05f0, 0x249420},

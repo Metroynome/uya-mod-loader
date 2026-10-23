@@ -106,3 +106,9 @@ the PC. Keep manual refresh/reload available without an editor connection.
 Supporting files may use `uya/mods/utils/forge/`; map packs currently remain in
 `uya/`. The implemented mailbox protocol is the starting point for integration,
 not a proposed replacement protocol.
+
+## Filename/protocol update
+
+Map filename stems now accept up to 128 ASCII characters (plus the NUL terminator).
+Update Forge, Map Loader, and `mods/utils/mapscan.irx` together, then cold-boot.
+External clients must use [PINE protocol v2](PINE.md); the v1 field offsets are incompatible.

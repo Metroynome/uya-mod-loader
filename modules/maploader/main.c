@@ -4,34 +4,34 @@
 #include "maploader.h"
 #include "include/forge.h"
 
-static unsigned int commandContext(void), commandState(void), commandError(void);
-static int commandRequest(unsigned int, const char*);
+static u32 commandContext(void), commandState(void), commandError(void);
+static int commandRequest(u32, const char*);
 static int reloadMap(void);
 static const char* hopStatus(void);
 
-static const ModMenuApi* menu;
+static const ModMenuApi_t* menu;
 static int tab, dirty = 1, lastContext = -1;
 static char status[48] = "Choose a map in multiplayer staging";
-static const MapHopApi hopService = {FORGE_API_VERSION,
-                                     sizeof(MapHopApi),
-                                     mapHopAvailable,
-                                     reloadMap,
-                                     hopStatus,
-                                     commandContext,
-                                     commandRequest,
-                                     commandState,
-                                     commandError};
+static const MapHopApi_t hopService = {FORGE_API_VERSION,
+                                       sizeof(MapHopApi_t),
+                                       mapHopAvailable,
+                                       reloadMap,
+                                       hopStatus,
+                                       commandContext,
+                                       commandRequest,
+                                       commandState,
+                                       commandError};
 /* Shared asynchronous requests; usable without a menu service. */
-static unsigned int jobState, jobError, jobCommand;
-static char jobName[64];
+static u32 jobState, jobError, jobCommand;
+static char jobName[FORGE_FILENAME_SIZE];
 /* Merge the sorted catalog with retail names without allocating a second list.
  * Keep stable catalog indices for selection, descriptions and reloads. */
-static const unsigned char retailOrder[] = {48, 40, 45, 47, 46, 41, 43, 49, 44, 42};
+static const u8 retailOrder[] = {48, 40, 45, 47, 46, 41, 43, 49, 44, 42};
 static int lastEditable = -1;
 
-static void copy(char* dest, const char* src, unsigned int cap)
+static void copy(char* dest, const char* src, u32 cap)
 {
-	unsigned int i = 0;
+	u32 i = 0;
 	while (src[i] && i + 1 < cap) {
 		dest[i] = src[i];
 		++i;
@@ -74,7 +74,7 @@ static int choose(void* context)
 	return 1;
 }
 
-static int chooseRetail(unsigned int base)
+static int chooseRetail(u32 base)
 {
 	if (mapScanActive() || mapLoading() || base < 40 || base > 49)
 		return 0;
@@ -83,24 +83,24 @@ static int chooseRetail(unsigned int base)
 	return mapChooseRetail(base);
 }
 
-static unsigned int commandState(void)
+static u32 commandState(void)
 {
 	return jobState;
 }
 
-static unsigned int commandError(void)
+static u32 commandError(void)
 {
 	return jobError;
 }
 
-static unsigned int commandContext(void)
+static u32 commandContext(void)
 {
 	if (mapApi->context != UYA_CONTEXT_LOCAL || !mapForgeActive() || !mapHooksReady())
 		return 0;
 	return mapStaging() == 1 ? 1 : mapHopInGame() ? 2 : 0;
 }
 
-static void commandFinish(unsigned int error)
+static void commandFinish(u32 error)
 {
 	jobError = error;
 	jobState = error ? FORGE_FAILED : FORGE_COMPLETE;
@@ -132,9 +132,9 @@ static int commandSelect(void)
 	return FORGE_ERROR_NOT_FOUND;
 }
 
-static int commandRequest(unsigned int command, const char* name)
+static int commandRequest(u32 command, const char* name)
 {
-	unsigned int context = commandContext(), i;
+	u32 context = commandContext(), i;
 	if (jobState == FORGE_SCANNING || jobState == FORGE_LOADING || mapScanActive() || mapLoading() || mapHopResult == 1)
 		return FORGE_ERROR_BUSY;
 	if (!context)
@@ -148,12 +148,12 @@ static int commandRequest(unsigned int command, const char* name)
 	if (command == FORGE_SELECT || command == FORGE_REFRESH_SELECT || command == FORGE_SELECT_RETAIL) {
 		if (!name || !name[0] || name[0] == '.')
 			return FORGE_ERROR_NAME;
-		for (i = 0; i < 64 && name[i]; ++i) {
-			unsigned char c = name[i];
+		for (i = 0; i < sizeof(jobName) && name[i]; ++i) {
+			u8 c = name[i];
 			if (c < 32 || c > 126 || c == '/' || c == '\\' || c == ':' || c == '"' || c == '*' || c == '?')
 				return FORGE_ERROR_NAME;
 		}
-		if (i == 64)
+		if (i == sizeof(jobName))
 			return FORGE_ERROR_NAME;
 		copy(jobName, name, sizeof(jobName));
 	}
@@ -264,10 +264,10 @@ static void selectMap(void* context, int index)
 static const char* mapInfo(void* context, int index)
 {
 	static int cached = -2;
-	static unsigned int revision;
+	static u32 revision;
 	static char text[292];
 	char author[32], description[256];
-	unsigned int i, p = 0;
+	u32 i, p = 0;
 	(void)context;
 	if (revision != mapCatalogRevision) {
 		revision = mapCatalogRevision;
@@ -303,7 +303,7 @@ static const char* mapInfo(void* context, int index)
 
 static int add(const char* label, int type, ModMenuCallback callback, void* context, int enabled)
 {
-	ModMenuItem item;
+	ModMenuItem_t item;
 	int handle;
 	item.label = label;
 	item.type = type;
@@ -370,7 +370,7 @@ static void deactivate(void)
 	mapScanRelease();
 }
 
-int moduleInit(const ModuleApi* api)
+int moduleInit(const ModuleApi_t* api)
 {
 	if (api->version < UYA_API_VERSION || api->size < sizeof(*api))
 		return -1;
@@ -394,7 +394,7 @@ int moduleInit(const ModuleApi* api)
 
 void moduleUpdate(void)
 {
-	const ModMenuApi* found;
+	const ModMenuApi_t* found;
 	int context, scanResult = 0, scanAllowed;
 	mapHopTick();
 	if (mapLoading())

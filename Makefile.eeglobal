@@ -139,7 +139,7 @@ image: $(ELF)
 else
 comma := ,
 HOST_CC ?= cc
-build/relocate: tools/relocate.c
+build/relocate: tools/relocate.c types.h
 	@mkdir -p build
 	$(HOST_CC) -std=c99 -Wall -Wextra $< -o $@
 image: $(ELF) build/relocate

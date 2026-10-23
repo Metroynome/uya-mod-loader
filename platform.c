@@ -6,7 +6,7 @@
  * Keep these separate from librac3/libuya so their shared symbol names cannot
  * cause the loader to bind to the wrong game mode.
  */
-void platformApi(ModuleApi* api, unsigned int mode)
+void platformApi(ModuleApi_t* api, u32 mode)
 {
 	int sp = mode == UYA_MODE_CAMPAIGN;
 	api->version = UYA_API_VERSION;
@@ -21,26 +21,26 @@ void platformApi(ModuleApi* api, unsigned int mode)
 
 /* Refuse unknown SDK layouts instead of calling an address from another build.
  * This also defers loading while the resident core is being replaced. */
-int platformReady(unsigned int mode)
+int platformReady(u32 mode)
 {
 	int sp = mode == UYA_MODE_CAMPAIGN;
 	if (mode != UYA_MODE_CAMPAIGN && mode != UYA_MODE_MULTIPLAYER)
 		return 0;
-	return *(volatile unsigned int*)(sp ? 0x121760 : 0x128c70) == 0x27bdff40 &&
-	       *(volatile unsigned int*)(sp ? 0x123430 : 0x12aa38) == 0x27bdfeb0 &&
-	       *(volatile unsigned int*)(sp ? 0x1236c0 : 0x12acc8) == 0x27bdff60 &&
-	       *(volatile unsigned int*)(sp ? 0x123840 : 0x12b080) == 0x27bdff20 &&
-	       *(volatile unsigned int*)(sp ? 0x11f0a0 : 0x1264e0) == 0x24030064;
+	return *(volatile u32*)(sp ? 0x121760 : 0x128c70) == 0x27bdff40 &&
+	       *(volatile u32*)(sp ? 0x123430 : 0x12aa38) == 0x27bdfeb0 &&
+	       *(volatile u32*)(sp ? 0x1236c0 : 0x12acc8) == 0x27bdff60 &&
+	       *(volatile u32*)(sp ? 0x123840 : 0x12b080) == 0x27bdff20 &&
+	       *(volatile u32*)(sp ? 0x11f0a0 : 0x1264e0) == 0x24030064;
 }
 
 /* Campaign level -1 is the initial main menu and may run campaign modules.
  * Level 0 is Veldin; other negative IDs are not recognized.
  * The lobby is 0x27; higher IDs (including local MP variants) are multiplayer.
  * Only read the global belonging to the verified resident SDK layout. */
-unsigned int platformMode(unsigned int layout)
+u32 platformMode(u32 layout)
 {
 	int level;
-	unsigned int mode;
+	u32 mode;
 	if (layout == UYA_MODE_CAMPAIGN) {
 #if UYA_MODULE_REGION == 3
 		level = *(volatile int*)0x001de75c;
@@ -73,15 +73,15 @@ unsigned int platformMode(unsigned int layout)
 /* NetInfo.state reaches NETREGISTERED (5) at post-DNAS profile selection,
  * before the lobby connection exists. onlyLocalPlayers remains authoritative
  * for offline matches, including custom maps using online overlay IDs. */
-unsigned int platformContext(unsigned int mode)
+u32 platformContext(u32 mode)
 {
 #if UYA_MODULE_REGION != 3
 #if UYA_MODULE_REGION == 2
-	const unsigned int net = 0x1a5cc0;
+	const u32 net = 0x1a5cc0;
 #else
-	const unsigned int net = 0x1a5e40;
+	const u32 net = 0x1a5e40;
 #endif
-	unsigned int state, menu;
+	u32 state, menu;
 	int i;
 #endif
 	if (mode == UYA_MODE_CAMPAIGN)
@@ -89,19 +89,19 @@ unsigned int platformContext(unsigned int mode)
 #if UYA_MODULE_REGION != 3
 	if (mode != UYA_MODE_MULTIPLAYER)
 		return 0;
-	if (*(volatile unsigned int*)(net + 0x180))
+	if (*(volatile u32*)(net + 0x180))
 		return UYA_CONTEXT_LOCAL;
-	state = *(volatile unsigned int*)(net + 0x130);
+	state = *(volatile u32*)(net + 0x130);
 	/* Local Play teardown leaves network states 5 or 10 with onlyLocalPlayers
      * cleared. The foremost active menu distinguishes it from online login.
      * Never use a covered Local Play menu underneath the profile screen. */
 	{
 		for (i = 2; i >= 0; --i) {
-			menu = *(volatile unsigned int*)(0x1c5c110 + i * 4);
+			menu = *(volatile u32*)(0x1c5c110 + i * 4);
 			if (!menu)
 				continue;
-			if (menu == *(volatile unsigned int*)0x1c5c0b8 || menu == *(volatile unsigned int*)0x1c5c0c0 ||
-			    menu == *(volatile unsigned int*)0x1c5c0c4)
+			if (menu == *(volatile u32*)0x1c5c0b8 || menu == *(volatile u32*)0x1c5c0c0 ||
+			    menu == *(volatile u32*)0x1c5c0c4)
 				return UYA_CONTEXT_LOCAL;
 			break;
 		}

@@ -3,13 +3,13 @@
  * This is packaging, not a size policy: the runtime owns allocation/validation. */
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
+#include "../types.h"
 #include <string.h>
 #include <elf.h>
 
-typedef struct {
-	uint32_t offset, type, value;
-} Record;
+typedef struct Record {
+	u32 offset, type, value;
+} Record_t;
 
 static void fail(const char* s)
 {
@@ -17,10 +17,10 @@ static void fail(const char* s)
 	exit(1);
 }
 
-static unsigned char* readFile(const char* path, size_t* size)
+static u8* readFile(const char* path, size_t* size)
 {
 	FILE* f = fopen(path, "rb");
-	unsigned char* p;
+	u8* p;
 	long n;
 	if (!f || fseek(f, 0, SEEK_END) || (n = ftell(f)) < 0 || fseek(f, 0, SEEK_SET))
 		fail("read failed");
@@ -31,12 +31,12 @@ static unsigned char* readFile(const char* path, size_t* size)
 	return p;
 }
 
-static uint32_t word(const unsigned char* p)
+static u32 word(const u8* p)
 {
-	return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
+	return (u32)p[0] | (u32)p[1] << 8 | (u32)p[2] << 16 | (u32)p[3] << 24;
 }
 
-static void put(unsigned char* p, uint32_t v)
+static void put(u8* p, u32 v)
 {
 	p[0] = v;
 	p[1] = v >> 8;
@@ -52,20 +52,20 @@ static void bounds(size_t offset, size_t length, size_t size)
 
 static int order(const void* a, const void* b)
 {
-	uint32_t x = ((const Record*)a)->offset, y = ((const Record*)b)->offset;
+	u32 x = ((const Record_t*)a)->offset, y = ((const Record_t*)b)->offset;
 	return x < y ? -1 : x > y;
 }
 
 int main(int argc, char** argv)
 {
 	size_t es, bs;
-	unsigned char *elf, *bin;
+	u8 *elf, *bin;
 	Elf32_Ehdr* eh;
 	Elf32_Shdr* sh;
-	uint32_t base, count = 0;
-	unsigned int i, j;
+	u32 base, count = 0;
+	u32 i, j;
 	FILE* out;
-	Record* records;
+	Record_t* records;
 	if (argc != 4)
 		fail("usage: relocate ELF FLAT OUTPUT");
 	elf = readFile(argv[1], &es);
@@ -88,7 +88,7 @@ int main(int argc, char** argv)
 	for (i = 0; i < eh->e_shnum; ++i) {
 		Elf32_Rel* rel;
 		Elf32_Sym* sym;
-		unsigned int n, ns;
+		u32 n, ns;
 		if (sh[i].sh_type != SHT_REL)
 			continue;
 		if (sh[i].sh_info >= eh->e_shnum || sh[i].sh_link >= eh->e_shnum)
@@ -102,8 +102,8 @@ int main(int argc, char** argv)
 		sym = (Elf32_Sym*)(elf + sh[sh[i].sh_link].sh_offset);
 		ns = sh[sh[i].sh_link].sh_size / sizeof(*sym);
 		for (j = 0; j < n; ++j) {
-			unsigned int k, type = ELF32_R_TYPE(rel[j].r_info), s = ELF32_R_SYM(rel[j].r_info);
-			uint32_t offset = rel[j].r_offset - base, v, target;
+			u32 k, type = ELF32_R_TYPE(rel[j].r_info), s = ELF32_R_SYM(rel[j].r_info);
+			u32 offset = rel[j].r_offset - base, v, target;
 			if (!type)
 				continue;
 			if (s >= ns)
@@ -150,7 +150,7 @@ int main(int argc, char** argv)
 	}
 	qsort(records, count, sizeof(*records), order);
 	for (i = 0; i < count; ++i) {
-		unsigned char record[12];
+		u8 record[12];
 		if (i && records[i - 1].offset == records[i].offset)
 			fail("duplicate relocation");
 		put(record, records[i].offset);
@@ -160,7 +160,7 @@ int main(int argc, char** argv)
 			fail("write failed");
 	}
 	{
-		unsigned char value[4];
+		u8 value[4];
 		put(value, count);
 		if (fseek(out, 36, SEEK_SET) || fwrite(value, 1, 4, out) != 4 || fclose(out))
 			fail("write failed");

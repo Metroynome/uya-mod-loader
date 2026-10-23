@@ -132,3 +132,9 @@ split-screen loading has not been live-qualified.
 | `multiplayer.c` | Staging, names, and guarded loading hooks |
 | `hop.c`, `hop_addresses.h` | Regional transitions and HUD setup |
 | `directory.c`, `iop/mapscan/` | Directory scanning RPC |
+
+## Filename/protocol update
+
+Map filename stems now accept up to 128 ASCII characters (plus the NUL terminator).
+Update Forge, Map Loader, and `mods/utils/mapscan.irx` together, then cold-boot.
+External clients must use [PINE protocol v2](../forge/PINE.md); the v1 field offsets are incompatible.

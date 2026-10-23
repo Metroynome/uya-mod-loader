@@ -1,10 +1,10 @@
 #include "module.h"
 
 /* This pointer is updated by the loader on mode transitions. */
-static const ModuleApi* loader;
-static unsigned int updates;
+static const ModuleApi_t* loader;
+static u32 updates;
 
-int moduleInit(const ModuleApi* api)
+int moduleInit(const ModuleApi_t* api)
 {
 	loader = api;
 	loader->print("hello: initialized (region %u, mode %u)\n", api->region, api->mode);

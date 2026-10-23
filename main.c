@@ -11,7 +11,7 @@
 #include "strings.h"
 
 #ifndef MODULE_START
-#define MODULE_START (((unsigned int)_loader_end + 63U) & ~63U)
+#define MODULE_START (((u32)_loader_end + 63U) & ~63U)
 #endif
 #define MODULE_END      0x00100000U
 #define EXTRA_RAM_START 0x02000000U
@@ -32,39 +32,39 @@
 /* Named list values carry a tag so legacy numeric modes retain their ABI. */
 #define NAMED_CONTEXTS 0x100U
 
-struct LoadedModule {
-	unsigned int address, size;
+typedef struct LoadedModule {
+	u32 address, size;
 	ModuleUpdate update;
 	ModuleInit init;
-	unsigned int modes, initialized, contexts, policy, active;
+	u32 modes, initialized, contexts, policy, active;
 	ModuleLifecycle activate, deactivate;
-};
+} LoadedModule_t;
 
-struct ModuleService {
-	unsigned int id, version, owner;
+typedef struct ModuleService {
+	u32 id, version, owner;
 	const void* table;
-};
+} ModuleService_t;
 
-struct LoaderState {
-	unsigned int magic, busy, count, mode, listLoaded, retryTicks, exceptionAttempted, exceptionReserved;
-	struct LoadedModule modules[MODULE_LIMIT];
-	ModuleApi api;
+typedef struct LoaderState {
+	u32 magic, busy, count, mode, listLoaded, retryTicks, exceptionAttempted, exceptionReserved;
+	LoadedModule_t modules[MODULE_LIMIT];
+	ModuleApi_t api;
 	int configBusy;
-	unsigned int currentModule; /* index + 1; zero outside callbacks */
-	struct ModuleService services[8];
-	unsigned int poolStart, poolEnd;
-};
+	u32 currentModule; /* index + 1; zero outside callbacks */
+	ModuleService_t services[8];
+	u32 poolStart, poolEnd;
+} LoaderState_t;
 
-extern unsigned char _loader_end[];
+extern u8 _loader_end[];
 extern void* GetSyscallHandler(int syscall);
 
 #ifdef _EE
 /* Linker-placed after the payload, never overwritten by recurring PNACH writes. */
-ModuleTable moduleTable __attribute__((section(".loader.state")));
-static struct LoaderState loaderState __attribute__((section(".loader.state")));
+ModuleTable_t moduleTable __attribute__((section(".loader.state")));
+static LoaderState_t loaderState __attribute__((section(".loader.state")));
 #endif
 
-const ModuleApi* moduleConfigApi(void)
+const ModuleApi_t* moduleConfigApi(void)
 {
 	return &STATE->api;
 }
@@ -72,7 +72,7 @@ const ModuleApi* moduleConfigApi(void)
 /* Choose once per boot. Never probe unavailable RAM or move live modules.
  * PCSX2 reports expanded RAM through the normal GetMemorySize syscall.
  */
-static void selectModulePool(unsigned int memorySize)
+static void selectModulePool(u32 memorySize)
 {
 	STATE->poolStart = MODULE_START;
 	STATE->poolEnd = MODULE_END;
@@ -92,19 +92,19 @@ int* moduleConfigBusy(void)
 	return &STATE->configBusy;
 }
 
-static unsigned int modeContexts(unsigned int mode)
+static u32 modeContexts(u32 mode)
 {
 	return (mode & 1 ? UYA_CONTEXT_CAMPAIGN : 0) | (mode & 2 ? (UYA_CONTEXT_LOCAL | UYA_CONTEXT_ONLINE) : 0);
 }
 
-static int moduleAllowed(const struct LoadedModule* m)
+static int moduleAllowed(const LoadedModule_t* m)
 {
 	return (m->modes & STATE->mode) && (m->contexts & m->policy & loaderApi.context);
 }
 
 static int setLifecycle(ModuleLifecycle activate, ModuleLifecycle deactivate)
 {
-	struct LoadedModule* m;
+	LoadedModule_t* m;
 	if (!STATE->currentModule)
 		return -1;
 	m = &STATE->modules[STATE->currentModule - 1];
@@ -113,7 +113,7 @@ static int setLifecycle(ModuleLifecycle activate, ModuleLifecycle deactivate)
 	return 0;
 }
 
-static int restrictContexts(unsigned int contexts)
+static int restrictContexts(u32 contexts)
 {
 	if (!STATE->currentModule || (contexts & ~UYA_CONTEXT_ALL))
 		return -1;
@@ -123,13 +123,13 @@ static int restrictContexts(unsigned int contexts)
 
 /* Modules can export APIs without hard-coded addresses or load-order coupling.
  * Services are visible only while their owner's mode is active. */
-static int publishService(unsigned int id, unsigned int version, const void* table)
+static int publishService(u32 id, u32 version, const void* table)
 {
-	unsigned int i;
+	u32 i;
 	if (!id || !version || !table || !STATE->currentModule)
 		return -1;
 	for (i = 0; i < 8; ++i) {
-		struct ModuleService* s = &STATE->services[i];
+		ModuleService_t* s = &STATE->services[i];
 		if (s->id == id) {
 			if (s->owner != STATE->currentModule || s->version != version || s->table != table)
 				return -1;
@@ -137,7 +137,7 @@ static int publishService(unsigned int id, unsigned int version, const void* tab
 		}
 	}
 	for (i = 0; i < 8; ++i) {
-		struct ModuleService* s = &STATE->services[i];
+		ModuleService_t* s = &STATE->services[i];
 		if (!s->id) {
 			s->id = id;
 			s->version = version;
@@ -149,23 +149,23 @@ static int publishService(unsigned int id, unsigned int version, const void* tab
 	return -1;
 }
 
-static const void* findService(unsigned int id, unsigned int version)
+static const void* findService(u32 id, u32 version)
 {
-	unsigned int i;
+	u32 i;
 	for (i = 0; i < 8; ++i) {
-		struct ModuleService* s = &STATE->services[i];
+		ModuleService_t* s = &STATE->services[i];
 		if (s->id == id && s->version == version && s->owner && moduleAllowed(&STATE->modules[s->owner - 1]))
 			return s->table;
 	}
 	return 0;
 }
 
-static int readExact(int fd, void* buffer, unsigned int size)
+static int readExact(int fd, void* buffer, u32 size)
 {
-	unsigned int done = 0;
+	u32 done = 0;
 	while (done < size) {
 		int count = fileRead(fd, (char*)buffer + done, size - done);
-		if (count <= 0 || (unsigned int)count > size - done)
+		if (count <= 0 || (u32)count > size - done)
 			return 0;
 		done += count;
 	}
@@ -186,10 +186,10 @@ static void syncCode(void)
 
 static void installExceptionHandler(void)
 {
-	unsigned char* memory = (unsigned char*)EXCEPTION_ADDRESS;
-	unsigned int i, hash = 2166136261U;
+	u8* memory = (u8*)EXCEPTION_ADDRESS;
+	u32 i, hash = 2166136261U;
 	int fd, valid;
-	unsigned int address;
+	u32 address;
 
 	/* Optional and attempted once per boot, before any module initialization.
      * Missing/invalid payloads never prevent normal module loading. */
@@ -249,16 +249,16 @@ static int validPath(const char* path)
 	}
 }
 
-static int validEntry(unsigned int offset, unsigned int size)
+static int validEntry(u32 offset, u32 size)
 {
-	return offset == UYA_MODULE_NO_ENTRY || (!(offset & 3) && offset >= sizeof(ModuleDiscovery) && offset < size);
+	return offset == UYA_MODULE_NO_ENTRY || (!(offset & 3) && offset >= sizeof(ModuleDiscovery_t) && offset < size);
 }
 
 /* A small monotonic allocator: successful loads retain their slots until restart.
  * Failed loads never consume space. No game heap edits or per-module addresses. */
-static unsigned int nextModuleAddress(unsigned int size)
+static u32 nextModuleAddress(u32 size)
 {
-	unsigned int address = STATE->poolStart;
+	u32 address = STATE->poolStart;
 	if (STATE->count)
 		address = (STATE->modules[STATE->count - 1].address + STATE->modules[STATE->count - 1].size + 63U) & ~63U;
 	/* Keep each module contiguous. A module crossing the handler starts after
@@ -269,24 +269,24 @@ static unsigned int nextModuleAddress(unsigned int size)
 	return address;
 }
 
-static int validHeader(const ModuleHeader* h)
+static int validHeader(const ModuleHeader_t* h)
 {
-	unsigned int address = nextModuleAddress(h->memorySize);
+	u32 address = nextModuleAddress(h->memorySize);
 	return h->magic == UYA_MODULE_MAGIC && h->version == UYA_MODULE_VERSION &&
 	       (!h->region || h->region == UYA_MODULE_REGION) && h->address == 0x000f0000 && h->modes &&
-	       !(h->modes & ~3U) && h->imageSize >= sizeof(ModuleDiscovery) && !(h->imageSize & 3) &&
+	       !(h->modes & ~3U) && h->imageSize >= sizeof(ModuleDiscovery_t) && !(h->imageSize & 3) &&
 	       h->imageSize <= h->memorySize && address < STATE->poolEnd && h->memorySize <= STATE->poolEnd - address &&
-	       h->relocationCount <= (h->imageSize - sizeof(ModuleDiscovery)) / 4 &&
+	       h->relocationCount <= (h->imageSize - sizeof(ModuleDiscovery_t)) / 4 &&
 	       validEntry(h->initOffset, h->imageSize) && validEntry(h->updateOffset, h->imageSize);
 }
 
 /* The build preserves only references into the module. Game addresses stay
  * absolute. Read records incrementally so relocation metadata needs no heap. */
-static int relocateModule(int fd, const ModuleHeader* h, unsigned int address)
+static int relocateModule(int fd, const ModuleHeader_t* h, u32 address)
 {
-	unsigned int i, previous = 0;
-	ModuleDiscovery* discovery = (void*)address;
-	unsigned int exports = discovery->exports;
+	u32 i, previous = 0;
+	ModuleDiscovery_t* discovery = (void*)address;
+	u32 exports = discovery->exports;
 	if (discovery->magic != UYA_MODULE_DISCOVERY_MAGIC || discovery->version != UYA_DISCOVERY_VERSION ||
 	    discovery->size != sizeof(*discovery))
 		return 0;
@@ -294,13 +294,13 @@ static int relocateModule(int fd, const ModuleHeader* h, unsigned int address)
 	    ((exports & 3) || exports < h->address + sizeof(*discovery) || exports - h->address > h->memorySize - 4))
 		return 0;
 	for (i = 0; i < h->relocationCount; ++i) {
-		ModuleRelocation r;
-		unsigned int *word, value;
-		if (!readExact(fd, &r, sizeof(r)) || (r.offset & 3) || r.offset < sizeof(ModuleDiscovery) ||
+		ModuleRelocation_t r;
+		u32 *word, value;
+		if (!readExact(fd, &r, sizeof(r)) || (r.offset & 3) || r.offset < sizeof(ModuleDiscovery_t) ||
 		    r.offset >= h->imageSize || (i && r.offset <= previous))
 			return 0;
 		previous = r.offset;
-		word = (unsigned int*)(address + r.offset);
+		word = (u32*)(address + r.offset);
 		value = address + r.value;
 		switch (r.type) {
 			case 2:
@@ -337,7 +337,7 @@ static int sameText(const char* a, const char* b)
 
 static int endsWith(const char* text, const char* suffix)
 {
-	unsigned int n = strlen(text), m = strlen(suffix);
+	u32 n = strlen(text), m = strlen(suffix);
 	return n >= m && sameText(text + n - m, suffix);
 }
 
@@ -348,7 +348,7 @@ static int resolveModuleName(const char* name, char* filename)
 {
 	char base[112];
 	const char* region = UYA_REGION_NAME;
-	unsigned int i;
+	u32 i;
 	if (strlen(name) > 96)
 		return -1;
 	if (name[0] == 'm' && strlen(name) >= 8) {
@@ -386,16 +386,16 @@ static int resolveModuleName(const char* name, char* filename)
 }
 
 /* Allocate, read, relocate, then publish. BSS is zeroed before initialization. */
-static void loadModule(const char* name, unsigned int modes, char names[MODULE_LIMIT][112])
+static void loadModule(const char* name, u32 modes, char names[MODULE_LIMIT][112])
 {
 	char path[128], filename[112];
-	unsigned int i;
-	ModuleHeader header;
-	struct LoadedModule* module;
+	u32 i;
+	ModuleHeader_t header;
+	LoadedModule_t* module;
 	int fd, valid;
-	unsigned int address;
+	u32 address;
 
-	unsigned int contexts = (modes & NAMED_CONTEXTS) ? (modes & ~NAMED_CONTEXTS) : modeContexts(modes);
+	u32 contexts = (modes & NAMED_CONTEXTS) ? (modes & ~NAMED_CONTEXTS) : modeContexts(modes);
 	if (modes & NAMED_CONTEXTS)
 		modes = (contexts & 1 ? 1 : 0) | (contexts & 6 ? 2 : 0);
 	if (!modes || (modes & ~3U) || (contexts & ~UYA_CONTEXT_ALL))
@@ -477,7 +477,7 @@ static int isSpace(char c)
  * Splitting in place keeps memory use small; paths cannot contain whitespace.
  * Full-line # comments remain accepted for existing comment-only lines.
  */
-static int parseModuleLine(char* line, char** name, unsigned int* modes)
+static int parseModuleLine(char* line, char** name, u32* modes)
 {
 	while (isSpace(*line))
 		++line;
@@ -494,11 +494,11 @@ static int parseModuleLine(char* line, char** name, unsigned int* modes)
 	if (*line >= '0' && *line <= '3')
 		*modes = *line++ - '0';
 	else {
-		unsigned int mask = 0;
+		u32 mask = 0;
 		int special = 0;
 		for (;;) {
 			char *word = line, stop;
-			unsigned int bit;
+			u32 bit;
 			while (*line && !isSpace(*line) && *line != ',' && *line != '/')
 				++line;
 			stop = *line;
@@ -545,9 +545,9 @@ static int loadModuleList(void)
 {
 	char list[2048], names[MODULE_LIMIT][112]; /* Startup-only list and duplicate names. */
 	char *line, *next, *name;
-	unsigned int modes, lineNumber = 0;
+	u32 modes, lineNumber = 0;
 	int parsed;
-	unsigned int size = 0;
+	u32 size = 0;
 	int fd = fileOpen("host0:uya/config/modules.txt", 1, 0);
 	int count = 0, valid = 1;
 	/* The config list wins; the root list is a fallback, never merged. */
@@ -559,7 +559,7 @@ static int loadModuleList(void)
 	}
 	while (size < sizeof(list) - 1) {
 		count = fileRead(fd, list + size, sizeof(list) - 1 - size);
-		if (count < 0 || (unsigned int)count > sizeof(list) - 1 - size) {
+		if (count < 0 || (u32)count > sizeof(list) - 1 - size) {
 			valid = 0;
 			break;
 		}
@@ -598,16 +598,16 @@ static int loadModuleList(void)
  * entry.S preserves its return registers. The busy flag prevents recursive
  * entry while file I/O or a module itself waits for the game/IOP.
  */
-void loaderTick(unsigned int layout)
+void loaderTick(u32 layout)
 {
-	unsigned int i, mode;
+	u32 i, mode;
 	if (STATE->magic == LOADER_MAGIC && STATE->busy)
 		return;
 	if (STATE->magic != LOADER_MAGIC) {
 		memset(STATE, 0, sizeof(*STATE));
 		memset(MODULE_TABLE, 0, sizeof(*MODULE_TABLE));
 		MODULE_TABLE->version = 1;
-		MODULE_TABLE->entrySize = sizeof(ModuleInfo);
+		MODULE_TABLE->entrySize = sizeof(ModuleInfo_t);
 		MODULE_TABLE->magic = UYA_MODULE_TABLE_MAGIC;
 		selectModulePool(platformMemorySize());
 		STATE->magic = LOADER_MAGIC;
@@ -649,7 +649,7 @@ void loaderTick(unsigned int layout)
 		--STATE->retryTicks;
 	/* Clean up all departing modules before any newly active module runs. */
 	for (i = STATE->count; i > 0; --i) {
-		struct LoadedModule* m = &STATE->modules[i - 1];
+		LoadedModule_t* m = &STATE->modules[i - 1];
 		if (m->active && !moduleAllowed(m)) {
 			STATE->currentModule = i;
 			if (m->deactivate)
@@ -658,7 +658,7 @@ void loaderTick(unsigned int layout)
 		}
 	}
 	for (i = 0; i < STATE->count; ++i) {
-		struct LoadedModule* module = &STATE->modules[i];
+		LoadedModule_t* module = &STATE->modules[i];
 		if (!moduleAllowed(module))
 			continue;
 		STATE->currentModule = i + 1;
@@ -667,10 +667,10 @@ void loaderTick(unsigned int layout)
 			module->initialized = 1;
 			if (result < 0) {
 				printf("loader: init failed (%d) at %08x\n", result, module->address);
-				unsigned int j;
+				u32 j;
 				for (j = 0; j < 8; ++j)
 					if (STATE->services[j].owner == i + 1)
-						memset(&STATE->services[j], 0, sizeof(struct ModuleService));
+						memset(&STATE->services[j], 0, sizeof(ModuleService_t));
 				if (module->deactivate)
 					module->deactivate();
 				module->policy = 0;

@@ -1,10 +1,10 @@
 /* Generated campaign pause anchors, verified against retail overlays. */
-struct CampaignPause {
+typedef struct CampaignPause {
 	int level;
-	unsigned int setup, message, parent, push, setupHash, messageHash;
-};
+	u32 setup, message, parent, push, setupHash, messageHash;
+} CampaignPause_t;
 #if UYA_MODULE_REGION == 1
-static const struct CampaignPause campaignPauses[] = {
+static const CampaignPause_t campaignPauses[] = {
     {1, 0x47bcc0, 0x4181a0, 0x47b380, 0x513758, 0x5345875dU, 0xfdd71217U},
     {2, 0x451f48, 0x3f0908, 0x451608, 0x4e3938, 0xa52a5627U, 0x5e5150a1U},
     {3, 0x4693d0, 0x405420, 0x468a90, 0x500dc0, 0x12c7f3e0U, 0x41e527eU},
@@ -42,7 +42,7 @@ static const struct CampaignPause campaignPauses[] = {
 };
 #endif
 #if UYA_MODULE_REGION == 2
-static const struct CampaignPause campaignPauses[] = {
+static const CampaignPause_t campaignPauses[] = {
     {1, 0x47f520, 0x41a878, 0x47ebe0, 0x517748, 0xa427bf36U, 0x749594f0U},
     {2, 0x455c28, 0x3f34d0, 0x4552e8, 0x4e7d80, 0xeef8b71bU, 0x60fdd072U},
     {3, 0x46d018, 0x407d28, 0x46c6d8, 0x505198, 0xd73acf21U, 0xeaa5c835U},
@@ -80,7 +80,7 @@ static const struct CampaignPause campaignPauses[] = {
 };
 #endif
 #if UYA_MODULE_REGION == 3
-static const struct CampaignPause campaignPauses[] = {
+static const CampaignPause_t campaignPauses[] = {
     {1, 0x4866b8, 0x4225f0, 0x485b68, 0x51e5e0, 0xa1b3e2d8U, 0xf6d756d2U},
     {2, 0x45c9d8, 0x3fae18, 0x45be88, 0x4ee858, 0xa2a313dbU, 0xfe34e04eU},
     {3, 0x473dc8, 0x40f870, 0x473278, 0x50bc48, 0x9a1fa295U, 0x8609bf75U},

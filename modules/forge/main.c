@@ -4,28 +4,28 @@
 
 void forgeBridgeInit(void);
 void forgeBridgeDisable(void);
-void forgeBridgeTick(const MapHopApi*);
+void forgeBridgeTick(const MapHopApi_t*);
 static int active(void);
 
-static const ModuleApi* loader;
-static const ModMenuApi* menu;
+static const ModuleApi_t* loader;
+static const ModMenuApi_t* menu;
 static int enabled, tab, item, refreshItem, lastReady = -1, lastRefresh = -1;
-static const ForgeApi service = {FORGE_API_VERSION, sizeof(ForgeApi), active};
+static const ForgeApi_t service = {FORGE_API_VERSION, sizeof(ForgeApi_t), active};
 
 static int active(void)
 {
 	return enabled && loader->context == UYA_CONTEXT_LOCAL;
 }
 
-static const MapHopApi* hop(void)
+static const MapHopApi_t* hop(void)
 {
-	const MapHopApi* p = loader->findService(MAP_HOP_SERVICE_ID, FORGE_API_VERSION);
+	const MapHopApi_t* p = loader->findService(MAP_HOP_SERVICE_ID, FORGE_API_VERSION);
 	return p && p->version == FORGE_API_VERSION && p->size >= sizeof(*p) ? p : 0;
 }
 
 static void reload(void* unused)
 {
-	const MapHopApi* p = hop();
+	const MapHopApi_t* p = hop();
 	(void)unused;
 	if (p && p->reload() > 0 && menu)
 		menu->close();
@@ -33,7 +33,7 @@ static void reload(void* unused)
 
 static void refresh(void* unused)
 {
-	const MapHopApi* p = hop();
+	const MapHopApi_t* p = hop();
 	(void)unused;
 	if (p && !p->request(FORGE_REFRESH, 0) && menu)
 		menu->close();
@@ -56,7 +56,7 @@ static void deactivate(void)
 	lastReady = -1;
 }
 
-int moduleInit(const ModuleApi* api)
+int moduleInit(const ModuleApi_t* api)
 {
 	loader = api;
 	forgeBridgeInit();
@@ -70,10 +70,10 @@ int moduleInit(const ModuleApi* api)
 
 void moduleUpdate(void)
 {
-	const MapHopApi* p = hop();
+	const MapHopApi_t* p = hop();
 	int ready = p && p->available();
-	static const ModMenuItem action = {"Reload Current Map", MODMENU_ACTION, 0, 0, 0, 0, reload, 0};
-	static const ModMenuItem refreshAction = {"Refresh Custom Maps", MODMENU_ACTION, 0, 0, 0, 0, refresh, 0};
+	static const ModMenuItem_t action = {"Reload Current Map", MODMENU_ACTION, 0, 0, 0, 0, reload, 0};
+	static const ModMenuItem_t refreshAction = {"Refresh Custom Maps", MODMENU_ACTION, 0, 0, 0, 0, refresh, 0};
 	int canRefresh = p && p->context() && p->state() != FORGE_SCANNING && p->state() != FORGE_LOADING;
 	forgeBridgeTick(p);
 	if (menu && p && (p->state() == FORGE_SCANNING || p->state() == FORGE_LOADING))
@@ -101,10 +101,10 @@ void moduleUpdate(void)
 	}
 }
 
-void* memset(void* dest, int value, unsigned int size)
+void* memset(void* dest, int value, u32 size)
 {
-	unsigned char* p = dest;
+	u8* p = dest;
 	while (size--)
-		*p++ = (unsigned char)value;
+		*p++ = (u8)value;
 	return dest;
 }

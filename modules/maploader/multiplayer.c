@@ -4,8 +4,8 @@
 #include "maploader.h"
 #include "hop_addresses.h"
 
-#define WORD(a) (*(volatile unsigned int*)(a))
-#define JAL(a)  (0x0c000000U | ((unsigned int)(a) >> 2))
+#define WORD(a) (*(volatile u32*)(a))
+#define JAL(a)  (0x0c000000U | ((u32)(a) >> 2))
 #if UYA_MODULE_REGION == 2
 #define IMAGE_SET       0x6814b0
 #define MESSAGE         0x59a970
@@ -78,41 +78,41 @@
 #endif
 /* Local and online staging both use child 1 for the map name. */
 #ifndef MAP_IMAGE_SET
-#define MAP_IMAGE_SET(child, texture) ((int (*)(unsigned int, unsigned int))IMAGE_SET)(child, texture)
+#define MAP_IMAGE_SET(child, texture) ((int (*)(u32, u32))IMAGE_SET)(child, texture)
 #endif
 
 typedef void (*SoundCallback)(int, unsigned long long);
 
-struct Hook {
-	unsigned int address, original;
+typedef struct Hook {
+	u32 address, original;
 	void* replacement;
-};
+} Hook_t;
 
-static void hookedTable(unsigned int sector, unsigned int count, void* dest);
+static void hookedTable(u32 sector, u32 count, void* dest);
 static void hookedSound(int loc, int offset, SoundCallback callback, unsigned long long user);
 static void hookedSoundInit(void);
 static void hookedSoundCore(void);
-static void hookedLoad(void* dest, unsigned int sector, unsigned int sectors);
+static void hookedLoad(void* dest, u32 sector, u32 sectors);
 static int hookedSync(int mode);
 
 #if UYA_MODULE_REGION == 2
-static const unsigned int radarHooks[10] = {
+static const u32 radarHooks[10] = {
     0x4951a4, 0x4972bc, 0x48cb94, 0x48a264, 0x48967c, 0x486f14, 0x486f0c, 0x48978c, 0x488a8c, 0x48840c};
-static const unsigned int localRadarHooks[6] = {0x4a61a4, 0x4a82bc, 0x49db94, 0x49b264, 0x49a67c, 0x497f14};
+static const u32 localRadarHooks[6] = {0x4a61a4, 0x4a82bc, 0x49db94, 0x49b264, 0x49a67c, 0x497f14};
 #else
-static const unsigned int radarHooks[10] = {
+static const u32 radarHooks[10] = {
     0x4931b4, 0x49520c, 0x48ab24, 0x488274, 0x48768c, 0x484ea4, 0x48505c, 0x48789c, 0x486bdc, 0x48651c};
-static const unsigned int localRadarHooks[6] = {0x4a41b4, 0x4a620c, 0x49bb24, 0x499274, 0x49868c, 0x495ea4};
+static const u32 localRadarHooks[6] = {0x4a41b4, 0x4a620c, 0x49bb24, 0x499274, 0x49868c, 0x495ea4};
 #endif
 int mapAllowOnline;
-unsigned int mapSceneRequest;
-static unsigned int wadReader = WAD_READ, soundInit = SOUND_INIT, soundCore = SOUND_CORE;
-static unsigned int nameHook = NAME_HOOK, nameTable = NAME_TABLE;
-static MapRecord active;
+u32 mapSceneRequest;
+static u32 wadReader = WAD_READ, soundInit = SOUND_INIT, soundCore = SOUND_CORE;
+static u32 nameHook = NAME_HOOK, nameTable = NAME_TABLE;
+static MapRecord_t active;
 static int armed, busy, failed, soundSent;
 static void* soundBuffer;
-static unsigned int savedSettings, savedBase, forcedBase;
-static struct Hook hooks[] = {{TOC_HOOK, JAL(TOC_READ), hookedTable},
+static u32 savedSettings, savedBase, forcedBase;
+static Hook_t hooks[] = {{TOC_HOOK, JAL(TOC_READ), hookedTable},
                               {WAD_HOOK, JAL(WAD_READ), hookedLoad},
                               {SYNC_HOOK, JAL(CD_SYNC), hookedSync},
                               {SOUND_HOOK, JAL(SOUND_DISC), hookedSound},
@@ -132,9 +132,9 @@ int mapOnlineDisabled(void)
 
 static int hookedName(void)
 {
-	unsigned int level = WORD(MAP_ID), i;
+	u32 level = WORD(MAP_ID), i;
 	if (!mapOnlineDisabled() && level >= 40 && level <= 59) {
-		unsigned int base = 40 + (level - 40) % 10;
+		u32 base = 40 + (level - 40) % 10;
 		const char* name = mapRetailName(base);
 		char* dest = (char*)(nameTable + (base - 40) * 32);
 		if (mapSelection >= 0 && mapSelection < mapCount && base == mapRecords[mapSelection].base)
@@ -149,13 +149,13 @@ static int hookedName(void)
 
 int mapStaging(void)
 {
-	unsigned int i, local, online;
+	u32 i, local, online;
 	if (!mapMultiplayerReady() || WORD(LEVEL_ID) != 39 || WORD(SCENE) != 1)
 		return 0;
 	local = WORD(0x1c5c064 + 23 * 4);
 	online = WORD(0x1c5c064 + 33 * 4);
 	for (i = 0; i < 3; ++i) {
-		unsigned int menu = WORD(0x1c5c110 + i * 4);
+		u32 menu = WORD(0x1c5c110 + i * 4);
 		if (menu && menu == local)
 			return 1;
 		if (menu && menu == online)
@@ -166,7 +166,7 @@ int mapStaging(void)
 
 /* Names are also needed from gameplay overlays where the staging message
  * lookup no longer exists. Keep stock names separate from the patched table. */
-const char* mapRetailName(unsigned int base)
+const char* mapRetailName(u32 base)
 {
 	static const char* names[] = {"Bakisi Isles",
 	                              "Hoven Gorge",
@@ -181,9 +181,9 @@ const char* mapRetailName(unsigned int base)
 	return base >= 40 && base <= 49 ? names[base - 40] : "Retail map";
 }
 
-unsigned int mapCurrentBase(void)
+u32 mapCurrentBase(void)
 {
-	unsigned int settings = WORD(SETTINGS);
+	u32 settings = WORD(SETTINGS);
 	if (settings < 0x100000 || settings > 0x1fffe00 || (settings & 3))
 		return 0;
 	return WORD(settings + 0x17c);
@@ -196,7 +196,7 @@ static const char* retailMapName(void)
 
 static void writeStagingName(const char* name)
 {
-	unsigned int menu, child, i, base;
+	u32 menu, child, i, base;
 	int context = mapStaging();
 	if (!name || !context)
 		return;
@@ -231,9 +231,9 @@ void mapUpdateName(void)
 	writeStagingName(mapSelection >= 0 && mapSelection < mapCount ? mapRecords[mapSelection].name : retailMapName());
 }
 
-int mapChooseBase(unsigned int base)
+int mapChooseBase(u32 base)
 {
-	unsigned int settings;
+	u32 settings;
 	/* Local staging has a different UI, but its callback reads this same
      * settings pointer and the halfword at +0x17c. Verified in the local
      * staging disassembly and an NTSC-U live lobby. The game chooses the
@@ -253,7 +253,7 @@ int mapChooseBase(unsigned int base)
 	return 1;
 }
 
-int mapChooseRetail(unsigned int base)
+int mapChooseRetail(u32 base)
 {
 	if (!mapChooseBase(base))
 		return 0;
@@ -298,17 +298,17 @@ static void loadError(void)
 	mapApi->print("maploader: load stopped; refusing to run partially replaced map data\n");
 }
 
-static int writable(void* dest, unsigned int size)
+static int writable(void* dest, u32 size)
 {
-	unsigned int address = (unsigned int)dest;
+	u32 address = (u32)dest;
 	/* Only the game's allocated EE data buffers, never module/kernel memory. */
 	return address >= 0x100000 && address < 0x2000000 && size <= 0x2000000 - address;
 }
 
-static void hookedTable(unsigned int sector, unsigned int count, void* dest)
+static void hookedTable(u32 sector, u32 count, void* dest)
 {
-	unsigned int level = WORD(MAP_ID);
-	((void (*)(unsigned int, unsigned int, void*))TOC_READ)(sector, count, dest);
+	u32 level = WORD(MAP_ID);
+	((void (*)(u32, u32, void*))TOC_READ)(sector, count, dest);
 	mapHopOnLoad();
 	armed = failed = soundSent = 0;
 	soundBuffer = 0;
@@ -328,9 +328,9 @@ static void hookedTable(unsigned int sector, unsigned int count, void* dest)
 	busy = 0;
 	armed = 1;
 	if (active.wad)
-		((unsigned int*)dest)[5] = (active.wad + 0x7ff) / 0x800;
+		((u32*)dest)[5] = (active.wad + 0x7ff) / 0x800;
 	if (active.world)
-		((unsigned int*)dest)[9] = (active.world + 0x7ff) / 0x800;
+		((u32*)dest)[9] = (active.world + 0x7ff) / 0x800;
 	mapApi->print("maploader: replacing map %u with %s\n", level, active.filename);
 }
 
@@ -341,7 +341,7 @@ static int soundFromEE(void* buffer)
 		return -1;
 	WORD(SOUND_ERROR) = 0;
 	WORD(SOUND_RESULT) = 0xffffffff;
-	WORD(SOUND_PARAMS) = (unsigned int)buffer;
+	WORD(SOUND_PARAMS) = (u32)buffer;
 	((void (*)(void*, void*))0x126b28)((void*)SOUND_RESULT, (void*)(SOUND_RESULT + 4));
 	while (((int (*)(void*))0x12a018)((void*)SOUND_RPC)) {
 		if (++spins > 1000000)
@@ -372,7 +372,7 @@ static void hookedSound(int loc, int offset, SoundCallback callback, unsigned lo
 		int result;
 		if (soundSent)
 			return;
-		WORD(SOUND_BUSY + 8) = (unsigned int)callback;
+		WORD(SOUND_BUSY + 8) = (u32)callback;
 		*(volatile unsigned long long*)(SOUND_BUSY + 16) = user;
 		result = soundFromEE(soundBuffer);
 		if (result < 0) {
@@ -399,12 +399,12 @@ static void hookedSoundCore(void)
 		((void (*)(void))soundCore)();
 }
 
-static void hookedLoad(void* dest, unsigned int sector, unsigned int sectors)
+static void hookedLoad(void* dest, u32 sector, u32 sectors)
 {
-	unsigned int part = WORD(PART_ID), size;
+	u32 part = WORD(PART_ID), size;
 	const char* extension;
 	if (!armed || part > 1) {
-		((void (*)(void*, unsigned int, unsigned int))wadReader)(dest, sector, sectors);
+		((void (*)(void*, u32, u32))wadReader)(dest, sector, sectors);
 		return;
 	}
 	size = part ? active.world : active.wad;
@@ -439,14 +439,14 @@ static void hookedLoad(void* dest, unsigned int sector, unsigned int sectors)
 		}
 		/* Disc reads are sector padded; file payloads need not be. */
 		{
-			unsigned char* p = (unsigned char*)dest + size;
-			unsigned int remaining = sectors * 0x800 - size;
+			u8* p = (u8*)dest + size;
+			u32 remaining = sectors * 0x800 - size;
 			while (remaining--)
 				*p++ = 0;
 		}
 		mapApi->flushCache(0);
 	} else {
-		((void (*)(void*, unsigned int, unsigned int))wadReader)(dest, sector, sectors);
+		((void (*)(void*, u32, u32))wadReader)(dest, sector, sectors);
 	}
 	busy = 0;
 }
@@ -457,7 +457,7 @@ static int hookedSync(int mode)
 	return failed ? 1 : result;
 }
 
-static int hookedRadar(unsigned int sector, unsigned int count, void* dest, void* args)
+static int hookedRadar(u32 sector, u32 count, void* dest, void* args)
 {
 	if (armed && active.radar && count == 0x21 && writable(dest, 0x10800)) {
 		int ok;
@@ -469,15 +469,15 @@ static int hookedRadar(unsigned int sector, unsigned int count, void* dest, void
 			return 0;
 		}
 	}
-	return ((int (*)(unsigned int, unsigned int, void*, void*))CD_READ)(sector, count, dest, args);
+	return ((int (*)(u32, u32, void*, void*))CD_READ)(sector, count, dest, args);
 }
 
 /* Loading code is map-specific after leaving staging. Switch the entire hook
  * group only when its retail/current-owned calls match the requested overlay. */
 static void configureHooks(void)
 {
-	unsigned int level = WORD(LEVEL_ID), i, a[6], o[6];
-	const unsigned int* row;
+	u32 level = WORD(LEVEL_ID), i, a[6], o[6];
+	const u32* row;
 	if (level < 39 || level > 49)
 		return;
 	row = hopAddresses[level - 39];
@@ -514,9 +514,9 @@ static void configureHooks(void)
 	mapSceneRequest = row[4];
 }
 
-static int radarMatches(unsigned int address)
+static int radarMatches(u32 address)
 {
-	static const unsigned int signature[10] = {0x0260202d,
+	static const u32 signature[10] = {0x0260202d,
 	                                           0xae000018,
 	                                           0xae00001c,
 	                                           0x0220282d,
@@ -526,7 +526,7 @@ static int radarMatches(unsigned int address)
 	                                           0x10400007,
 	                                           0x24020001,
 	                                           0xae120014};
-	unsigned int i;
+	u32 i;
 	for (i = 0; i < 10; ++i)
 		if (WORD(address - 20 + i * 4) != signature[i])
 			return 0;
@@ -535,7 +535,7 @@ static int radarMatches(unsigned int address)
 
 int mapHooksReady(void)
 {
-	unsigned int i;
+	u32 i;
 	if (!mapMultiplayerReady() || mapOnlineDisabled())
 		return 0;
 	for (i = 0; i < sizeof(hooks) / sizeof(hooks[0]); ++i)
@@ -546,7 +546,7 @@ int mapHooksReady(void)
 
 void mapDisableHooks(void)
 {
-	unsigned int i, changed = 0, level;
+	u32 i, changed = 0, level;
 	if (!mapMultiplayerReady() || busy)
 		return;
 	/* Restore only instructions still owned by this module. A competing
@@ -556,13 +556,13 @@ void mapDisableHooks(void)
 			WORD(hooks[i].address) = hooks[i].original;
 			changed = 1;
 		}
-	if (WORD(nameHook) == (0x08000000U | ((unsigned int)hookedName >> 2)) && WORD(nameHook + 4) == 0x27bd0050) {
+	if (WORD(nameHook) == (0x08000000U | ((u32)hookedName >> 2)) && WORD(nameHook + 4) == 0x27bd0050) {
 		WORD(nameHook) = 0x03e00008;
 		changed = 1;
 	}
 	level = WORD(LEVEL_ID);
 	if (level >= 40 && level <= 55) {
-		unsigned int address = level < 50 ? radarHooks[level - 40] : localRadarHooks[level - 50];
+		u32 address = level < 50 ? radarHooks[level - 40] : localRadarHooks[level - 50];
 		if (WORD(address) == JAL(hookedRadar) && WORD(address + 4) == 0x26070040) {
 			WORD(address) = JAL(CD_READ);
 			changed = 1;
@@ -579,7 +579,7 @@ void mapDisableHooks(void)
 
 void mapInstallHooks(void)
 {
-	unsigned int i, changed = 0, level;
+	u32 i, changed = 0, level;
 	if (!mapMultiplayerReady() || busy)
 		return;
 	if (mapOnlineDisabled()) {
@@ -592,20 +592,20 @@ void mapInstallHooks(void)
 	/* Tail-hook the transition name builder, preserving its stack delay slot. */
 	if (WORD(nameHook) == 0x03e00008 && WORD(nameHook + 4) == 0x27bd0050 && WORD(nameHook - 4) == 0xdfbf0048 &&
 	    WORD(nameHook - 8) == 0xdfbe0040) {
-		WORD(nameHook) = 0x08000000U | ((unsigned int)hookedName >> 2);
+		WORD(nameHook) = 0x08000000U | ((u32)hookedName >> 2);
 		changed = 1;
 	}
 	/* Install the loading group atomically: never combine our loader with a
      * Horizon/other mod's half-owned hook set. Overlay reloads restore retail
      * calls; accept either retail or our own instruction on reinstallation. */
 	for (i = 0; i < sizeof(hooks) / sizeof(hooks[0]); ++i) {
-		unsigned int instruction = WORD(hooks[i].address);
+		u32 instruction = WORD(hooks[i].address);
 		if (instruction != hooks[i].original && instruction != JAL(hooks[i].replacement))
 			break;
 	}
 	if (i == sizeof(hooks) / sizeof(hooks[0])) {
 		for (i = 0; i < sizeof(hooks) / sizeof(hooks[0]); ++i) {
-			unsigned int instruction = JAL(hooks[i].replacement);
+			u32 instruction = JAL(hooks[i].replacement);
 			if (WORD(hooks[i].address) != instruction) {
 				WORD(hooks[i].address) = instruction;
 				changed = 1;
@@ -616,7 +616,7 @@ void mapInstallHooks(void)
 	/* Local radar hooks were separately signature-matched in code5 levels
      * 50..55. There are no split-screen counterparts for online bases 46..49. */
 	if (armed && ((level >= 40 && level <= 49) || (level >= 50 && level <= 55))) {
-		unsigned int address = level < 50 ? radarHooks[level - 40] : localRadarHooks[level - 50];
+		u32 address = level < 50 ? radarHooks[level - 40] : localRadarHooks[level - 50];
 		if (radarMatches(address)) {
 			WORD(address) = JAL(hookedRadar);
 			changed = 1;

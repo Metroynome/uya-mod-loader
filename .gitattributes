@@ -3,3 +3,4 @@ Dockerfile text eol=lf
 Makefile.* text eol=lf
 Makefile text eol=lf
 release/*.txt text eol=lf
+*.awk text eol=lf

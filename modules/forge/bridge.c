@@ -3,21 +3,13 @@
 
 /* Part of Forge's BSS and module memory size, not a loader reservation.
  * PINE follows the module discovery header and exports table; see PINE.md. */
-volatile ForgeMailbox forgeMailbox __attribute__((aligned(16)));
-const ForgeExports moduleExports UYA_MODULE_EXPORTS = {FORGE_EXPORTS_MAGIC, 1, sizeof(ForgeExports), &forgeMailbox};
-static unsigned int seen, running;
-
-static void message(const char* s)
-{
-	unsigned int i;
-	for (i = 0; i < 47 && s && s[i]; ++i)
-		FORGE_MAILBOX->message[i] = s[i];
-	FORGE_MAILBOX->message[i] = 0;
-}
+volatile ForgeMailbox_t forgeMailbox __attribute__((aligned(16)));
+const ForgeExports_t moduleExports UYA_MODULE_EXPORTS = {FORGE_EXPORTS_MAGIC, 1, sizeof(ForgeExports_t), &forgeMailbox};
+static u32 seen, running;
 
 void forgeBridgeDisable(void)
 {
-	volatile ForgeMailbox* b = FORGE_MAILBOX;
+	volatile ForgeMailbox_t* b = FORGE_MAILBOX;
 	b->available = b->capabilities = b->context = 0;
 	if (running) {
 		b->state = FORGE_FAILED;
@@ -26,26 +18,25 @@ void forgeBridgeDisable(void)
 		running = 0;
 	}
 	seen = b->requestId;
-	message("Forge inactive");
 }
 
 void forgeBridgeInit(void)
 {
-	volatile ForgeMailbox* b = FORGE_MAILBOX;
-	unsigned int i;
+	volatile ForgeMailbox_t* b = FORGE_MAILBOX;
+	u32 i;
 	for (i = 0; i < sizeof(*b) / 4; ++i)
-		((volatile unsigned int*)b)[i] = 0;
+		((volatile u32*)b)[i] = 0;
 	seen = running = 0;
-	b->version = 1;
+	b->version = FORGE_MAILBOX_VERSION;
 	b->size = sizeof(*b);
 	b->magic = FORGE_MAILBOX_MAGIC;
 }
 
-void forgeBridgeTick(const MapHopApi* p)
+void forgeBridgeTick(const MapHopApi_t* p)
 {
-	volatile ForgeMailbox* b = FORGE_MAILBOX;
-	unsigned int id, command, i;
-	char name[64];
+	volatile ForgeMailbox_t* b = FORGE_MAILBOX;
+	u32 id, command, i;
+	char name[FORGE_FILENAME_SIZE];
 	int error;
 	++b->heartbeat;
 	b->available = p != 0;
@@ -54,7 +45,6 @@ void forgeBridgeTick(const MapHopApi* p)
 	if (running) {
 		b->state = p ? p->state() : FORGE_FAILED;
 		b->error = p ? p->error() : FORGE_ERROR_INACTIVE;
-		message(p ? p->status() : "Map Loader unavailable");
 		if (b->state == FORGE_COMPLETE || b->state == FORGE_FAILED) {
 			b->completedId = running;
 			running = 0;
@@ -64,11 +54,19 @@ void forgeBridgeTick(const MapHopApi* p)
 	if (!id || id == seen)
 		return;
 	command = b->command;
-	for (i = 0; i < 64; ++i)
+	for (i = 0; i < sizeof(name); ++i)
 		name[i] = b->filename[i];
 	if (id != b->requestId)
 		return; /* Host is still submitting a newer request. */
 	seen = id;
+	for (i = 0; i < sizeof(name) && name[i]; ++i)
+		;
+	if ((command == FORGE_SELECT || command == FORGE_REFRESH_SELECT || command == FORGE_SELECT_RETAIL) &&
+	    i == sizeof(name)) {
+		b->rejectError = FORGE_ERROR_NAME;
+		b->rejectedId = id;
+		return;
+	}
 	error = running ? FORGE_ERROR_BUSY : !p ? FORGE_ERROR_INACTIVE : p->request(command, name);
 	if (error) {
 		b->rejectError = error;
@@ -79,7 +77,6 @@ void forgeBridgeTick(const MapHopApi* p)
 	running = id;
 	b->state = p->state();
 	b->error = 0;
-	message(p->status());
 	if (b->state == FORGE_COMPLETE || b->state == FORGE_FAILED) {
 		b->completedId = id;
 		running = 0;

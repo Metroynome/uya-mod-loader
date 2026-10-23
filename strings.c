@@ -1,14 +1,14 @@
 #include "strings.h"
 
-void* memset(void* p, int c, unsigned int n)
+void* memset(void* p, int c, u32 n)
 {
-	unsigned char* d = p;
+	u8* d = p;
 	while (n--)
 		*d++ = c;
 	return p;
 }
 
-unsigned int strlen(const char* s)
+u32 strlen(const char* s)
 {
 	const char* p = s;
 	while (*p)
@@ -25,11 +25,11 @@ char* strchr(const char* s, int c)
 	return 0;
 }
 
-void* memchr(const void* p, int c, unsigned int n)
+void* memchr(const void* p, int c, u32 n)
 {
-	const unsigned char* s = p;
+	const u8* s = p;
 	while (n--) {
-		if (*s == (unsigned char)c)
+		if (*s == (u8)c)
 			return (void*)s;
 		++s;
 	}

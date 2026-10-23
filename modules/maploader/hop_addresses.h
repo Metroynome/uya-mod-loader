@@ -1,7 +1,7 @@
 /* Regional retail SDK code, matched across level 39..49 memory images.
  * Columns: WAD call site, WAD reader, sound init, sound core, scene request, name-builder return, name table. */
 #if UYA_MODULE_REGION == 2
-static const unsigned int hopAddresses[11][7] = {
+static const u32 hopAddresses[11][7] = {
     {0x5a41c8, 0x5c2a40, 0x5f16f0, 0x5c1310, 0x59a578, 0x6787a8, 0x352d20},
     {0x470978, 0x4951f8, 0x4c3d90, 0x493b08, 0x467050, 0x54bec0, 0x357640},
     {0x472528, 0x497310, 0x4c5ea8, 0x495c20, 0x468c00, 0x54e088, 0x357780},
@@ -15,7 +15,7 @@ static const unsigned int hopAddresses[11][7] = {
     {0x465820, 0x488460, 0x4b6ff8, 0x486d70, 0x45bef8, 0x53e988, 0x3601c0},
 };
 #else
-static const unsigned int hopAddresses[11][7] = {
+static const u32 hopAddresses[11][7] = {
     {0x5a2560, 0x5c09f8, 0x5eeff0, 0x5bf328, 0x5992a8, 0x675dc0, 0x352e20},
     {0x46ee10, 0x493208, 0x4c16e8, 0x491b78, 0x465e80, 0x549518, 0x3577c0},
     {0x470900, 0x495260, 0x4c3740, 0x493bd0, 0x467970, 0x54b620, 0x357900},
