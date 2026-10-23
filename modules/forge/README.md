@@ -73,7 +73,7 @@ reloads, retail Korgon Outpost, and return hops with working gameplay/HUD.
 PAL tests covered Bakisi Isles and Aquatos Aquadome starts/reloads and hops in
 both directions, including the corrected custom loading-screen name.
 Temple of Shaar's PAL normal-start and hop crashes remain unresolved. Other map
-bases/player counts are not all live-qualified. See [ADDRESSES.md](../../ADDRESSES.md).
+bases/player counts are not all live-qualified. See [ADDRESSES.md](../../docs/ADDRESSES.md).
 
 ## Ownership
 

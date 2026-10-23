@@ -74,6 +74,6 @@ not fix the setting.
 | NTSC-J (SCPS-15084) | 64DC6000 | Unsupported |
 
 Older PCSX2 builds may need each file renamed to `<CRC>.pnach`.
-Full [configuration documentation](https://github.com/Metroynome/uya-mod-loader/blob/master/CONFIG.md),
+Full [configuration documentation](https://github.com/Metroynome/uya-mod-loader/blob/master/docs/CONFIG.md),
 [map limitations](https://github.com/Metroynome/uya-mod-loader/blob/master/modules/maploader/README.md),
 and build instructions are in the repository.

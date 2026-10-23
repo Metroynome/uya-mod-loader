@@ -1,6 +1,6 @@
 # Old EE ld cannot combine garbage collection with retained relocations.
 # Reuse the normal link's live input sections, then discard everything else.
-# Usage: awk -f tools/sections.awk module.map module.ld > live.ld
+# Usage: awk -f tools/sections.awk module.map src/module.ld > live.ld
 NR == FNR {
     if ($0 ~ /^\.(text|rodata|data|bss)[ \t]/) { group=$1; next }
     if ($0 ~ /^[^ \t]/) { group=""; next }

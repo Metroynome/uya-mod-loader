@@ -181,11 +181,16 @@ Use `CAMPAIGN_OBJS` and `MULTIPLAYER_OBJS` for `LIBRARY=both`. Shared rules in
 `Makefile.eeglobal` compile, link, and package relocation data. The loader picks
 addresses at runtime; creators do not need fixed memory locations. Older
 `module.json`/`module.conf` modules should migrate to `Makefile.defs` and rebuild.
-Only the loader uses `template/` and `bin2code` to generate PNACH files.
+Only the loader uses `src/template/` and `bin2code` to generate PNACH files.
 
 ## Module APIs
 
-Mods need [module.h](module.h); Mod Menu is optional.
+Mods need [module.h](include/module.h); Mod Menu is optional.
+
+Keep shared module headers in `modules/<name>/include/` and private headers beside
+the module sources. Include another module API by its repository-relative path,
+such as `modules/modmenu/include/modmenu.h`. Find its service at runtime and handle
+the module being disabled or missing.
 
 - `moduleInit(api)` runs once when the module first becomes eligible. A negative
   result disables it. BSS starts zeroed and persists across context changes.
@@ -201,7 +206,7 @@ Mods need [module.h](module.h); Mod Menu is optional.
   Retry lookup if the provider is not ready. Loaded does not mean active.
 - `loadConfig` / `saveConfig` store settings in
   `uya/config/<mod-name>.<region>.ini`, independently of Mod Menu.
-  See [CONFIG.md](CONFIG.md) for examples and return codes.
+  See [CONFIG.md](docs/CONFIG.md) for examples and return codes.
 
 ### Module discovery and exports
 
@@ -258,7 +263,7 @@ Campaign builds support NTSC-U, PAL, and NTSC-J. Multiplayer modules support
 NTSC-U/PAL; NTSC-J multiplayer callbacks remain disabled until addresses and a
 regional library are available. Build success alone does not verify gameplay.
 Live NTSC-U/PAL coverage and remaining limitations are recorded in
-[ADDRESSES.md](ADDRESSES.md) and the module guides.
+[ADDRESSES.md](docs/ADDRESSES.md) and the module guides.
 
 Default modules deactivate at the post-DNAS profile screen and reactivate on
 return to Local Play. The loader uses a separate hook from Horizon. The user

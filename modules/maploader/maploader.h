@@ -2,7 +2,7 @@
 #define UYA_HOST_MAPLOADER_H
 
 #include "module.h"
-#include "include/forge.h"
+#include "modules/forge/include/forge.h"
 
 #define MAP_LIMIT (96)
 

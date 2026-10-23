@@ -15,7 +15,7 @@ and transitions do not accept new map commands.
 
 Fields use the widths listed below; multibyte integers are little-endian. Strings are NUL-terminated ASCII.
 Offsets are relative to the discovered mailbox address. The C declaration is
-`include/forge.h`; the ELF symbol is `forgeMailbox`.
+`modules/forge/include/forge.h`; the ELF symbol is `forgeMailbox`.
 
 ### Discovery through the loader and module headers
 
@@ -40,7 +40,7 @@ No memory scan is needed. All pointers are 32-bit little-endian EE addresses.
    complete 16-byte exports structure inside Forge's address/size range.
 4. Forge exports contain magic `0x31584746` (`FGX1`) at +`0x00`, version
    `1` at +`0x04`, size `16` at +`0x08`, and the mailbox pointer at
-   +`0x0c`. The C declaration is `forgeExports_t` in `include/forge.h`.
+   +`0x0c`. The C declaration is `forgeExports_t` in `modules/forge/include/forge.h`.
 5. Require a 16-byte-aligned mailbox entirely within Forge's address/size range.
    Check mailbox magic `0x32475246` (`FRG2`), 16-bit version `2`, and 16-bit size `168`.
    Re-read discovery pointers and the table entry to detect a restart during

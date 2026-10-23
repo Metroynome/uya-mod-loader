@@ -1,7 +1,7 @@
 /* Local Play development transitions. The retail request only schedules the
  * change; the game's main loop performs teardown and loading after we return. */
 #include "maploader.h"
-#include "include/forge.h"
+#include "modules/forge/include/forge.h"
 
 #if UYA_MODULE_REGION == 2
 #define LEVEL_ID          (0x1f83a8)

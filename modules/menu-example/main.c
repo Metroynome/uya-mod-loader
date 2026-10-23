@@ -1,4 +1,4 @@
-#include "include/modmenu.h"
+#include "modules/modmenu/include/modmenu.h"
 
 static const moduleApi_t* loader;
 static int registered, enabled, amount = 5;

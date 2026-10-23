@@ -114,7 +114,7 @@ Future online use requires both an online-enabled `modules.txt` entry and
 host/client synchronization or qualify Map Loader for online use. The user
 confirmed Horizon patch loading without a crash on the current NTSC-U setup,
 with offline modules disabled. An older PAL patch conflicted with the loader's
-`0xa0000` discovery header. See [ADDRESSES.md](../../ADDRESSES.md).
+`0xa0000` discovery header. See [ADDRESSES.md](../../docs/ADDRESSES.md).
 
 ## Verification and source
 

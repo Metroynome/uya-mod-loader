@@ -22,14 +22,15 @@ These rules apply throughout this repository. Follow the user's current instruct
 - Prefer plain C and the existing Makefiles. Do not add Python code or dependencies to the project.
 - Add no extra build tools, generators, wrappers, or scripts unless absolutely necessary. First check whether C, Make, or an existing tool can do the work. Explain the concrete need if an extra tool is unavoidable.
 - Use `Makefile.defs` for module build settings and the shared `Makefile.eeglobal` rules. Avoid parallel build configuration or duplicated build logic.
-- Keep the existing loader PNACH flow using `template/` and `bin2code`. Modules build as loader binaries, not PNACH files.
+- Keep the existing loader PNACH flow using `src/template/` and `bin2code`. Modules build as loader binaries, not PNACH files.
 - Keep files few and purposeful. Do not introduce layers, helper frameworks, or new validation systems without a concrete need in the requested change.
 - Keep logs and temporary investigation output outside the source tree. Use the existing ignored build/test locations; do not add disposable tests, logs, or generated outputs to source control. Retain useful existing regression checks.
 
 ## Loader and module conventions
 
+- Keep module-owned public headers in `modules/<name>/include/`, private headers beside module sources, and loader headers in root `include/`. Reference shared module headers by their repository-relative paths; do not copy them into a central folder.
 - Modules must be usable without Mod Menu. The loader owns shared lifecycle, service discovery, and configuration persistence; Mod Menu provides optional UI.
-- Use the existing loader API and service discovery rather than inventing shared fixed addresses. Read `module.h`, `ADDRESSES.md`, and the relevant module documentation before changing memory layout or public interfaces.
+- Use the existing loader API and service discovery rather than inventing shared fixed addresses. Read `include/module.h`, `docs/ADDRESSES.md`, and the relevant module documentation before changing memory layout or public interfaces.
 - Preserve API compatibility where practical. Update affected producers, consumers, and documentation together when a change requires a new contract.
 - Preserve the declared regional and campaign/local/online support. Never reuse an address across regions or overlays without evidence. Do not present untested regions as verified.
 - Match Horizon's menu elements and styling for tabs, buttons, lists, and controller glyphs. Consult `horizon-uya-patch/patch/config.c` and the existing Mod Menu implementation rather than inventing a new visual style.

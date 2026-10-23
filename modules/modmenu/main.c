@@ -1,6 +1,6 @@
 /* Offline menu core. Other modules own gameplay behavior; this module owns
  * registration, selection, input and drawing. No Horizon/server state is used. */
-#include "include/modmenu.h"
+#include "modules/modmenu/include/modmenu.h"
 #include "backend.h"
 #include "version.h"
 

@@ -1,6 +1,6 @@
 /* Development-only Local Play controls. Map Loader owns all transition work. */
-#include "include/forge.h"
-#include "include/modmenu.h"
+#include "modules/forge/include/forge.h"
+#include "modules/modmenu/include/modmenu.h"
 
 void forgeBridgeInit(void);
 void forgeBridgeDisable(void);

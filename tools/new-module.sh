@@ -30,7 +30,7 @@ for variant in $variants; do
         cat <<'SOURCE'
 
 /* No Mod Menu dependency. Use loader->context for context-specific behavior,
- * and the loader configuration API for optional settings (see CONFIG.md). */
+ * and the loader configuration API for optional settings (see docs/CONFIG.md). */
 static const moduleApi_t* loader;
 
 int moduleInit(const moduleApi_t* api)

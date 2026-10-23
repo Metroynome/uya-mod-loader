@@ -1,8 +1,8 @@
 /* Standalone Custom Maps tab. Map selection is independent of menu internals;
  * file IO and game hooks live in files.c and multiplayer.c respectively. */
-#include "include/modmenu.h"
+#include "modules/modmenu/include/modmenu.h"
 #include "maploader.h"
-#include "include/forge.h"
+#include "modules/forge/include/forge.h"
 
 static u32 commandContext(void), commandState(void), commandError(void);
 static int commandRequest(u32, const char*);

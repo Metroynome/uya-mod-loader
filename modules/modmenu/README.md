@@ -18,12 +18,12 @@ menu, input capture also resets the preview-movie timer.
 
 ## Register a tab
 
-Include [include/modmenu.h](../../include/modmenu.h). Find the service from your
+Include [modules/modmenu/include/modmenu.h](include/modmenu.h). Find the service from your
 update callback so registration works regardless of module order. Your mod can
 continue without Mod Menu when the service is unavailable.
 
 ```c
-#include "include/modmenu.h"
+#include "modules/modmenu/include/modmenu.h"
 
 static const moduleApi_t* loader;
 static const modMenuApi_t* registeredMenu;
@@ -167,7 +167,7 @@ is retained, not copied. See [bios-warning](../bios-warning/main.c) for an examp
 
 Persistence belongs to the loader and works without a menu. New mods should use
 `moduleConfigField_t` and loader `loadConfig` / `saveConfig` directly; see
-[CONFIG.md](../../CONFIG.md).
+[CONFIG.md](../../docs/CONFIG.md).
 
 ## Implementation and verification
 
@@ -179,4 +179,4 @@ Input is captured before gameplay receives buttons/sticks and restored on close.
 Offline campaign and Local Play navigation/input capture have passed user tests.
 PAL testing also covered the new loader hook and in-game menu after map hops.
 This does not qualify every level, split-screen setup, or online configuration.
-See [ADDRESSES.md](../../ADDRESSES.md) for regional evidence and online limits.
+See [ADDRESSES.md](../../docs/ADDRESSES.md) for regional evidence and online limits.

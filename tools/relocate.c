@@ -3,7 +3,7 @@
  * This is packaging, not a size policy: the runtime owns allocation/validation. */
 #include <stdio.h>
 #include <stdlib.h>
-#include "../types.h"
+#include "../include/types.h"
 #include <string.h>
 #include <elf.h>
 

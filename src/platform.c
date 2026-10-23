@@ -2,7 +2,7 @@
 
 /* Resident SDK functions: campaign boot core1 uses base 0x116f80;
  * multiplayer uses the resident layout in the supplied NTSC-U EE dump.
- * Regional validation and provenance are documented in ADDRESSES.md.
+ * Regional validation and provenance are documented in docs/ADDRESSES.md.
  * Keep these separate from librac3/libuya so their shared symbol names cannot
  * cause the loader to bind to the wrong game mode.
  */

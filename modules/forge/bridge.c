@@ -1,5 +1,5 @@
 /* PINE only writes data; commands execute here on the normal module tick. */
-#include "include/forge.h"
+#include "modules/forge/include/forge.h"
 
 /* Part of Forge's BSS and module memory size, not a loader reservation.
  * PINE follows the module discovery header and exports table; see PINE.md. */
