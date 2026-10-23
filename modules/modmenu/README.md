@@ -180,3 +180,15 @@ Offline campaign and Local Play navigation/input capture have passed user tests.
 PAL testing also covered the new loader hook and in-game menu after map hops.
 This does not qualify every level, split-screen setup, or online configuration.
 See [ADDRESSES.md](../../docs/ADDRESSES.md) for regional evidence and online limits.
+
+### Focused-tab Square action
+
+`setTabAction(tab, label, callback, context)` registers a Square shortcut and
+footer hint for that tab. It fires once per press only while the tab is focused
+and the menu is open, with no modal/progress overlay. The label is copied; the
+context must remain valid. Pass a null callback to clear it. Removing the tab
+also removes the action. Callbacks must check their own gameplay/loading state.
+
+This is appended to menu API 1 at EE offset `0x50`; callers using it must check
+the service size (the updated `modmenuFind` does this). Older clients can still
+use the existing API prefix.

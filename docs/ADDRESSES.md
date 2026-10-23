@@ -228,3 +228,25 @@ without crashing. No new debugger capture of the downloaded patch or callback
 slot was taken during that successful test. This confirms patch loading for
 that setup, not every online game mode or module combination; the earlier PAL
 stale-callback finding remains relevant to older patch builds.
+
+## Horizon to Local Play map-loader handoff
+
+NTSC-U live inspection after logout found all 65 maps cataloged, but Horizon
+callbacks remained at `0x19507c`, `0x5a2560`, `0x5a2408`, and `0x5bf36c`.
+The completed scan was hidden because the standalone loading group was not installed.
+Horizon also retained its loading-name and level-exit hooks.
+
+`modules/maploader/multiplayer.c` checks a 64-byte FNV-1a callback signature
+against the local Horizon `patch-10683.bin` / `patch-10684.bin` builds before
+reclaiming the complete group. NTSC-U callback bytes were matched against the
+running patch; PAL signatures are from the regional binary and regression
+fixtures, pending live transition verification. The handoff requires Local
+Play staging, local loader context, and no lobby connection. Unknown builds or
+partial hook groups are not overwritten. Restoration and installation run
+together because Horizon can reinstall its hooks if retail calls are left
+exposed between updates.
+
+After installing the fix, the user verified that returning from Horizon online
+play to Local Play staging shows the map list and that Square refreshes it.
+This confirms the NTSC-U menu handoff and refresh path. PAL logout handoff and
+starting a custom-map game after this handoff still need live verification.

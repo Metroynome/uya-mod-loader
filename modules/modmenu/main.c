@@ -12,6 +12,9 @@ typedef struct tab {
 	ModMenuListLabel listLabel, listInfo;
 	ModMenuListSelect listSelect;
 	void* context;
+	char actionLabel[24];
+	ModMenuCallback action;
+	void* actionContext;
 } tab_t;
 
 typedef struct item {
@@ -36,6 +39,7 @@ static int menuConfigLoad(const char* mod, const modMenuConfigField_t* f, int n)
 static int menuConfigSave(const char* mod, const modMenuConfigField_t* f, int n);
 static void setProgress(const char* label, int current, int total);
 static int setModal(ModMenuModal draw);
+static int setTabAction(int tab, const char* label, ModMenuCallback callback, void* context);
 
 static tab_t tabs[MODMENU_MAX_TABS];
 static item_t items[MODMENU_MAX_ITEMS];
@@ -48,7 +52,7 @@ static u32 previousButtons, previousMode, closingButtons;
 static const modMenuApi_t menuApi = {
     MODMENU_API_VERSION, sizeof(modMenuApi_t), addTab,      addItem,  removeTab,      setItemEnabled,   isOpen,
     closeMenu,           getActiveTab,       focusTab,    setList,  setListInfo,    setTabVisibility, setTabContexts,
-    menuConfigLoad,      menuConfigSave,     setProgress, setModal, menuBackendBox, menuBackendText};
+    menuConfigLoad,      menuConfigSave,     setProgress, setModal, menuBackendBox, menuBackendText, setTabAction};
 /* A window of whole tabs: measured text plus Horizon-style padding. Scroll
  * the first visible tab only when the focused tab would fall outside it. */
 static int firstTab;
@@ -178,6 +182,9 @@ static int removeTab(int tab)
 	tabs[index].handle = 0;
 	tabs[index].count = 0;
 	tabs[index].listInfo = 0;
+	tabs[index].action = 0;
+	tabs[index].actionContext = 0;
+	tabs[index].actionLabel[0] = 0;
 	if (selectedTab == tab) {
 		selectedTab = 0;
 		selectedItem = 0;
@@ -241,6 +248,26 @@ static int setListInfo(int tab, ModMenuListLabel info)
 		return -1;
 	tabs[i].listInfo = info;
 	return 0;
+}
+
+static int setTabAction(int tab, const char* label, ModMenuCallback callback, void* context)
+{
+	int i = tabIndex(tab);
+	if (i < 0 || (callback && !copyText(tabs[i].actionLabel, label, sizeof(tabs[i].actionLabel))))
+		return -1;
+	tabs[i].action = callback;
+	tabs[i].actionContext = context;
+	return 0;
+}
+
+static void drawFooter(void)
+{
+	int i = tabIndex(selectedTab);
+	menuBackendText(.12f, .81f, 0x8069cbf2, "\x14 \x15 TAB   \x10 SELECT   \x12 BACK");
+	if (i >= 0 && tabs[i].action) {
+		menuBackendText(.66f, .81f, 0x8069cbf2, "\x13");
+		menuBackendText(.69f, .81f, 0x8069cbf2, tabs[i].actionLabel);
+	}
 }
 
 /* Retain the original menu API as forwarding helpers for existing clients. */
@@ -495,7 +522,7 @@ static void draw(void)
 		menuBackendText(.14f, .575f, 0x8069cbf2, "Menu works without a server connection.");
 		menuBackendText(.13f, .66f, 0x8069cbf2, "D-pad: Browse settings / change values");
 		menuBackendText(.13f, .715f, 0x8069cbf2, "Enable mods in modules.txt, then restart.");
-		menuBackendText(.12f, .81f, 0x8069cbf2, "\x14 \x15 TAB     \x10 SELECT     \x12 BACK");
+		drawFooter();
 		return;
 	}
 	if (index >= 0 && tabs[index].count) {
@@ -530,7 +557,7 @@ static void draw(void)
 		}
 		if (t->listInfo)
 			drawInfo(t->listInfo(t->context, t->cursor));
-		menuBackendText(.12f, .81f, 0x8069cbf2, "\x14 \x15 TAB     \x10 SELECT     \x12 BACK");
+		drawFooter();
 		return;
 	}
 	for (i = 0; i < MODMENU_MAX_ITEMS; ++i)
@@ -578,7 +605,7 @@ static void draw(void)
 				menuBackendText(.865f - menuBackendWidth(value), y, color, value);
 			}
 		}
-	menuBackendText(.12f, .81f, 0x8069cbf2, "\x14 \x15 TAB     \x10 SELECT     \x12 BACK");
+	drawFooter();
 }
 
 static void deactivate(void)
@@ -686,6 +713,17 @@ void moduleUpdate(void)
 		selectTab(-1);
 	else if (pressed & 0x800)
 		selectTab(1);
+	/* Handle shortcuts only for the visible, focused tab and once per press.
+	 * Return after callbacks: they may rebuild tabs or open a progress popup. */
+	if (pressed & 0x8000) {
+		int i = tabIndex(selectedTab);
+		if (i >= 0 && visible(selectedTab) && tabs[i].action) {
+			tabs[i].action(tabs[i].actionContext);
+			if (opened && !progressLabel[0])
+				draw();
+			return;
+		}
+	}
 	if (!selectedItem && (tabIndex(selectedTab) < 0 || !tabs[tabIndex(selectedTab)].count))
 		selectItem(1);
 	if (pressed & 0x10)

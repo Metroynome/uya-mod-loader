@@ -317,6 +317,27 @@ static int add(const char* label, int type, ModMenuCallback callback, void* cont
 	return handle > 0;
 }
 
+/* Local refresh does not require Forge; in-game use still requires Forge. */
+static void refreshMaps(void* context)
+{
+	(void)context;
+	if (mapApi->context != UYA_CONTEXT_LOCAL || mapLoading() || mapScanActive() || mapHopResult == 1 ||
+	    jobState == FORGE_SCANNING || jobState == FORGE_LOADING ||
+	    (mapStaging() != 1 && !(mapForgeActive() && mapHopInGame())))
+		return;
+	mapScanStart();
+	dirty = 1;
+}
+
+static void browseRetailMaps(void* context)
+{
+	(void)context;
+	if (mapScanActive() || !mapHooksReady() || mapLoading())
+		return;
+	menu->setList(tab, mapCount + 11, mapLabel, selectMap, 0, listFocus());
+	menu->setListInfo(tab, mapInfo);
+}
+
 static int rebuild(int context)
 {
 	int ok = 1, editable = (context > 0 || (mapForgeActive() && mapHopInGame())) && mapHooksReady() && !mapLoading() &&
@@ -334,12 +355,26 @@ static int rebuild(int context)
 		ok &= add("Campaign loading backend not available", MODMENU_LABEL, 0, 0, 1);
 		ok &= add("Existing map packs require multiplayer", MODMENU_LABEL, 0, 0, 1);
 	} else {
+		int canRefresh = mapApi->context == UYA_CONTEXT_LOCAL &&
+		                 (context == 1 || (mapForgeActive() && mapHopInGame())) && !mapLoading() &&
+		                 !mapScanActive() && mapHopResult != 1 && jobState != FORGE_SCANNING && jobState != FORGE_LOADING;
+		if (canRefresh)
+			ok &= menu->setTabAction(tab, "REFRESH", refreshMaps, 0) == 0;
 		if (editable) {
-			ok &= menu->setList(tab, mapCount + 11, mapLabel, selectMap, 0, listFocus()) == 0;
-			ok &= menu->setListInfo(tab, mapInfo) == 0;
+			if (mapCount) {
+				ok &= menu->setList(tab, mapCount + 11, mapLabel, selectMap, 0, listFocus()) == 0;
+				ok &= menu->setListInfo(tab, mapInfo) == 0;
+			} else {
+				ok &= add(mapCatalogReady ? "No custom maps found" : status, MODMENU_LABEL, 0, 0, 1);
+				ok &= add("Refresh Custom Maps", MODMENU_ACTION, refreshMaps, 0, canRefresh);
+				ok &= add("Browse Retail Maps", MODMENU_ACTION, browseRetailMaps, 0, 1);
+			}
 		} else {
 			ok &= add(status, MODMENU_LABEL, 0, 0, 1);
-			ok &= add("Select maps from the staging screen", MODMENU_LABEL, 0, 0, 1);
+			ok &= add(context == 1 && !mapHooksReady() ? "Map loading hooks unavailable" :
+			          "Select maps from the staging screen", MODMENU_LABEL, 0, 0, 1);
+			if (canRefresh)
+				ok &= add("Refresh Custom Maps", MODMENU_ACTION, refreshMaps, 0, 1);
 		}
 	}
 	if (!ok) {

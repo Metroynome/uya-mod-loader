@@ -73,13 +73,22 @@ is reused after leaving staging or quitting a game. **No `.idx` files are used**
 old index files can be removed. Filesystem changes are not detected automatically.
 
 Use **Forge → Refresh Custom Maps** or a [PINE refresh command](../forge/PINE.md)
-after adding, removing, or updating maps. Without Forge, restart to rescan.
+after adding, removing, or updating maps. You can also press Square while the
+Custom Maps tab is focused in Local Play staging, without Forge. An empty catalog
+shows a **Refresh Custom Maps** button and **Browse Retail Maps**. Square also
+works in-game when Forge is active. Refresh is blocked during scans or loading.
 Refresh reuses the allocation and retains selection by filename when possible.
 There is no backup catalog: a failed scan clears selection and makes the list
 unavailable. Retry by refreshing or re-entering staging, then select again.
 
 Deactivation releases the catalog. On a campaign ELF change, stale multiplayer
 pointers are discarded instead of being passed to the campaign allocator.
+After leaving Horizon online play, Map Loader reclaims its loading hooks only
+in Local Play staging and only when all Horizon callback signatures match the
+verified regional builds. Unknown hooks stay untouched; the tab reports that
+loading hooks are unavailable rather than presenting a completed scan as a
+missing map list.
+
 The IOP helper remains available until an IOP reset. Do not alter map files
 while scanning or loading a game.
 

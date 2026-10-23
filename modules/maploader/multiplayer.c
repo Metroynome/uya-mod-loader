@@ -577,6 +577,57 @@ void mapDisableHooks(void)
 	}
 }
 
+/* Horizon leaves its map-loading calls installed when returning to Local Play.
+ * Match the first 64 bytes of each callback, not just a jump into low memory.
+ * These FNV-1a signatures come from patch-10683/10684; NTSC-U was also read
+ * live after logout. Unknown patch builds remain untouched. */
+static int horizonCall(u32 instruction, u32 opcode, u32 signature)
+{
+	u32 address = (instruction & 0x03ffffff) << 2;
+	u32 hash = 2166136261, i;
+	if ((instruction & 0xfc000000) != opcode || address < 0x000d0000 || address > 0x000effc0)
+		return 0;
+	for (i = 0; i < 64; ++i)
+		hash = (hash ^ *(volatile u8*)(address + i)) * 16777619;
+	return hash == signature;
+}
+
+static int reclaimLocalHooks(void)
+{
+#if UYA_MODULE_REGION == 2
+	static const u32 signatures[] = {0x46b8a999, 0x7bee231d, 0x0a7d2770, 0xc4c726eb, 0x67355e77, 0x57a96645};
+	const u32 exitHook = 0x193340, exitCall = JAL(0x192f68);
+#else
+	static const u32 signatures[] = {0xaedf49cb, 0x1e0cdf27, 0x0a7d2770, 0x5b912728, 0x99239e38, 0x314282cf};
+	const u32 exitHook = 0x193430, exitCall = JAL(0x193058);
+#endif
+	const u32 addresses[] = {TOC_HOOK, WAD_HOOK, SYNC_HOOK, SOUND_HOOK};
+	const u32 originals[] = {JAL(TOC_READ), JAL(WAD_READ), JAL(CD_SYNC), JAL(SOUND_DISC)};
+	u32 i, name = WORD(NAME_HOOK), exit = WORD(exitHook);
+	if (mapApi->context != UYA_CONTEXT_LOCAL || WORD(CONNECTION) || mapStaging() != 1)
+		return 0;
+	/* Require the complete known Horizon group before changing any call. */
+	for (i = 0; i < 4; ++i)
+		if (!horizonCall(WORD(addresses[i]), 0x0c000000, signatures[i]))
+			return 0;
+	if ((WORD(SOUND_INIT_HOOK) && WORD(SOUND_INIT_HOOK) != JAL(SOUND_INIT)) ||
+	    (WORD(SOUND_CORE_HOOK) && WORD(SOUND_CORE_HOOK) != JAL(SOUND_CORE)))
+		return 0;
+	if (name != 0x03e00008 && name != (0x08000000 | ((u32)hookedName >> 2)) &&
+	    !horizonCall(name, 0x08000000, signatures[4]))
+		return 0;
+	if (exit != exitCall && !horizonCall(exit, 0x0c000000, signatures[5]))
+		return 0;
+	for (i = 0; i < 4; ++i)
+		WORD(addresses[i]) = originals[i];
+	WORD(SOUND_INIT_HOOK) = JAL(SOUND_INIT);
+	WORD(SOUND_CORE_HOOK) = JAL(SOUND_CORE);
+	if (name != (0x08000000 | ((u32)hookedName >> 2)))
+		WORD(NAME_HOOK) = 0x03e00008;
+	WORD(exitHook) = exitCall;
+	return 1;
+}
+
 void mapInstallHooks(void)
 {
 	u32 i, changed = 0, level;
@@ -586,6 +637,7 @@ void mapInstallHooks(void)
 		mapDisableHooks();
 		return;
 	}
+	changed |= reclaimLocalHooks();
 	configureHooks();
 	if (WORD(LEVEL_ID) != 39)
 		savedSettings = 0;
