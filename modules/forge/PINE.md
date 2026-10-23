@@ -165,34 +165,13 @@ is implemented here; access control belongs to the emulator's PINE endpoint.
 
 ## Verification
 
-Native tests cover commit ordering, duplicate IDs, busy rejection, inactivity,
-malformed filenames, staging-only selection, in-match hopping, and scan failure.
-Live NTSC-U Local Play staging checks passed using debugger writes to the same
-EE mailbox: refresh, select Bakisi Mini, refresh-and-select Temple of Shaar,
-and rejection of reload while no match is running. Busy requests were rejected
-without interrupting the active refresh. In-match mailbox reload of Temple of
-Shaar, refresh-and-hop to Bakisi Mini, and a subsequent Bakisi Mini reload all
-reported success and returned game/scene flags to ready. The user confirmed
-playable gameplay with the HUD visible after the sequence. These tests used the
-MCP debugger memory interface; editor-side PINE transport still needs integration
-verification.
+Native tests cover request ordering, duplicate IDs, busy rejection, inactivity,
+invalid filenames, context restrictions, and scan failures. Live NTSC-U checks
+covered refresh, selection, Start Game, custom/retail hops, and repeated reloads
+with working gameplay and HUD. PAL covered Bakisi Isles and Aquatos Aquadome
+starts, reloads, and hops, including the custom loading-screen name fix.
 
-Start Game: native tests and all regional builds pass. In live NTSC-U Local Play,
-command 5 started the selected Temple of Shaar map, reported successful completion,
-and returned game/scene flags to ready. A second Start Game request during gameplay
-was rejected with wrong-context error 1. The user confirmed gameplay and HUD
-work normally.
-
-Command 6 live checks: Temple of Shaar -> retail Korgon Outpost completed and
-cleared custom asset overrides. The user confirmed the stock loading name and
-HUD. Command 1 then reloaded Korgon with overrides still disabled; command 3
-returned to Bakisi Mini with custom loading re-enabled. Both reported success
-and returned to gameplay. The user confirmed normal gameplay and HUD after
-the sequence.
-
-PAL uses the same commands and discovery layout. Regional routines are matched
-to game dumps. Live Start Game and reload completed on retail Bakisi Isles and
-Aquatos Aquadome. Aquadome -> retail Bakisi -> Aquadome completed with successful
-HUD setup. The user confirmed gameplay, HUD, and the Forge menu reload action.
-Temple of Shaar crashes during normal PAL starts as well as hops;
-that map-specific loading case remains unresolved.
+These tests used MCP debugger reads/writes to the EE mailbox. Editor-side PINE
+transport still needs integration verification. Temple of Shaar's PAL loading
+failure remains unresolved; campaign, online, NTSC-J, and split-screen hopping
+are unsupported. See [Forge support notes](README.md#support-and-limitations).

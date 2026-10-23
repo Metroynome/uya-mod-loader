@@ -15,10 +15,15 @@ No build tools or libraries are needed to play.
 4. Preserve your `uya/config/*.ini` settings when upgrading. Replace the loader
    and module binaries together with files from the same release.
 
-Release defaults include Mod Menu and Map Loader where supported, without test
-or example modules. NTSC-J supports campaign Mod Menu only. Online is disabled
-by default because Horizon uses overlapping memory; do not enable overlapping
-loader/Horizon cheats together.
+Release defaults include Mod Menu, BIOS Warning, and Map Loader where supported,
+without tests/examples. NTSC-J supports campaign only. Forge is opt-in and must
+be built/copied separately. When upgrading to v2, replace older modules with
+compatible version-4 binaries.
+
+Online coexistence with Horizon is not verified. The tested downloaded patch
+still used the loader's address for a network callback pointer and crashed.
+Updated Horizon networking binaries are required before retesting; keeping
+modules disabled online does not resolve that address conflict.
 
 Use L3 + R3 in front-end menus; during gameplay choose MOD MENU from the pause menu.
 
@@ -36,11 +41,12 @@ scripts. Follow any script-update prompt and rerun if requested. Map packs are
 separate downloads, not included in the ZIP.
 
 `uya/mods/utils/mapscan.irx` is the required directory helper for Map Loader.
-Enter Local Play staging to scan maps and create/update the regional `.idx`
-cache. A progress popup blocks input until scanning finishes. Later staging
-visits check for changes; unchanged caches are not rewritten. No scan runs on
-multiplayer menu entry or online staging. Do not update maps during scanning
-or match loading.
+Enter Local Play staging for the first scan. A progress popup captures input
+until it finishes. The catalog stays in memory across staging visits and games;
+no `.idx` files are used and new files are not detected automatically. Use
+Forge → Refresh Custom Maps or a PINE refresh command after changing maps.
+Without Forge, restart the game to rescan. Do not change assets while scanning
+or loading a game. Map packs requiring Horizon custom code/game modes are unsupported.
 
 `uya/mods/utils/` is also available for other mods' supporting files. Keep
 module binaries directly in `uya/mods/` and settings in `uya/config/`.
@@ -50,6 +56,14 @@ module binaries directly in `uya/mods/` and settings in `uya/config/`.
 To enable it, copy `uya/mods/utils/exceptionhandler.bin` into
 `uya/mods/debug/exceptionhandler.bin`, creating the debug folder if needed.
 Remove the copy from `debug/` to disable it, then restart the game.
+
+## Expanded RAM
+
+The loader can place modules in PCSX2's 128 MiB RAM when the BIOS supports it.
+Older BIOS versions may crash when entering multiplayer even if modules fall
+back to normal memory. If BIOS Warning appears, disable expanded RAM or use a
+compatible BIOS, then restart. Cross or Triangle dismisses the warning; it does
+not fix the setting.
 
 ## Regions and documentation
 

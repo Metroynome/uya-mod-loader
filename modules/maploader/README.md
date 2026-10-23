@@ -1,15 +1,24 @@
-# Map loader
+# Map Loader
 
-`maploader` is an independent module. It registers a **Custom Maps** tab through
-the public `modmenu` API and adapts the WAD/world/sound/radar replacement flow
-from `Horizon/horizon-uya-patch/patch/maploader.c`.
+`maploader` loads Horizon-format hostfs map packs in NTSC-U/PAL Local Play.
+Mod Menu provides the Custom Maps tab; Forge adds in-game hopping and refresh
+commands. Campaign replacement and NTSC-J multiplayer are not implemented.
 
-## Installation
+## Setup
 
-Keep the Horizon map pack in the `uya/` root, separate from module binaries:
+Enable these entries in `uya/config/modules.txt`:
 
 ```text
-host0:uya/
+modmenu campaign,local
+maploader local
+# Optional: build/copy Forge, then enable it for refresh and in-game hopping.
+forge local
+```
+
+Keep map assets in `uya/`, separate from module binaries:
+
+```text
+uya/
   config/modules.txt
   aquadome.version
   aquadome.wad
@@ -20,164 +29,106 @@ host0:uya/
   aquadome.pal.world
   ...
   mods/
-    utils/
-      mapscan.irx
-    maploader.ntscu.bin
-    maploader.pal.bin
-    modmenu.ntscu.bin
-    modmenu.pal.bin
+    modmenu.<region>.bin
+    maploader.<region>.bin
+    forge.<region>.bin
+    utils/mapscan.irx
 ```
 
-Maps are discovered automatically on the first **Local Play staging** visit
-after activation. Neither
-entering multiplayer menus nor entering online staging triggers a scan. The
-bundled `mods/utils/mapscan.irx` helper enumerates `host0:uya/` offline; it needs no
-Horizon connection, USB drivers, or Python command.
+NTSC-U uses `.wad`, `.world`, `.sound`, and `.map`; PAL uses `.pal.wad`, etc.
+Both share `.version` metadata. The helper enumerates files offline without
+Horizon, USB drivers, or Python. See the [root README](../../README.md#build-with-docker)
+for builds. Modules are placed dynamically; adding one does not require
+rebuilding unrelated modules. Install compatible binaries and cold-boot.
 
-The modal popup shows discovery activity, followed by metadata-processing
-progress. Work is split across update calls. Input is captured until scanning
-finishes or fails. After a successful scan, later staging visits reuse the
-heap-resident catalog, including after quitting a game. An empty catalog also
-counts as successful. Deactivation releases the catalog and resets this state.
-Use **Refresh Custom Maps** or a PINE refresh command after adding, removing,
-or updating maps. No `.idx` files are read or written; old index files can be
-removed. Each refresh refills the same allocation in place, with no backup
-catalog. Selection is retained by filename if the selected map still exists.
-A failed scan leaves the list unavailable and clears its selection; retry with
-Refresh Custom Maps or by re-entering staging. Select a map again after retrying.
-Do not change map assets while scanning or loading a game.
+## Select maps
 
-The catalog uses one multiplayer `malloc` allocation, retained until deactivation.
-On a change to the campaign ELF, old multiplayer pointers are discarded rather
-than passed to
-the campaign allocator. The helper stays resident until the IOP resets and is
-reused on later scans. Map payloads are not modified by discovery. NTSC-U uses
-`.wad`, `.world`, `.sound`, `.map`; PAL uses `.pal.wad`, etc., with shared `.version`
-metadata. Unsupported custom-code/game-mode maps are skipped.
+1. Enter Local Play staging and wait for the first scan to finish.
+2. Open Mod Menu with L3 + R3 and switch to Custom Maps with L1/R1.
+3. Browse with Up/Down and select with Cross. The menu closes automatically.
+4. Start the game normally.
 
-Enable:
+`None` appears first, followed by retail bases 40–49 and up to 96 custom maps
+in alphabetical order. The highlighted entry stays centered on the right, with
+its author/description on the left. There are no pages.
 
-```text
-modmenu campaign,local
-maploader local
-```
+Selecting a custom map sets its retail base automatically. Selecting a retail
+map clears the custom override and establishes the baseline. In staging,
+`None` restores that baseline after a custom selection. The preview uses the
+retail base's image; custom artwork is not loaded. Staging/loading names use the
+selected map's name. Retail names are English.
 
-Build and deploy **all** binaries together; adding this module changes the
-linked addresses of other modules. Cold-boot after deployment.
+With Forge active, the list is also available through the in-game pause menu's
+MOD MENU entry. Selecting a named retail/custom map hops to it; `None` remains
+staging-only. See the [Forge guide](../forge/README.md).
 
-## Local Play
+## Scanning and refresh
 
-1. Enter Local Play staging and wait for the scan popup to finish.
-2. Open the menu with L3 + R3 and select the Custom Maps tab with L1/R1.
-3. Select a map with Cross. Its retail base map is set automatically.
-4. Close the menu and start the match normally.
+The first Local Play staging visit after activation scans `host0:uya/`. Entering
+multiplayer menus or online staging does not scan. The progress popup captures
+input while discovery and metadata processing run across updates.
 
-"None" clears the override and restores the previous base selection while
-still in staging. Browse the entire catalog with Up/Down; X commits the
-highlighted entry and closes the menu. The highlighted map stays centered in
-the right-hand list; the left pane shows the author and description from the
-map pack's `.version` metadata when available. There are no pages, and up to 96 maps per region are supported.
-Use Forge -> Refresh Custom Maps (or its PINE refresh command) after adding or
-removing maps. Without Forge, restart the game to discover changes.
+A successful catalog, including an empty one, stays in one heap allocation and
+is reused after leaving staging or quitting a game. **No `.idx` files are used**;
+old index files can be removed. Filesystem changes are not detected automatically.
 
-All retail bases 40–49 remain selectable in Local Play. The backend accepts
-the base ID directly or its split-screen counterpart where the game uses one;
-it does not force a nonexistent 56–59 overlay. A map's geometry/gameplay must
-also be suitable for split screen; a valid base ID alone cannot guarantee that.
+Use **Forge → Refresh Custom Maps** or a [PINE refresh command](../forge/PINE.md)
+after adding, removing, or updating maps. Without Forge, restart to rescan.
+Refresh reuses the allocation and retains selection by filename when possible.
+There is no backup catalog: a failed scan clears selection and makes the list
+unavailable. Retry by refreshing or re-entering staging, then select again.
 
-## Online and campaign status
+Deactivation releases the catalog. On a campaign ELF change, stale multiplayer
+pointers are discarded instead of being passed to the campaign allocator.
+The IOP helper remains available until an IOP reset. Do not alter map files
+while scanning or loading a game.
 
-Maploader disables itself by default when a multiplayer lobby-server connection
-is active: its tab disappears, the selection clears, and it restores only hooks
-that it still owns. `host0:uya/maploader-online.txt` defaults to `0`. Set its first
-character to `1` and reboot to opt into online use on a future server without
-Horizon. Missing or invalid configuration keeps online use disabled.
+## Supported assets and failures
 
-This opt-in does not add host/client map synchronization: all clients must select
-the same map/version, with the host selecting its retail base. It also does not
-make the full standalone loader compatible with Horizon's overlapping memory
-range. Do not enable both systems together.
+- WAD/world replacement, with TOC sizes updated before game allocations.
+- Optional sound bank and radar map.
+- Custom staging and loading-screen names, including Forge hops.
+- Retail loading-screen art and staging previews.
 
-The module is available in campaign to explain its status, but **campaign
-replacement is not implemented**. Campaign needs a separately verified loading
-backend and campaign map assets. Multiplayer maps are never redirected into
-campaign. The catalog rejects campaign base IDs for now. NTSC-J is not built
-because its multiplayer resident layout is not verified by the parent loader.
+Maps requiring Horizon custom game modes or `.code` extensions are excluded;
+this module does not implement that ABI. Campaign base IDs are rejected.
+Split-screen base IDs are handled where the game supports them, but this does
+not guarantee that a particular map works with multiple players.
 
-## Supported payloads and failure handling
+Selection and loading validate asset sizes; reads handle short transfers and
+check the expected length. Failure **after replacement begins stops the load**
+to avoid running partial data. Fix the assets and restart the game. Sound RPC
+failures also stop loading; a stalled transition is not guaranteed recoverable
+through the menu.
 
-- WAD and/or world replacement, with TOC sector sizes updated before allocation.
-- Optional sound bank, uploaded before the level WAD reuses its staging buffer.
-- Optional radar map with separately checked online/local overlay hooks.
-- Custom names in staging and on the loading screen; stock loading-screen art remains in use.
-- Maps requiring a forced Horizon game mode or `.code` extension are excluded;
-  this module does not supply Horizon's custom-code/game-mode ABI.
+The backend does not resize the heap. Map data uses game-allocated buffers;
+the catalog is heap-resident and its bookkeeping lives in module storage.
 
-Selection checks file sizes again. TOC replacement checks the target base and
-files before modifying allocations. Reads handle short transfers and verify
-the expected file length. A failed read **after replacement starts stalls the
-load** instead of allowing partially replaced map data to run. Fix the files,
-use Forge -> Refresh Custom Maps or restart the game. Do not change payload files during a match/load.
-Sound RPC waits are bounded; failure also stops the load.
+## Contexts and online compatibility
 
-The backend does not resize the heap. It reads into buffers allocated by the
-game from the updated TOC. Catalog and loader state live in module BSS.
+`maploader local` deactivates at post-DNAS profile selection, removing its tab
+and restoring owned hooks. It reactivates on return to Local Play.
 
-## Source and verification
+Future online use requires both an online-enabled `modules.txt` entry and
+`uya/maploader-online.txt` starting with `1` (default `0`). This does not add
+host/client synchronization or guarantee Horizon coexistence. The tested
+Horizon download still used the loader's `0xA0000` address as a network callback
+slot and crashed; updated networking consumers are needed before retesting.
+See [ADDRESSES.md](../../ADDRESSES.md).
 
-- `main.c`: menu registration, scrolling list and selection.
-- `files.c`: catalog validation and bounded hostfs reads.
-- `multiplayer.c`: regional staging access and guarded loading hooks.
-- `directory.c` and `iop/mapscan/`: offline directory RPC support.
+## Verification and source
 
-Loading/seek anchors and radar signatures were verified against the supplied
-retail extraction. They are retained in C with runtime hook guards.
+NTSC-U/PAL builds and native checks pass. Live tests covered custom-map starts,
+reloads, retail/custom hops, HUD restoration, catalog retention, and retail
+previews. PAL Aquatos Aquadome passed start/reload and hops to/from Bakisi Isles;
+the user also confirmed its corrected loading-screen name. Temple of Shaar
+still crashes on PAL during normal starts and hops. Multi-controller
+split-screen loading has not been live-qualified.
 
-NTSC-U/PAL builds and native tests pass. Both regional loading-hook sets,
-resident seek anchors, ten online radar hooks and six local radar hooks were
-checked against the extracted binaries. NTSC-U Local Play staging was inspected
-live: menu identity, settings pointer and base-map field were verified.
-In an NTSC-U Local Play test, Aquatos Aquadome progressed through the replacement
-TOC and reached loaded gameplay (base 43, scene-ready flag set), with the custom
-sound upload completed, no loader failure flag, and the radar hook installed.
-The user confirmed that Aquatos Aquadome loaded. PAL Aquatos Aquadome completed Start Game, reload, and hops to/from retail
-Bakisi Isles. Temple of Shaar crashes on PAL during normal starts and hops;
-that loading case remains unresolved. Multi-controller split-screen loads
-have not been tested live.
-
-With normal RAM, the loader and modules share `0x000a0000-0x000fffff`.
-With PCSX2's 128 MiB RAM enabled, modules instead start at `0x02000000`;
-the loader stays at `0x000a0000`. Normal-RAM modules start immediately
-after the aligned loader end and may reach Horizon's `CUSTOM_GAME_MODE` range
-(`0x000f0000-0x00100000`). Full Horizon-patch coexistence still needs explicit
-memory/hook integration; simply enabling both is not supported.
-
-## Execution contexts
-
-The default `modules.txt` now uses `maploader local`. Loader API 3 disables it at
-the post-DNAS profile screen and invokes its cleanup callback to remove the tab
-and owned map hooks. On returning to Local Play it registers its tab and hooks
-again. The optional `maploader-online.txt` flag does not override `modules.txt`:
-future online use requires both an online-capable context entry and that flag.
-This is not support for coexistence with the full Horizon patch's overlapping
-memory layout.
-
-## Retail maps and Forge
-
-Custom Maps keeps `None` first, then merges retail bases 40-49 and installed
-custom maps alphabetically by display name. Retail
-entries use their stock names and show "Retail map" in the description area.
-They remain available when no custom maps are installed. Staging retail selection
-clears the override and establishes the baseline that `None` restores after a
-later custom selection. Retail names are displayed in English.
-
-With Forge active in supported NTSC-U/PAL Local Play gameplay, choosing a retail
-entry hops directly to it. Reload Current Map supports both retail and custom
-maps. The transition clears custom WAD/world, sound and radar overrides before
-retail loading, and restores the stock loading name. `None` remains staging-only.
-PAL hopping uses regional loading hooks; see Forge README for live coverage. Split-screen hopping remains disabled. See
-[Forge PINE commands](../forge/PINE.md) for command 6 and supported base IDs.
-
-Local staging also updates its retail preview texture when the selected base
-changes, including retail selections and restoring the baseline with `None`.
-Custom maps show their retail base preview; custom artwork is not loaded.
+| File | Responsibility |
+| --- | --- |
+| `main.c` | Menu, selection, and public service |
+| `files.c` | Catalog validation and hostfs reads |
+| `multiplayer.c` | Staging, names, and guarded loading hooks |
+| `hop.c`, `hop_addresses.h` | Regional transitions and HUD setup |
+| `directory.c`, `iop/mapscan/` | Directory scanning RPC |

@@ -6,31 +6,41 @@ initialization:
 
 ```c
 #include "module.h"
-static const ModuleApi *loader;
+
+static const ModuleApi* loader;
 static int enabled = 1, amount = 5;
 static const ModuleConfigField settings[] = {
-    { "enabled", &enabled, 0, 1 },
-    { "amount", &amount, 0, 10 }
+	{"enabled", &enabled, 0, 1},
+	{"amount", &amount, 0, 10}
 };
-int moduleInit(const ModuleApi *api)
-{
-    if (api->version < 4 || api->size < sizeof(ModuleApi)) return -1;
-    loader = api;
-    int result = loader->loadConfig("my-mod", settings, 2);
-    /* Missing files retain defaults; log invalid files or I/O errors. */
-    if (result < 0) loader->print("my-mod: config error %d\n", result);
-    return 0;
-}
-/* Call when the user commits settings, not every frame. */
+
+/* Call from an explicit settings action, not every update. */
 static int saveSettings(void)
 {
-    return loader->saveConfig("my-mod", settings, 2);
+	return loader->saveConfig("my-mod", settings, 2);
 }
-void moduleUpdate(void) {}
+
+int moduleInit(const ModuleApi* api)
+{
+	int result;
+
+	if (api->version < UYA_API_VERSION || api->size < sizeof(*api))
+		return -1;
+	loader = api;
+	result = loader->loadConfig("my-mod", settings, 2);
+	if (result < 0)
+		loader->print("my-mod: config error %d\n", result);
+	return 0;
+}
+
+void moduleUpdate(void)
+{
+}
 ```
 
 For NTSC-U this uses `host0:uya/config/my-mod.ntscu.ini`, corresponding to
-`hostfs/uya/config/my-mod.ntscu.ini` in the repository/release layout:
+`hostfs/uya/config/my-mod.ntscu.ini` in source builds or
+`uya/config/my-mod.ntscu.ini` under the installed host root:
 
 ```ini
 [settings]
@@ -40,7 +50,7 @@ amount=5
 
 PAL uses `.pal.ini`; NTSC-J uses `.ntscj.ini`. Campaign and multiplayer share
 the same regional file. Keep the packaged `config` directory: the API does not
-create directories. Move prior settings from `uya/mods/config/` into `uya/config/`.
+create directories. Preserve this folder when upgrading.
 No implicit writes occur; a missing file stays missing until the mod calls save.
 A creator may ship a default INI, or simply use defaults in code.
 
@@ -67,7 +77,3 @@ can leave an incomplete file, so check the return value.
 
 Existing Mod Menu configuration calls forward to this API. New mods should use
 `ModuleConfigField`, `UYA_CONFIG_*`, and the loader functions directly.
-
-Campaign's private SDK writer is mapped to resident support routines for each
-region. Its verified assembly is checked in as `campaign-write.S`.
-Multiplayer uses the resident SDK writer. Neither path changes the game heap.
