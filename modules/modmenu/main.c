@@ -4,7 +4,7 @@
 #include "backend.h"
 #include "version.h"
 
-typedef struct Tab {
+typedef struct tab {
 	int handle;
 	u32 modes, contexts, executionContexts;
 	char key[32], label[32];
@@ -12,18 +12,18 @@ typedef struct Tab {
 	ModMenuListLabel listLabel, listInfo;
 	ModMenuListSelect listSelect;
 	void* context;
-} Tab_t;
+} tab_t;
 
-typedef struct Item {
+typedef struct item {
 	int handle, tab, enabled;
 	char label[48];
-	ModMenuItem_t definition;
-} Item_t;
+	modMenuItem_t definition;
+} item_t;
 
 static int setTabVisibility(int tab, u32 contexts);
 static int setTabContexts(int tab, u32 contexts);
 static int addTab(const char* key, const char* label, u32 modes);
-static int addItem(int tab, const ModMenuItem_t* d);
+static int addItem(int tab, const modMenuItem_t* d);
 static int removeTab(int tab);
 static int setItemEnabled(int handle, int enabled);
 static int isOpen(void);
@@ -32,21 +32,21 @@ static int getActiveTab(void);
 static int focusTab(int tab);
 static int setList(int tab, int count, ModMenuListLabel label, ModMenuListSelect select, void* context, int initial);
 static int setListInfo(int tab, ModMenuListLabel info);
-static int menuConfigLoad(const char* mod, const ModMenuConfigField_t* f, int n);
-static int menuConfigSave(const char* mod, const ModMenuConfigField_t* f, int n);
+static int menuConfigLoad(const char* mod, const modMenuConfigField_t* f, int n);
+static int menuConfigSave(const char* mod, const modMenuConfigField_t* f, int n);
 static void setProgress(const char* label, int current, int total);
 static int setModal(ModMenuModal draw);
 
-static Tab_t tabs[MODMENU_MAX_TABS];
-static Item_t items[MODMENU_MAX_ITEMS];
-static const ModuleApi_t* loader;
+static tab_t tabs[MODMENU_MAX_TABS];
+static item_t items[MODMENU_MAX_ITEMS];
+static const moduleApi_t* loader;
 static int homeTab;
 static char progressLabel[64];
 static int progressCurrent, progressTotal, progressPulse;
 static int nextHandle = 1, opened, selectedTab, selectedItem, lastLevel = -999;
 static u32 previousButtons, previousMode, closingButtons;
-static const ModMenuApi_t menuApi = {
-    MODMENU_API_VERSION, sizeof(ModMenuApi_t), addTab,      addItem,  removeTab,      setItemEnabled,   isOpen,
+static const modMenuApi_t menuApi = {
+    MODMENU_API_VERSION, sizeof(modMenuApi_t), addTab,      addItem,  removeTab,      setItemEnabled,   isOpen,
     closeMenu,           getActiveTab,       focusTab,    setList,  setListInfo,    setTabVisibility, setTabContexts,
     menuConfigLoad,      menuConfigSave,     setProgress, setModal, menuBackendBox, menuBackendText};
 /* A window of whole tabs: measured text plus Horizon-style padding. Scroll
@@ -138,7 +138,7 @@ static int addTab(const char* key, const char* label, u32 modes)
 	return tabs[freeSlot].handle;
 }
 
-static int addItem(int tab, const ModMenuItem_t* d)
+static int addItem(int tab, const modMenuItem_t* d)
 {
 	int i;
 	char label[48];
@@ -244,12 +244,12 @@ static int setListInfo(int tab, ModMenuListLabel info)
 }
 
 /* Retain the original menu API as forwarding helpers for existing clients. */
-static int menuConfigLoad(const char* mod, const ModMenuConfigField_t* f, int n)
+static int menuConfigLoad(const char* mod, const modMenuConfigField_t* f, int n)
 {
 	return loader->loadConfig(mod, f, n);
 }
 
-static int menuConfigSave(const char* mod, const ModMenuConfigField_t* f, int n)
+static int menuConfigSave(const char* mod, const modMenuConfigField_t* f, int n)
 {
 	return loader->saveConfig(mod, f, n);
 }
@@ -317,7 +317,7 @@ static void selectItem(int direction)
 {
 	int i, index = tabIndex(selectedTab);
 	if (index >= 0 && tabs[index].count) {
-		Tab_t* t = &tabs[index];
+		tab_t* t = &tabs[index];
 		t->cursor = (t->cursor + direction + t->count) % t->count;
 		return;
 	}
@@ -350,7 +350,7 @@ static void activate(int direction)
 	}
 	for (i = 0; i < MODMENU_MAX_ITEMS; ++i)
 		if (items[i].handle == selectedItem && selectedItem) {
-			ModMenuItem_t* d = &items[i].definition;
+			modMenuItem_t* d = &items[i].definition;
 			int value;
 			if (!items[i].enabled || !visible(items[i].tab))
 				return;
@@ -499,7 +499,7 @@ static void draw(void)
 		return;
 	}
 	if (index >= 0 && tabs[index].count) {
-		Tab_t* t = &tabs[index];
+		tab_t* t = &tabs[index];
 		/* Odd row count keeps the highlighted entry in the exact center.
          * Wrap neighbors at both ends, as Horizon's vertical list does. */
 		menuBackendBox(.11f, .3f, .365f, .5f, 0x800c2241);
@@ -590,7 +590,7 @@ static void deactivate(void)
 	lastLevel = -999;
 }
 
-int moduleInit(const ModuleApi_t* api)
+int moduleInit(const moduleApi_t* api)
 {
 
 	if (api->version < UYA_API_VERSION || api->size < sizeof(*api))

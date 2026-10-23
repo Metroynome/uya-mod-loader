@@ -5,10 +5,10 @@
 #endif
 
 /* Keep repeated catalog moves out of the scan state machine. */
-void mapCopyRecord(MapRecord_t* to, const MapRecord_t* from) __attribute__((noinline));
+void mapCopyRecord(mapRecord_t* to, const mapRecord_t* from) __attribute__((noinline));
 
-const ModuleApi_t* mapApi;
-MapRecord_t* mapRecords;
+const moduleApi_t* mapApi;
+mapRecord_t* mapRecords;
 int mapCount, mapSelection = -1;
 int mapCatalogReady;
 /* Scan state is driven one entry/RPC at a time from Local Play staging. */
@@ -53,7 +53,7 @@ int mapReadExact(int fd, void* dest, u32 size)
 	return 1;
 }
 
-int mapOpenPart(const MapRecord_t* map, const char* extension)
+int mapOpenPart(const mapRecord_t* map, const char* extension)
 {
 	char path[176];
 	u32 pos = 0;
@@ -68,7 +68,7 @@ int mapOpenPart(const MapRecord_t* map, const char* extension)
 	return mapApi->open(path, 1, 0);
 }
 
-int mapReadPart(const MapRecord_t* map, const char* extension, void* dest, u32 size)
+int mapReadPart(const mapRecord_t* map, const char* extension, void* dest, u32 size)
 {
 	int fd = mapOpenPart(map, extension), ok;
 	u8 tail;
@@ -80,8 +80,8 @@ int mapReadPart(const MapRecord_t* map, const char* extension, void* dest, u32 s
 }
 
 /* MP's resident seek has been checked in both regional SDK images. Campaign
- * catalogs can be read via ModuleApi_t, but no campaign game-code hooks are used. */
-static int sizeMatches(const MapRecord_t* map, const char* extension, u32 size)
+ * catalogs can be read via moduleApi_t, but no campaign game-code hooks are used. */
+static int sizeMatches(const mapRecord_t* map, const char* extension, u32 size)
 {
 	int fd, result;
 	if (!size)
@@ -94,7 +94,7 @@ static int sizeMatches(const MapRecord_t* map, const char* extension, u32 size)
 	return result == (int)size;
 }
 
-int mapValidate(const MapRecord_t* map)
+int mapValidate(const mapRecord_t* map)
 {
 	if (!mapMultiplayerReady())
 		return 0;
@@ -112,7 +112,7 @@ void* memset(void* dest, int value, u32 size)
 
 /* .version metadata is shared by both regions: 48-byte header, author[32],
  * description[256]. Older packs may contain just the header. */
-int mapReadInfo(const MapRecord_t* map, char* author, char* description)
+int mapReadInfo(const mapRecord_t* map, char* author, char* description)
 {
 	char path[176], header[48];
 	u32 pos = 0, i;
@@ -158,14 +158,14 @@ static void copyName(char* to, const char* from)
 		;
 }
 
-static int validRecord(const MapRecord_t* m)
+static int validRecord(const mapRecord_t* m)
 {
 	return validName(m->filename, sizeof(m->filename)) && validName(m->name, 32) && m->base >= 40 && m->base <= 49 &&
 	       (m->wad || m->world) && m->wad <= 0x1000000 && m->world <= 0x400000 && m->sound <= 0x400000 &&
 	       m->radar <= 0x10800;
 }
 
-static int partSize(const MapRecord_t* m, const char* ext)
+static int partSize(const mapRecord_t* m, const char* ext)
 {
 	int fd = mapOpenPart(m, ext), size;
 	if (fd < 0)
@@ -176,7 +176,7 @@ static int partSize(const MapRecord_t* m, const char* ext)
 	return size;
 }
 
-static int inspect(MapRecord_t* m)
+static int inspect(mapRecord_t* m)
 {
 	u8 data[384] __attribute__((aligned(64)));
 	char path[176];
@@ -258,7 +258,7 @@ void mapScanStart(void)
 		return;
 	}
 	if (!mapRecords)
-		mapRecords = mapAlloc(MAP_LIMIT * sizeof(MapRecord_t));
+		mapRecords = mapAlloc(MAP_LIMIT * sizeof(mapRecord_t));
 	if (!mapRecords) {
 		mapMessage("Not enough memory to scan custom maps");
 		return;
@@ -269,7 +269,7 @@ void mapScanStart(void)
 	mapCount = 0;
 	mapSelection = -1;
 	mapCatalogReady = 0;
-	memset(mapRecords, 0, MAP_LIMIT * sizeof(MapRecord_t));
+	memset(mapRecords, 0, MAP_LIMIT * sizeof(mapRecord_t));
 	candidates = current = kept = waitTicks = 0;
 	++mapCatalogRevision; /* Re-read descriptions even when the catalog is unchanged. */
 	mapDirectoryReset();
@@ -291,7 +291,7 @@ int mapScanTotal(void)
 	return phase == 4 ? candidates : 0;
 }
 
-void mapCopyRecord(MapRecord_t* to, const MapRecord_t* from)
+void mapCopyRecord(mapRecord_t* to, const mapRecord_t* from)
 {
 	u32 i;
 	u8* d = (u8*)to;
@@ -304,7 +304,7 @@ int mapScanTick(void)
 {
 	int r, n, i;
 	char name[256];
-	MapRecord_t temp;
+	mapRecord_t temp;
 	if (!phase)
 		return 0;
 	if (++waitTicks > 6000) {

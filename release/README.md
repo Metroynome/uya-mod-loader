@@ -20,10 +20,10 @@ without tests/examples. NTSC-J supports campaign only. Forge is opt-in and must
 be built/copied separately. When upgrading to v2, replace older modules with
 compatible version-4 binaries.
 
-Online coexistence with Horizon is not verified. The tested downloaded patch
-still used the loader's address for a network callback pointer and crashed.
-Updated Horizon networking binaries are required before retesting; keeping
-modules disabled online does not resolve that address conflict.
+Online patch loading passed a user test on the current NTSC-U setup with default
+modules disabled online. Older Horizon builds using `0xa0000` for their network
+callback pointer conflict with this loader. Other online game modes and module
+combinations have not all been verified.
 
 Use L3 + R3 in front-end menus; during gameplay choose MOD MENU from the pause menu.
 

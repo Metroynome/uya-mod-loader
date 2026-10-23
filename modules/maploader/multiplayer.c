@@ -5,71 +5,71 @@
 #include "hop_addresses.h"
 
 #define WORD(a) (*(volatile u32*)(a))
-#define JAL(a)  (0x0c000000U | ((u32)(a) >> 2))
+#define JAL(a)  (0x0c000000 | ((u32)(a) >> 2))
 #if UYA_MODULE_REGION == 2
-#define IMAGE_SET       0x6814b0
-#define MESSAGE         0x59a970
-#define MESSAGE_CALL    0x0c166a40
-#define MESSAGE_LOAD    0x8c42bcc0
-#define CONNECTION      0x1cd4cc
-#define NAME_HOOK       0x6787a8
-#define NAME_TABLE      0x352d20
-#define MAP_ID          0x2412dc
-#define PART_ID         0x240288
-#define LEVEL_ID        0x1f83a8
-#define SCENE           0x245848
-#define SETTINGS        0x241640
-#define TOC_HOOK        0x194f8c
-#define TOC_READ        0x194ed8
-#define WAD_HOOK        0x5a41c8
-#define WAD_READ        0x5c2a40
-#define SYNC_HOOK       0x5a4070
-#define CD_SYNC         0x194a38
-#define CD_READ         0x194970
-#define SOUND_HOOK      0x5c1354
-#define SOUND_DISC      0x193888
-#define SOUND_INIT_HOOK 0x5a41f4
-#define SOUND_INIT      0x5f16f0
-#define SOUND_CORE_HOOK 0x5a41fc
-#define SOUND_CORE      0x5c1310
-#define SOUND_BUSY      0x240bc8
-#define SOUND_ERROR     0x240b88
-#define SOUND_RESULT    0x240140
-#define SOUND_PARAMS    0x240180
-#define SOUND_RPC       0x240100
-#define SOUND_FLUSH     0x193590
+#define IMAGE_SET       (0x6814b0)
+#define MESSAGE         (0x59a970)
+#define MESSAGE_CALL    (0x0c166a40)
+#define MESSAGE_LOAD    (0x8c42bcc0)
+#define CONNECTION      (0x1cd4cc)
+#define NAME_HOOK       (0x6787a8)
+#define NAME_TABLE      (0x352d20)
+#define MAP_ID          (0x2412dc)
+#define PART_ID         (0x240288)
+#define LEVEL_ID        (0x1f83a8)
+#define SCENE           (0x245848)
+#define SETTINGS        (0x241640)
+#define TOC_HOOK        (0x194f8c)
+#define TOC_READ        (0x194ed8)
+#define WAD_HOOK        (0x5a41c8)
+#define WAD_READ        (0x5c2a40)
+#define SYNC_HOOK       (0x5a4070)
+#define CD_SYNC         (0x194a38)
+#define CD_READ         (0x194970)
+#define SOUND_HOOK      (0x5c1354)
+#define SOUND_DISC      (0x193888)
+#define SOUND_INIT_HOOK (0x5a41f4)
+#define SOUND_INIT      (0x5f16f0)
+#define SOUND_CORE_HOOK (0x5a41fc)
+#define SOUND_CORE      (0x5c1310)
+#define SOUND_BUSY      (0x240bc8)
+#define SOUND_ERROR     (0x240b88)
+#define SOUND_RESULT    (0x240140)
+#define SOUND_PARAMS    (0x240180)
+#define SOUND_RPC       (0x240100)
+#define SOUND_FLUSH     (0x193590)
 #else
-#define IMAGE_SET       0x67e990
-#define MESSAGE         0x599618
-#define MESSAGE_CALL    0x0c16656a
-#define MESSAGE_LOAD    0x8c42bdc0
-#define CONNECTION      0x1cd64c
-#define NAME_HOOK       0x675dc0
-#define NAME_TABLE      0x352e20
-#define MAP_ID          0x24145c
-#define PART_ID         0x240408
-#define LEVEL_ID        0x1f8528
-#define SCENE           0x2459c8
-#define SETTINGS        0x2417c0
-#define TOC_HOOK        0x19507c
-#define TOC_READ        0x194fc8
-#define WAD_HOOK        0x5a2560
-#define WAD_READ        0x5c09f8
-#define SYNC_HOOK       0x5a2408
-#define CD_SYNC         0x194b28
-#define CD_READ         0x194a60
-#define SOUND_HOOK      0x5bf36c
-#define SOUND_DISC      0x193978
-#define SOUND_INIT_HOOK 0x5a258c
-#define SOUND_INIT      0x5eeff0
-#define SOUND_CORE_HOOK 0x5a2594
-#define SOUND_CORE      0x5bf328
-#define SOUND_BUSY      0x240d48
-#define SOUND_ERROR     0x240d08
-#define SOUND_RESULT    0x2402c0
-#define SOUND_PARAMS    0x240300
-#define SOUND_RPC       0x240280
-#define SOUND_FLUSH     0x193680
+#define IMAGE_SET       (0x67e990)
+#define MESSAGE         (0x599618)
+#define MESSAGE_CALL    (0x0c16656a)
+#define MESSAGE_LOAD    (0x8c42bdc0)
+#define CONNECTION      (0x1cd64c)
+#define NAME_HOOK       (0x675dc0)
+#define NAME_TABLE      (0x352e20)
+#define MAP_ID          (0x24145c)
+#define PART_ID         (0x240408)
+#define LEVEL_ID        (0x1f8528)
+#define SCENE           (0x2459c8)
+#define SETTINGS        (0x2417c0)
+#define TOC_HOOK        (0x19507c)
+#define TOC_READ        (0x194fc8)
+#define WAD_HOOK        (0x5a2560)
+#define WAD_READ        (0x5c09f8)
+#define SYNC_HOOK       (0x5a2408)
+#define CD_SYNC         (0x194b28)
+#define CD_READ         (0x194a60)
+#define SOUND_HOOK      (0x5bf36c)
+#define SOUND_DISC      (0x193978)
+#define SOUND_INIT_HOOK (0x5a258c)
+#define SOUND_INIT      (0x5eeff0)
+#define SOUND_CORE_HOOK (0x5a2594)
+#define SOUND_CORE      (0x5bf328)
+#define SOUND_BUSY      (0x240d48)
+#define SOUND_ERROR     (0x240d08)
+#define SOUND_RESULT    (0x2402c0)
+#define SOUND_PARAMS    (0x240300)
+#define SOUND_RPC       (0x240280)
+#define SOUND_FLUSH     (0x193680)
 #endif
 /* Resolve the retail name from GameLevel, never from a label that may already
  * contain a custom name (including after a live module reload). */
@@ -83,10 +83,10 @@
 
 typedef void (*SoundCallback)(int, unsigned long long);
 
-typedef struct Hook {
+typedef struct hook {
 	u32 address, original;
 	void* replacement;
-} Hook_t;
+} hook_t;
 
 static void hookedTable(u32 sector, u32 count, void* dest);
 static void hookedSound(int loc, int offset, SoundCallback callback, unsigned long long user);
@@ -108,11 +108,11 @@ int mapAllowOnline;
 u32 mapSceneRequest;
 static u32 wadReader = WAD_READ, soundInit = SOUND_INIT, soundCore = SOUND_CORE;
 static u32 nameHook = NAME_HOOK, nameTable = NAME_TABLE;
-static MapRecord_t active;
+static mapRecord_t active;
 static int armed, busy, failed, soundSent;
 static void* soundBuffer;
 static u32 savedSettings, savedBase, forcedBase;
-static Hook_t hooks[] = {{TOC_HOOK, JAL(TOC_READ), hookedTable},
+static hook_t hooks[] = {{TOC_HOOK, JAL(TOC_READ), hookedTable},
                               {WAD_HOOK, JAL(WAD_READ), hookedLoad},
                               {SYNC_HOOK, JAL(CD_SYNC), hookedSync},
                               {SOUND_HOOK, JAL(SOUND_DISC), hookedSound},

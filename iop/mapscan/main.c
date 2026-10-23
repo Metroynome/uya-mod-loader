@@ -5,19 +5,19 @@
 #include <thbase.h>
 #include <sysclib.h>
 
-#define SERVICE 0x554d4151
+#define SERVICE (0x554d4151)
 
-typedef struct MapScanReply {
+typedef struct mapScanReply {
 	int status;
 	char name[256];
 	char pad[60];
-} MapScanReply_t;
+} mapScanReply_t;
 
 IRX_ID("uya_mapscan", 2, 0);
 static SifRpcDataQueue_t queue;
 static SifRpcServerData_t server;
 static int request[16] __attribute__((aligned(64)));
-static MapScanReply_t reply __attribute__((aligned(64)));
+static mapScanReply_t reply __attribute__((aligned(64)));
 static int directory = -1;
 
 static void* dispatch(int command, void* data, int size)

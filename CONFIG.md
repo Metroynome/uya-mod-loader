@@ -7,9 +7,9 @@ initialization:
 ```c
 #include "module.h"
 
-static const ModuleApi_t* loader;
+static const moduleApi_t* loader;
 static int enabled = 1, amount = 5;
-static const ModuleConfigField_t settings[] = {
+static const moduleConfigField_t settings[] = {
 	{"enabled", &enabled, 0, 1},
 	{"amount", &amount, 0, 10}
 };
@@ -20,7 +20,7 @@ static int saveSettings(void)
 	return loader->saveConfig("my-mod", settings, 2);
 }
 
-int moduleInit(const ModuleApi_t* api)
+int moduleInit(const moduleApi_t* api)
 {
 	int result;
 
@@ -76,4 +76,4 @@ file, discarding comments and unknown keys. Writes are not atomic; an I/O error
 can leave an incomplete file, so check the return value.
 
 Existing Mod Menu configuration calls forward to this API. New mods should use
-`ModuleConfigField_t`, `UYA_CONFIG_*`, and the loader functions directly.
+`moduleConfigField_t`, `UYA_CONFIG_*`, and the loader functions directly.

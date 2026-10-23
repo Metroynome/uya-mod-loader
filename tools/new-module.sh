@@ -31,9 +31,9 @@ for variant in $variants; do
 
 /* No Mod Menu dependency. Use loader->context for context-specific behavior,
  * and the loader configuration API for optional settings (see CONFIG.md). */
-static const ModuleApi_t* loader;
+static const moduleApi_t* loader;
 
-int moduleInit(const ModuleApi_t* api)
+int moduleInit(const moduleApi_t* api)
 {
 	loader = api;
 SOURCE

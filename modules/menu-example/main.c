@@ -1,9 +1,9 @@
 #include "include/modmenu.h"
 
-static const ModuleApi_t* loader;
+static const moduleApi_t* loader;
 static int registered, enabled, amount = 5;
-static const ModuleConfigField_t settings[] = {{"enabled", &enabled, 0, 1}, {"amount", &amount, 0, 10}};
-static const ModMenuApi_t* registeredMenu;
+static const moduleConfigField_t settings[] = {{"enabled", &enabled, 0, 1}, {"amount", &amount, 0, 10}};
+static const modMenuApi_t* registeredMenu;
 
 static void deactivate(void)
 {
@@ -26,7 +26,7 @@ static void configAction(void* saving)
 	loader->print("menu-example: %s settings result=%d\n", saving ? "save" : "load", result);
 }
 
-int moduleInit(const ModuleApi_t* api)
+int moduleInit(const moduleApi_t* api)
 {
 	loader = api;
 	if (api->version < UYA_API_VERSION || api->size < sizeof(*api))
@@ -38,12 +38,12 @@ int moduleInit(const ModuleApi_t* api)
 
 void moduleUpdate(void)
 {
-	const ModMenuApi_t* menu;
+	const modMenuApi_t* menu;
 	int tab;
-	ModMenuItem_t toggle = {"Example toggle", MODMENU_TOGGLE, &enabled, 0, 0, 0, action, 0};
-	ModMenuItem_t range = {"Example value", MODMENU_RANGE, &amount, 0, 10, 1, action, 0};
-	ModMenuItem_t save = {"Save settings", MODMENU_ACTION, 0, 0, 0, 0, configAction, (void*)1};
-	ModMenuItem_t load = {"Load settings", MODMENU_ACTION, 0, 0, 0, 0, configAction, 0};
+	modMenuItem_t toggle = {"Example toggle", MODMENU_TOGGLE, &enabled, 0, 0, 0, action, 0};
+	modMenuItem_t range = {"Example value", MODMENU_RANGE, &amount, 0, 10, 1, action, 0};
+	modMenuItem_t save = {"Save settings", MODMENU_ACTION, 0, 0, 0, 0, configAction, (void*)1};
+	modMenuItem_t load = {"Load settings", MODMENU_ACTION, 0, 0, 0, 0, configAction, 0};
 	if (registered)
 		return;
 	menu = modmenuFind(loader);

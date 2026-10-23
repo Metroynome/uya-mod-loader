@@ -6,7 +6,7 @@
  * Keep these separate from librac3/libuya so their shared symbol names cannot
  * cause the loader to bind to the wrong game mode.
  */
-void platformApi(ModuleApi_t* api, u32 mode)
+void platformApi(moduleApi_t* api, u32 mode)
 {
 	int sp = mode == UYA_MODE_CAMPAIGN;
 	api->version = UYA_API_VERSION;

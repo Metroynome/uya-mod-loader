@@ -9,15 +9,15 @@
 #define callRpc    CALL(0x129e18, int (*)(SifRpcClientData_t*, int, int, void*, int, void*, int, void*, void*))
 #define rpcBusy    CALL(0x12a018, int (*)(SifRpcClientData_t*))
 
-typedef struct MapScanReply {
+typedef struct mapScanReply {
 	int status;
 	char name[256];
 	char pad[60];
-} MapScanReply_t;
+} mapScanReply_t;
 
 static SifRpcClientData_t client __attribute__((aligned(64)));
 static int request[16] __attribute__((aligned(64)));
-static MapScanReply_t reply __attribute__((aligned(64)));
+static mapScanReply_t reply __attribute__((aligned(64)));
 static int pending, loading, attempted, bindRetries;
 
 void* mapAlloc(u32 size)

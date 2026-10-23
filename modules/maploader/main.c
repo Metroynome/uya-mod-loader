@@ -9,11 +9,11 @@ static int commandRequest(u32, const char*);
 static int reloadMap(void);
 static const char* hopStatus(void);
 
-static const ModMenuApi_t* menu;
+static const modMenuApi_t* menu;
 static int tab, dirty = 1, lastContext = -1;
 static char status[48] = "Choose a map in multiplayer staging";
-static const MapHopApi_t hopService = {FORGE_API_VERSION,
-                                       sizeof(MapHopApi_t),
+static const mapHopApi_t hopService = {FORGE_API_VERSION,
+                                       sizeof(mapHopApi_t),
                                        mapHopAvailable,
                                        reloadMap,
                                        hopStatus,
@@ -303,7 +303,7 @@ static const char* mapInfo(void* context, int index)
 
 static int add(const char* label, int type, ModMenuCallback callback, void* context, int enabled)
 {
-	ModMenuItem_t item;
+	modMenuItem_t item;
 	int handle;
 	item.label = label;
 	item.type = type;
@@ -370,7 +370,7 @@ static void deactivate(void)
 	mapScanRelease();
 }
 
-int moduleInit(const ModuleApi_t* api)
+int moduleInit(const moduleApi_t* api)
 {
 	if (api->version < UYA_API_VERSION || api->size < sizeof(*api))
 		return -1;
@@ -394,7 +394,7 @@ int moduleInit(const ModuleApi_t* api)
 
 void moduleUpdate(void)
 {
-	const ModMenuApi_t* found;
+	const modMenuApi_t* found;
 	int context, scanResult = 0, scanAllowed;
 	mapHopTick();
 	if (mapLoading())

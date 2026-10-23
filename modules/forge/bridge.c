@@ -3,13 +3,13 @@
 
 /* Part of Forge's BSS and module memory size, not a loader reservation.
  * PINE follows the module discovery header and exports table; see PINE.md. */
-volatile ForgeMailbox_t forgeMailbox __attribute__((aligned(16)));
-const ForgeExports_t moduleExports UYA_MODULE_EXPORTS = {FORGE_EXPORTS_MAGIC, 1, sizeof(ForgeExports_t), &forgeMailbox};
+volatile forgeMailbox_t forgeMailbox __attribute__((aligned(16)));
+const forgeExports_t moduleExports UYA_MODULE_EXPORTS = {FORGE_EXPORTS_MAGIC, 1, sizeof(forgeExports_t), &forgeMailbox};
 static u32 seen, running;
 
 void forgeBridgeDisable(void)
 {
-	volatile ForgeMailbox_t* b = FORGE_MAILBOX;
+	volatile forgeMailbox_t* b = FORGE_MAILBOX;
 	b->available = b->capabilities = b->context = 0;
 	if (running) {
 		b->state = FORGE_FAILED;
@@ -22,7 +22,7 @@ void forgeBridgeDisable(void)
 
 void forgeBridgeInit(void)
 {
-	volatile ForgeMailbox_t* b = FORGE_MAILBOX;
+	volatile forgeMailbox_t* b = FORGE_MAILBOX;
 	u32 i;
 	for (i = 0; i < sizeof(*b) / 4; ++i)
 		((volatile u32*)b)[i] = 0;
@@ -32,9 +32,9 @@ void forgeBridgeInit(void)
 	b->magic = FORGE_MAILBOX_MAGIC;
 }
 
-void forgeBridgeTick(const MapHopApi_t* p)
+void forgeBridgeTick(const mapHopApi_t* p)
 {
-	volatile ForgeMailbox_t* b = FORGE_MAILBOX;
+	volatile forgeMailbox_t* b = FORGE_MAILBOX;
 	u32 id, command, i;
 	char name[FORGE_FILENAME_SIZE];
 	int error;

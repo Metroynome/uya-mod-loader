@@ -56,7 +56,7 @@ all requests completed with state 3/error 0 and the expected level IDs.
 Live reads confirmed the original jr ra / stack restore at 12C994 during
 campaign boot and 139E94 in multiplayer. The user confirmed gameplay, HUD,
 and in-game Mod Menu drawing/navigation.
-NTSC-U/NTSC-J live testing and full Horizon coexistence remain unverified.
+NTSC-J live testing remains unverified. Later NTSC-U boot and online results are recorded below.
 
 ## Gameplay mode versus resident layout
 
@@ -111,7 +111,7 @@ and modules/forge/PINE.md for the complete mailbox pointer chain.
 
 ### Expanded EE RAM
 
-The loader calls BIOS syscall 0x7F (`GetMemorySize`) once at initialization.
+The loader calls BIOS syscall 0x7f (`GetMemorySize`) once at initialization.
 PCSX2 overrides this syscall when extra RAM is enabled. A result of 08000000
 selects the module pool 02000000-08000000 (exclusive end); otherwise the normal
 aligned-loader-end pool is used. No speculative memory writes are used to
@@ -218,3 +218,13 @@ pointer A35C0, while the new PAL callback slot 22F1A4 was zero. Execution
 stopped at PC 1 with v1=A35C0 and v0=1, consistent with interpreting the module
 table as callbacks. Online coexistence remains unverified until the deployed
 patch and its separately linked networking consumers use the new callback slot.
+
+## NTSC-U online follow-up (2026-10-23)
+
+After restarting MCP PCSX2 in portable mode with current matching PNACHs and
+modules, live reads confirmed the campaign entry hook and all eight module
+placements. The user then tested online and reported that Horizon's patch loaded
+without crashing. No new debugger capture of the downloaded patch or callback
+slot was taken during that successful test. This confirms patch loading for
+that setup, not every online game mode or module combination; the earlier PAL
+stale-callback finding remains relevant to older patch builds.

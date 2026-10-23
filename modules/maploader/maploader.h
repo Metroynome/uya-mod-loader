@@ -4,17 +4,17 @@
 #include "module.h"
 #include "include/forge.h"
 
-#define MAP_LIMIT 96
+#define MAP_LIMIT (96)
 
-typedef struct MapRecord {
+typedef struct mapRecord {
 	char filename[FORGE_FILENAME_SIZE], name[32];
 	u32 version, base, wad, world, sound, radar;
-} MapRecord_t;
+} mapRecord_t;
 
-typedef char MapRecordSize[(sizeof(MapRecord_t) == 188) ? 1 : -1];
+typedef char MapRecordSize[(sizeof(mapRecord_t) == 188) ? 1 : -1];
 
-extern const ModuleApi_t* mapApi;
-extern MapRecord_t* mapRecords;
+extern const moduleApi_t* mapApi;
+extern mapRecord_t* mapRecords;
 extern int mapCount, mapSelection;
 extern int mapCatalogReady;
 extern u32 mapCatalogRevision;
@@ -22,11 +22,11 @@ extern int mapAllowOnline;
 extern int mapHopSawLoading, mapHopResult;
 extern u32 mapSceneRequest;
 
-void mapCopyRecord(MapRecord_t* to, const MapRecord_t* from);
-int mapReadInfo(const MapRecord_t* map, char* author, char* description);
+void mapCopyRecord(mapRecord_t* to, const mapRecord_t* from);
+int mapReadInfo(const mapRecord_t* map, char* author, char* description);
 int mapReadExact(int fd, void* dest, u32 size);
-int mapOpenPart(const MapRecord_t* map, const char* extension);
-int mapReadPart(const MapRecord_t* map, const char* extension, void* dest, u32 size);
+int mapOpenPart(const mapRecord_t* map, const char* extension);
+int mapReadPart(const mapRecord_t* map, const char* extension, void* dest, u32 size);
 void* memset(void* dest, int value, u32 size);
 void* mapAlloc(u32 size);
 void mapFree(void* p);
@@ -41,7 +41,7 @@ void mapScanRelease(void);
 int mapScanActive(void);
 int mapScanCurrent(void);
 int mapScanTotal(void);
-int mapValidate(const MapRecord_t* map);
+int mapValidate(const mapRecord_t* map);
 int mapOnlineDisabled(void);
 int mapMultiplayerReady(void);
 /* 0 = unavailable, 1 = local staging, 2 = online staging. */

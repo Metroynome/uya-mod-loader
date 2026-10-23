@@ -8,5 +8,5 @@ u32 platformMode(u32 layout);
 u32 platformContext(u32 mode);
 u32 platformMemorySize(void);
 int platformReady(u32 mode);
-void platformApi(ModuleApi_t* api, u32 mode);
+void platformApi(moduleApi_t* api, u32 mode);
 #endif

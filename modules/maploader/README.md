@@ -111,10 +111,10 @@ and restoring owned hooks. It reactivates on return to Local Play.
 
 Future online use requires both an online-enabled `modules.txt` entry and
 `uya/maploader-online.txt` starting with `1` (default `0`). This does not add
-host/client synchronization or guarantee Horizon coexistence. The tested
-Horizon download still used the loader's `0xA0000` address as a network callback
-slot and crashed; updated networking consumers are needed before retesting.
-See [ADDRESSES.md](../../ADDRESSES.md).
+host/client synchronization or qualify Map Loader for online use. The user
+confirmed Horizon patch loading without a crash on the current NTSC-U setup,
+with offline modules disabled. An older PAL patch conflicted with the loader's
+`0xa0000` discovery header. See [ADDRESSES.md](../../ADDRESSES.md).
 
 ## Verification and source
 

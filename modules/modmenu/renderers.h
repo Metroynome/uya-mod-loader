@@ -1,10 +1,10 @@
 /* Verified against the RAC Levels extraction; do not guess overlay offsets. */
-typedef struct MenuRenderer {
+typedef struct menuRenderer {
 	int level;
 	u32 print, box, boxHash, context, contextHash;
-} MenuRenderer_t;
+} menuRenderer_t;
 #if UYA_MODULE_REGION == 1
-static const MenuRenderer_t renderers[] = {
+static const menuRenderer_t renderers[] = {
     {-1, 0x38eb10, 0x3eded8, 0x7a30b7f7U, 0x1d97a8, 0x173e12ccU},
     {1, 0x40dbe0, 0x519598, 0x5e460aabU, 0x1dc1f8, 0x2cec303eU},
     {2, 0x3e6348, 0x4e9778, 0xe504d713U, 0x1dc0a8, 0x7f7ff76cU},
@@ -59,7 +59,7 @@ static const MenuRenderer_t renderers[] = {
     {55, 0x462330, 0x4e9ce8, 0xc6374bdfU, 0x245e88, 0x3b808e5dU},
 };
 #elif UYA_MODULE_REGION == 2
-static const MenuRenderer_t renderers[] = {
+static const menuRenderer_t renderers[] = {
     {-1, 0x38ebc8, 0x3ee038, 0xe2d28fd7U, 0x1d9768, 0x19af0a50U},
     {1, 0x410208, 0x51d588, 0x1fd6a9bbU, 0x1dc1b8, 0x2528df6eU},
     {2, 0x3e8e60, 0x4edbc0, 0x495d57cfU, 0x1dc068, 0xa64768f3U},
@@ -114,7 +114,7 @@ static const MenuRenderer_t renderers[] = {
     {55, 0x463558, 0x4ec428, 0x7e5ca9fbU, 0x245d08, 0xea0cd845U},
 };
 #elif UYA_MODULE_REGION == 3
-static const MenuRenderer_t renderers[] = {
+static const menuRenderer_t renderers[] = {
     {-1, 0x398dd8, 0x3f83d0, 0xa186e61bU, 0x1e2aa8, 0x389ac6b0U},
     {1, 0x417fe8, 0x5244e8, 0x5149c3f3U, 0x1e5578, 0x66e02d99U},
     {2, 0x3f0810, 0x4f4760, 0x11212ffU, 0x1e5428, 0xfbcfb05eU},

@@ -19,28 +19,28 @@ Offsets are relative to the discovered mailbox address. The C declaration is
 
 ### Discovery through the loader and module headers
 
-PINE follows **0xA0000 -> module table -> Forge -> exports -> mailbox**.
+PINE follows **0xa0000 -> module table -> Forge -> exports -> mailbox**.
 No memory scan is needed. All pointers are 32-bit little-endian EE addresses.
 
-1. At `0x000a0000`, verify loader magic `0x444C5955` at +`0x04`, discovery
-   version `1` at +`0x08`, and size `48` at +`0x0C`. Read the module-table
+1. At `0x000a0000`, verify loader magic `0x444c5955` at +`0x04`, discovery
+   version `1` at +`0x08`, and size `48` at +`0x0c`. Read the module-table
    pointer from +`0x00`. Its location is linker-selected, not fixed at AF800.
-2. Read the table header: magic `0x554D5442`, version `1`, count (at most 8),
+2. Read the table header: magic `0x554d5442`, version `1`, count (at most 8),
    and entrySize `124`. Wait if the loader has not initialized it yet.
    Entries begin at table + `0x10`. Find `forge.ntscu.bin` or `forge.pal.bin` in the 112-byte
    NUL-terminated name. Address, size and modes are at entry +`0x70`, +`0x74`,
    and +`0x78`. Check the table is inside the loader/module A0000-100000 range
    and the full module range is inside EE memory before following it.
    With PCSX2's 128 MiB RAM enabled, modules can be in
-   `0x02000000-0x07FFFFFF`; the loader/table remain in low memory.
+   `0x02000000-0x07ffffff`; the loader/table remain in low memory.
    Do not reject Forge solely because its address is above the normal 32 MiB.
-3. At Forge's base, verify module magic `0x444D5955` (`UYMD`) at +`0x04`,
-   version `1` at +`0x08`, and size `16` at +`0x0C`. Read the exports
+3. At Forge's base, verify module magic `0x444d5955` (`UYMD`) at +`0x04`,
+   version `1` at +`0x08`, and size `16` at +`0x0c`. Read the exports
    pointer from +`0x00`. Require a nonzero, four-byte-aligned pointer and a
    complete 16-byte exports structure inside Forge's address/size range.
 4. Forge exports contain magic `0x31584746` (`FGX1`) at +`0x00`, version
    `1` at +`0x04`, size `16` at +`0x08`, and the mailbox pointer at
-   +`0x0C`. The C declaration is `ForgeExports_t` in `include/forge.h`.
+   +`0x0c`. The C declaration is `forgeExports_t` in `include/forge.h`.
 5. Require a 16-byte-aligned mailbox entirely within Forge's address/size range.
    Check mailbox magic `0x32475246` (`FRG2`), 16-bit version `2`, and 16-bit size `168`.
    Re-read discovery pointers and the table entry to detect a restart during
@@ -73,20 +73,20 @@ The mailbox is 168 bytes (was 172) while accepting 128 filename characters.
 | 0x04 | 2 | version | Game: 2 |
 | 0x06 | 2 | size | Game: 168 |
 | 0x08 | 4 | heartbeat | Game: advances on Forge updates |
-| 0x0C | 4 | requestId | **Host: write LAST**, nonzero |
+| 0x0c | 4 | requestId | **Host: write LAST**, nonzero |
 | 0x10 | 4 | acceptedId | Game: most recently accepted request |
 | 0x14 | 4 | completedId | Game: most recently completed request |
 | 0x18 | 4 | rejectedId | Game: most recently rejected request |
-| 0x1C | 1 | available | Game: compatible Map Loader available |
-| 0x1D | 1 | context | Game: 0 unavailable, 1 staging, 2 game |
-| 0x1E | 1 | capabilities | Game: bit `(1 << command)` |
-| 0x1F | 1 | command | Host: command number |
+| 0x1c | 1 | available | Game: compatible Map Loader available |
+| 0x1d | 1 | context | Game: 0 unavailable, 1 staging, 2 game |
+| 0x1e | 1 | capabilities | Game: bit `(1 << command)` |
+| 0x1f | 1 | command | Host: command number |
 | 0x20 | 1 | state | Game: accepted operation state |
 | 0x21 | 1 | error | Game: accepted operation error |
 | 0x22 | 1 | rejectError | Game: rejected operation error |
 | 0x23 | 1 | reserved | Zero; do not write |
 | 0x24 | 129 | filename | Host: up to 128 ASCII characters plus NUL |
-| 0xA5 | 3 | padding | Zero; do not write |
+| 0xa5 | 3 | padding | Zero; do not write |
 
 Write `command` as **one byte**, not a 32-bit word: adjacent bytes belong to the
 game. Write filename separately, then the aligned 32-bit request ID last.
@@ -110,7 +110,7 @@ and reports completion only when gameplay is ready. It preserves the game's
 normal roster, settings, overlay selection and HUD initialization. The callback
 is signature-checked; unavailable code or invalid selected map files reject the
 request. Leaving staging before execution cancels it. It cannot start online games.
-Staging capabilities are now `0x7C`; in-game capabilities are `0x5E`.
+Staging capabilities are now `0x7c`; in-game capabilities are `0x5e`.
 Older builds without bit `(1 << 5)` do not implement Start Game.
 
 Command 6 (`FORGE_SELECT_RETAIL`) uses the existing filename field as a

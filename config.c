@@ -44,7 +44,7 @@ static char* append(char* p, const char* s)
 	return p;
 }
 
-static int prepare(const char* mod, const ModuleConfigField_t* f, int n, char* path, int saving)
+static int prepare(const char* mod, const moduleConfigField_t* f, int n, char* path, int saving)
 {
 	int i, j;
 	char* p;
@@ -112,7 +112,7 @@ static int integer(const char* s, int* value)
 	return 1;
 }
 
-static int parse(char* text, const ModuleConfigField_t* f, int n)
+static int parse(char* text, const moduleConfigField_t* f, int n)
 {
 	int values[UYA_CONFIG_MAX_FIELDS], i;
 	u32 seen = 0;
@@ -158,7 +158,7 @@ static int parse(char* text, const ModuleConfigField_t* f, int n)
 	return UYA_CONFIG_OK;
 }
 
-int moduleConfigLoad(const char* mod, const ModuleConfigField_t* f, int n)
+int moduleConfigLoad(const char* mod, const moduleConfigField_t* f, int n)
 {
 	char path[96], text[2048], extra;
 	int fd, got, size = 0, result = UYA_CONFIG_IO, i;
@@ -209,7 +209,7 @@ static int configWrite(int fd, const void* data, int size)
 }
 #endif
 
-int moduleConfigSave(const char* mod, const ModuleConfigField_t* f, int n)
+int moduleConfigSave(const char* mod, const moduleConfigField_t* f, int n)
 {
 	char path[96], text[2048], digits[11], *p;
 	u32 v;

@@ -1,7 +1,7 @@
 #include "include/modmenu.h"
 
-static const ModuleApi_t* loader;
-static const ModMenuApi_t* menu;
+static const moduleApi_t* loader;
+static const modMenuApi_t* menu;
 static int shown, ownsPopup;
 
 static int drawWarning(u32 pressed)
@@ -32,7 +32,7 @@ static void deactivate(void)
 	menu = 0;
 }
 
-int moduleInit(const ModuleApi_t* api)
+int moduleInit(const moduleApi_t* api)
 {
 	if (api->version < UYA_API_VERSION || api->size < sizeof(*api))
 		return -1;

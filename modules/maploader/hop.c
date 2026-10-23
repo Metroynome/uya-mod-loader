@@ -4,29 +4,29 @@
 #include "include/forge.h"
 
 #if UYA_MODULE_REGION == 2
-#define LEVEL_ID          0x1f83a8
-#define GAME_ACTIVE       0x241a50
-#define SCENE_READY       0x245848
-#define SETTINGS          0x241640
-#define NET_PLAYERS       0x22f3d0
-#define PLAYER_COUNT      0x241644
-#define STAGING_MENU      0x1c5c0c0
-#define STAGING_VTABLE    0x47dda0
-#define START_GAME        0x6af070
-#define START_GAME_HASH   0x931aef7fU
-#define HUD_LOAD_SETTINGS 0x8c631120
+#define LEVEL_ID          (0x1f83a8)
+#define GAME_ACTIVE       (0x241a50)
+#define SCENE_READY       (0x245848)
+#define SETTINGS          (0x241640)
+#define NET_PLAYERS       (0x22f3d0)
+#define PLAYER_COUNT      (0x241644)
+#define STAGING_MENU      (0x1c5c0c0)
+#define STAGING_VTABLE    (0x47dda0)
+#define START_GAME        (0x6af070)
+#define START_GAME_HASH   (0x931aef7f)
+#define HUD_LOAD_SETTINGS (0x8c631120)
 #else
-#define LEVEL_ID          0x1f8528
-#define GAME_ACTIVE       0x241bd0
-#define SCENE_READY       0x2459c8
-#define SETTINGS          0x2417c0
-#define NET_PLAYERS       0x22f550
-#define PLAYER_COUNT      0x2417c4
-#define STAGING_MENU      0x1c5c0c0
-#define STAGING_VTABLE    0x47de60
-#define START_GAME        0x6ac720
-#define START_GAME_HASH   0xeca152d0U
-#define HUD_LOAD_SETTINGS 0x8c6312a0
+#define LEVEL_ID          (0x1f8528)
+#define GAME_ACTIVE       (0x241bd0)
+#define SCENE_READY       (0x2459c8)
+#define SETTINGS          (0x2417c0)
+#define NET_PLAYERS       (0x22f550)
+#define PLAYER_COUNT      (0x2417c4)
+#define STAGING_MENU      (0x1c5c0c0)
+#define STAGING_VTABLE    (0x47de60)
+#define START_GAME        (0x6ac720)
+#define START_GAME_HASH   (0xeca152d0)
+#define HUD_LOAD_SETTINGS (0x8c6312a0)
 #endif
 
 #define WORD(a) (*(volatile u32*)(a))
@@ -85,7 +85,7 @@ static int restoreHud(u32 level)
 
 int mapForgeActive(void)
 {
-	const ForgeApi_t* p = mapApi->findService(FORGE_SERVICE_ID, FORGE_API_VERSION);
+	const forgeApi_t* p = mapApi->findService(FORGE_SERVICE_ID, FORGE_API_VERSION);
 	return p && p->version == FORGE_API_VERSION && p->size >= sizeof(*p) && p->active();
 }
 

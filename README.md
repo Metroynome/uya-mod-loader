@@ -205,7 +205,7 @@ Mods need [module.h](module.h); Mod Menu is optional.
 
 ### Module discovery and exports
 
-The fixed loader header at `0xA0000` points to a linker-placed module table.
+The fixed loader header at `0xa0000` points to a linker-placed module table.
 Use `UYA_LOADER_DISCOVERY` and `UYA_MODULE_TABLE` from `module.h`; validate their
 magic, version, sizes, and count before following pointers. Entries describe
 filenames, addresses, allocated sizes, and modes. Do not modify the table.
@@ -227,9 +227,9 @@ aligned, follow `modules.txt` order, and last until restart.
 
 | Range (end exclusive) | Use |
 | --- | --- |
-| `0x98000–0x9E000` | Optional exception handler and workspace |
-| `0xA0000–0xA0030` | Fixed loader discovery header |
-| `0xA0030–_loader_end` | Loader code, data, module table, and state |
+| `0x98000–0x9e000` | Optional exception handler and workspace |
+| `0xa0000–0xa0030` | Fixed loader discovery header |
+| `0xa0030–_loader_end` | Loader code, data, module table, and state |
 | Aligned `_loader_end` to `0x100000` | Normal module pool |
 | `0x02000000–0x08000000` | Expanded-RAM module pool |
 
@@ -261,11 +261,11 @@ Live NTSC-U/PAL coverage and remaining limitations are recorded in
 [ADDRESSES.md](ADDRESSES.md) and the module guides.
 
 Default modules deactivate at the post-DNAS profile screen and reactivate on
-return to Local Play. The loader now uses a separate hook from Horizon, but
-**full online coexistence is not verified**. The tested downloaded Horizon patch
-still used `0xA0000` for its network callback pointer and crashed against the
-loader's discovery header. Updated patch/downloader/game-mode binaries using
-the new callback slot are required before retesting. Avoid other cheats that
+return to Local Play. The loader uses a separate hook from Horizon. The user
+confirmed online patch loading without a crash on the current NTSC-U setup.
+Older Horizon builds that use `0xa0000` as their network callback slot conflict
+with the loader; this was observed in an earlier PAL test. This result does not
+qualify every online game mode or module combination. Avoid other cheats that
 occupy the same memory or hook locations.
 
 ## Releases

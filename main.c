@@ -11,13 +11,13 @@
 #include "strings.h"
 
 #ifndef MODULE_START
-#define MODULE_START (((u32)_loader_end + 63U) & ~63U)
+#define MODULE_START (((u32)_loader_end + 63) & ~63)
 #endif
-#define MODULE_END      0x00100000U
-#define EXTRA_RAM_START 0x02000000U
-#define EXTRA_RAM_END   0x08000000U
-#define MODULE_LIMIT    UYA_MODULE_LIMIT
-#define LOADER_MAGIC    0x554d4c40U
+#define MODULE_END      (0x00100000)
+#define EXTRA_RAM_START (0x02000000)
+#define EXTRA_RAM_END   (0x08000000)
+#define MODULE_LIMIT    (UYA_MODULE_LIMIT)
+#define LOADER_MAGIC    (0x554d4c40)
 #ifndef STATE
 #define STATE (&loaderState)
 #endif
@@ -30,41 +30,41 @@
 #define fileRead  loaderApi.read
 #define fileClose loaderApi.close
 /* Named list values carry a tag so legacy numeric modes retain their ABI. */
-#define NAMED_CONTEXTS 0x100U
+#define NAMED_CONTEXTS (0x100)
 
-typedef struct LoadedModule {
+typedef struct loadedModule {
 	u32 address, size;
 	ModuleUpdate update;
 	ModuleInit init;
 	u32 modes, initialized, contexts, policy, active;
 	ModuleLifecycle activate, deactivate;
-} LoadedModule_t;
+} loadedModule_t;
 
-typedef struct ModuleService {
+typedef struct moduleService {
 	u32 id, version, owner;
 	const void* table;
-} ModuleService_t;
+} moduleService_t;
 
-typedef struct LoaderState {
+typedef struct loaderState {
 	u32 magic, busy, count, mode, listLoaded, retryTicks, exceptionAttempted, exceptionReserved;
-	LoadedModule_t modules[MODULE_LIMIT];
-	ModuleApi_t api;
+	loadedModule_t modules[MODULE_LIMIT];
+	moduleApi_t api;
 	int configBusy;
 	u32 currentModule; /* index + 1; zero outside callbacks */
-	ModuleService_t services[8];
+	moduleService_t services[8];
 	u32 poolStart, poolEnd;
-} LoaderState_t;
+} loaderState_t;
 
 extern u8 _loader_end[];
 extern void* GetSyscallHandler(int syscall);
 
 #ifdef _EE
 /* Linker-placed after the payload, never overwritten by recurring PNACH writes. */
-ModuleTable_t moduleTable __attribute__((section(".loader.state")));
-static LoaderState_t loaderState __attribute__((section(".loader.state")));
+moduleTable_t moduleTable __attribute__((section(".loader.state")));
+static loaderState_t loaderState __attribute__((section(".loader.state")));
 #endif
 
-const ModuleApi_t* moduleConfigApi(void)
+const moduleApi_t* moduleConfigApi(void)
 {
 	return &STATE->api;
 }
@@ -97,14 +97,14 @@ static u32 modeContexts(u32 mode)
 	return (mode & 1 ? UYA_CONTEXT_CAMPAIGN : 0) | (mode & 2 ? (UYA_CONTEXT_LOCAL | UYA_CONTEXT_ONLINE) : 0);
 }
 
-static int moduleAllowed(const LoadedModule_t* m)
+static int moduleAllowed(const loadedModule_t* m)
 {
 	return (m->modes & STATE->mode) && (m->contexts & m->policy & loaderApi.context);
 }
 
 static int setLifecycle(ModuleLifecycle activate, ModuleLifecycle deactivate)
 {
-	LoadedModule_t* m;
+	loadedModule_t* m;
 	if (!STATE->currentModule)
 		return -1;
 	m = &STATE->modules[STATE->currentModule - 1];
@@ -129,7 +129,7 @@ static int publishService(u32 id, u32 version, const void* table)
 	if (!id || !version || !table || !STATE->currentModule)
 		return -1;
 	for (i = 0; i < 8; ++i) {
-		ModuleService_t* s = &STATE->services[i];
+		moduleService_t* s = &STATE->services[i];
 		if (s->id == id) {
 			if (s->owner != STATE->currentModule || s->version != version || s->table != table)
 				return -1;
@@ -137,7 +137,7 @@ static int publishService(u32 id, u32 version, const void* table)
 		}
 	}
 	for (i = 0; i < 8; ++i) {
-		ModuleService_t* s = &STATE->services[i];
+		moduleService_t* s = &STATE->services[i];
 		if (!s->id) {
 			s->id = id;
 			s->version = version;
@@ -153,7 +153,7 @@ static const void* findService(u32 id, u32 version)
 {
 	u32 i;
 	for (i = 0; i < 8; ++i) {
-		ModuleService_t* s = &STATE->services[i];
+		moduleService_t* s = &STATE->services[i];
 		if (s->id == id && s->version == version && s->owner && moduleAllowed(&STATE->modules[s->owner - 1]))
 			return s->table;
 	}
@@ -251,7 +251,7 @@ static int validPath(const char* path)
 
 static int validEntry(u32 offset, u32 size)
 {
-	return offset == UYA_MODULE_NO_ENTRY || (!(offset & 3) && offset >= sizeof(ModuleDiscovery_t) && offset < size);
+	return offset == UYA_MODULE_NO_ENTRY || (!(offset & 3) && offset >= sizeof(moduleDiscovery_t) && offset < size);
 }
 
 /* A small monotonic allocator: successful loads retain their slots until restart.
@@ -269,23 +269,23 @@ static u32 nextModuleAddress(u32 size)
 	return address;
 }
 
-static int validHeader(const ModuleHeader_t* h)
+static int validHeader(const moduleHeader_t* h)
 {
 	u32 address = nextModuleAddress(h->memorySize);
 	return h->magic == UYA_MODULE_MAGIC && h->version == UYA_MODULE_VERSION &&
 	       (!h->region || h->region == UYA_MODULE_REGION) && h->address == 0x000f0000 && h->modes &&
-	       !(h->modes & ~3U) && h->imageSize >= sizeof(ModuleDiscovery_t) && !(h->imageSize & 3) &&
+	       !(h->modes & ~3U) && h->imageSize >= sizeof(moduleDiscovery_t) && !(h->imageSize & 3) &&
 	       h->imageSize <= h->memorySize && address < STATE->poolEnd && h->memorySize <= STATE->poolEnd - address &&
-	       h->relocationCount <= (h->imageSize - sizeof(ModuleDiscovery_t)) / 4 &&
+	       h->relocationCount <= (h->imageSize - sizeof(moduleDiscovery_t)) / 4 &&
 	       validEntry(h->initOffset, h->imageSize) && validEntry(h->updateOffset, h->imageSize);
 }
 
 /* The build preserves only references into the module. Game addresses stay
  * absolute. Read records incrementally so relocation metadata needs no heap. */
-static int relocateModule(int fd, const ModuleHeader_t* h, u32 address)
+static int relocateModule(int fd, const moduleHeader_t* h, u32 address)
 {
 	u32 i, previous = 0;
-	ModuleDiscovery_t* discovery = (void*)address;
+	moduleDiscovery_t* discovery = (void*)address;
 	u32 exports = discovery->exports;
 	if (discovery->magic != UYA_MODULE_DISCOVERY_MAGIC || discovery->version != UYA_DISCOVERY_VERSION ||
 	    discovery->size != sizeof(*discovery))
@@ -294,9 +294,9 @@ static int relocateModule(int fd, const ModuleHeader_t* h, u32 address)
 	    ((exports & 3) || exports < h->address + sizeof(*discovery) || exports - h->address > h->memorySize - 4))
 		return 0;
 	for (i = 0; i < h->relocationCount; ++i) {
-		ModuleRelocation_t r;
+		moduleRelocation_t r;
 		u32 *word, value;
-		if (!readExact(fd, &r, sizeof(r)) || (r.offset & 3) || r.offset < sizeof(ModuleDiscovery_t) ||
+		if (!readExact(fd, &r, sizeof(r)) || (r.offset & 3) || r.offset < sizeof(moduleDiscovery_t) ||
 		    r.offset >= h->imageSize || (i && r.offset <= previous))
 			return 0;
 		previous = r.offset;
@@ -390,8 +390,8 @@ static void loadModule(const char* name, u32 modes, char names[MODULE_LIMIT][112
 {
 	char path[128], filename[112];
 	u32 i;
-	ModuleHeader_t header;
-	LoadedModule_t* module;
+	moduleHeader_t header;
+	loadedModule_t* module;
 	int fd, valid;
 	u32 address;
 
@@ -607,7 +607,7 @@ void loaderTick(u32 layout)
 		memset(STATE, 0, sizeof(*STATE));
 		memset(MODULE_TABLE, 0, sizeof(*MODULE_TABLE));
 		MODULE_TABLE->version = 1;
-		MODULE_TABLE->entrySize = sizeof(ModuleInfo_t);
+		MODULE_TABLE->entrySize = sizeof(moduleInfo_t);
 		MODULE_TABLE->magic = UYA_MODULE_TABLE_MAGIC;
 		selectModulePool(platformMemorySize());
 		STATE->magic = LOADER_MAGIC;
@@ -649,7 +649,7 @@ void loaderTick(u32 layout)
 		--STATE->retryTicks;
 	/* Clean up all departing modules before any newly active module runs. */
 	for (i = STATE->count; i > 0; --i) {
-		LoadedModule_t* m = &STATE->modules[i - 1];
+		loadedModule_t* m = &STATE->modules[i - 1];
 		if (m->active && !moduleAllowed(m)) {
 			STATE->currentModule = i;
 			if (m->deactivate)
@@ -658,7 +658,7 @@ void loaderTick(u32 layout)
 		}
 	}
 	for (i = 0; i < STATE->count; ++i) {
-		LoadedModule_t* module = &STATE->modules[i];
+		loadedModule_t* module = &STATE->modules[i];
 		if (!moduleAllowed(module))
 			continue;
 		STATE->currentModule = i + 1;
@@ -670,7 +670,7 @@ void loaderTick(u32 layout)
 				u32 j;
 				for (j = 0; j < 8; ++j)
 					if (STATE->services[j].owner == i + 1)
-						memset(&STATE->services[j], 0, sizeof(ModuleService_t));
+						memset(&STATE->services[j], 0, sizeof(moduleService_t));
 				if (module->deactivate)
 					module->deactivate();
 				module->policy = 0;

@@ -12,26 +12,26 @@
 #define MENU_FLUSH(operation) ((void (*)(int))0x1264e0)(operation)
 #endif
 #if UYA_MODULE_REGION == 3
-#define BOOT_IDLE_CHECK 0x38b988
-#define BOOT_IDLE_TIMER 0x1de988
-#define BOOT_IDLE_LIMIT 0x28631c21
-#define BOOT_IDLE_STORE 0xaf828e1c
+#define BOOT_IDLE_CHECK (0x38b988)
+#define BOOT_IDLE_TIMER (0x1de988)
+#define BOOT_IDLE_LIMIT (0x28631c21)
+#define BOOT_IDLE_STORE (0xaf828e1c)
 #elif UYA_MODULE_REGION == 2
-#define BOOT_IDLE_CHECK 0x381734
-#define BOOT_IDLE_TIMER 0x1d5688
-#define BOOT_IDLE_LIMIT 0x28631771
-#define BOOT_IDLE_STORE 0xaf828dd8
+#define BOOT_IDLE_CHECK (0x381734)
+#define BOOT_IDLE_TIMER (0x1d5688)
+#define BOOT_IDLE_LIMIT (0x28631771)
+#define BOOT_IDLE_STORE (0xaf828dd8)
 #else
-#define BOOT_IDLE_CHECK 0x38175c
-#define BOOT_IDLE_TIMER 0x1d5688
-#define BOOT_IDLE_LIMIT 0x28631c21
-#define BOOT_IDLE_STORE 0xaf828dd8
+#define BOOT_IDLE_CHECK (0x38175c)
+#define BOOT_IDLE_TIMER (0x1d5688)
+#define BOOT_IDLE_LIMIT (0x28631c21)
+#define BOOT_IDLE_STORE (0xaf828dd8)
 #endif
 #define PAUSE_WORD(a) (*(volatile u32*)(a))
 #if UYA_MODULE_REGION == 3
 #define CAMPAIGN_SHIFT (-4)
 #else
-#define CAMPAIGN_SHIFT 0
+#define CAMPAIGN_SHIFT (0)
 #endif
 
 /* Campaign: intercept each fresh poll before retail code builds gameplay input. Keep a
@@ -39,7 +39,7 @@
  * The raw callback ABI is shared by librac3 and libuya's PAD structure. */
 typedef void (*RawPadCallback)(void*, u8*, int, void*);
 
-static const MenuRenderer_t* active;
+static const menuRenderer_t* active;
 static volatile u8* pad;
 static int levelId;
 static u32 inputHook, inputOriginal;
@@ -50,11 +50,11 @@ static u8 menuSample[32];
 /* Campaign has no Continue row. Preserve every retail option and append a
  * new row to private copies of its three main-menu table variants. */
 static u32 campaignTables[3][50], campaignSources[3];
-static const CampaignPause_t* campaignActive;
+static const campaignPause_t* campaignActive;
 static void (*campaignOpen)(void);
 
 /* Regional font differences are verified by the renderer-table generator. */
-static u32 rendererFont(const MenuRenderer_t* r)
+static u32 rendererFont(const menuRenderer_t* r)
 {
 #if UYA_MODULE_REGION == 3
 	return r->print - (r->level >= 39 ? 1720 : 1696);
@@ -63,7 +63,7 @@ static u32 rendererFont(const MenuRenderer_t* r)
 #endif
 }
 
-static u32 rendererFontHash(const MenuRenderer_t* r)
+static u32 rendererFontHash(const menuRenderer_t* r)
 {
 #if UYA_MODULE_REGION == 3
 	return r->level >= 39 ? 0x13484292U : 0xbe9688deU;
@@ -112,7 +112,7 @@ static u32 hash(const volatile u8* p, u32 size)
 int menuBackendReady(u32 mode)
 {
 	u32 i;
-	const MenuRenderer_t* r;
+	const menuRenderer_t* r;
 	active = 0;
 	if (mode == UYA_MODE_CAMPAIGN) {
 #if UYA_MODULE_REGION == 3
@@ -178,7 +178,7 @@ static volatile u8* captureLocalPlayers(u32 mode)
 	if (mode != UYA_MODE_MULTIPLAYER)
 		return 0;
 	for (i = 0; i < sizeof(menuPlayers) / sizeof(menuPlayers[0]); ++i) {
-		const MenuPlayers_t* p = &menuPlayers[i];
+		const menuPlayers_t* p = &menuPlayers[i];
 		const volatile u32* ref = (void*)p->reference;
 		if (p->level != levelId)
 			continue;
@@ -369,7 +369,7 @@ static void campaignMenuSelected(void)
 static void campaignPause(void (*openMenu)(void))
 {
 	static const u32 hi[3] = {0x78, 0xb8, 0xd4}, lo[3] = {0x80, 0xc0, 0xdc}, counts[3] = {9, 9, 8};
-	const CampaignPause_t* p = 0;
+	const campaignPause_t* p = 0;
 	u32 i, j, setup, installed = 1;
 	char* label;
 	if (!active || levelId < 0 || levelId >= 39)
@@ -452,7 +452,7 @@ void menuBackendPause(u32 mode, void (*openMenu)(void))
 	if (!active || mode != UYA_MODE_MULTIPLAYER)
 		return;
 	for (i = 0; i < sizeof(pauseEntries) / sizeof(pauseEntries[0]); ++i) {
-		const PauseEntry_t* p = &pauseEntries[i];
+		const pauseEntry_t* p = &pauseEntries[i];
 		char* label;
 		u32 jump = 0x08000000U | ((u32)openMenu >> 2);
 		volatile u32 *entry = (void*)p->entry, *tail = (void*)(p->callback + 0x54);
@@ -493,7 +493,7 @@ void menuBackendDeactivate(void)
 	menuBackendRelease();
 #if UYA_MODULE_REGION != 3
 	for (i = 0; i < sizeof(pauseEntries) / sizeof(pauseEntries[0]); ++i) {
-		const PauseEntry_t* p = &pauseEntries[i];
+		const pauseEntry_t* p = &pauseEntries[i];
 		u32 jump = 0x08000000U | ((u32)pauseOpen >> 2);
 		if (PAUSE_WORD(p->callback + 0x54) == jump && PAUSE_WORD(p->callback + 0x58) == 0x27bd0010 &&
 		    hash((void*)p->callback, 84) == p->callbackHash) {

@@ -7,9 +7,9 @@
 #include <string.h>
 #include <elf.h>
 
-typedef struct Record {
+typedef struct record {
 	u32 offset, type, value;
-} Record_t;
+} record_t;
 
 static void fail(const char* s)
 {
@@ -52,7 +52,7 @@ static void bounds(size_t offset, size_t length, size_t size)
 
 static int order(const void* a, const void* b)
 {
-	u32 x = ((const Record_t*)a)->offset, y = ((const Record_t*)b)->offset;
+	u32 x = ((const record_t*)a)->offset, y = ((const record_t*)b)->offset;
 	return x < y ? -1 : x > y;
 }
 
@@ -65,7 +65,7 @@ int main(int argc, char** argv)
 	u32 base, count = 0;
 	u32 i, j;
 	FILE* out;
-	Record_t* records;
+	record_t* records;
 	if (argc != 4)
 		fail("usage: relocate ELF FLAT OUTPUT");
 	elf = readFile(argv[1], &es);

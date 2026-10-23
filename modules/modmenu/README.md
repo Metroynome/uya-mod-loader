@@ -25,8 +25,8 @@ continue without Mod Menu when the service is unavailable.
 ```c
 #include "include/modmenu.h"
 
-static const ModuleApi_t* loader;
-static const ModMenuApi_t* registeredMenu;
+static const moduleApi_t* loader;
+static const modMenuApi_t* registeredMenu;
 static int tab, enabled;
 
 static void deactivate(void)
@@ -37,7 +37,7 @@ static void deactivate(void)
 	tab = 0;
 }
 
-int moduleInit(const ModuleApi_t* api)
+int moduleInit(const moduleApi_t* api)
 {
 	if (api->version < UYA_API_VERSION || api->size < sizeof(*api))
 		return -1;
@@ -47,9 +47,9 @@ int moduleInit(const ModuleApi_t* api)
 
 void moduleUpdate(void)
 {
-	const ModMenuApi_t* menu;
+	const modMenuApi_t* menu;
 	int handle;
-	ModMenuItem_t toggle = {"Enable feature", MODMENU_TOGGLE, &enabled, 0, 0, 0, 0, 0};
+	modMenuItem_t toggle = {"Enable feature", MODMENU_TOGGLE, &enabled, 0, 0, 0, 0, 0};
 
 	if (tab > 0)
 		return;
@@ -166,7 +166,7 @@ must clear its callback with `setModal(NULL)` during deactivation. The callback
 is retained, not copied. See [bios-warning](../bios-warning/main.c) for an example.
 
 Persistence belongs to the loader and works without a menu. New mods should use
-`ModuleConfigField_t` and loader `loadConfig` / `saveConfig` directly; see
+`moduleConfigField_t` and loader `loadConfig` / `saveConfig` directly; see
 [CONFIG.md](../../CONFIG.md).
 
 ## Implementation and verification
