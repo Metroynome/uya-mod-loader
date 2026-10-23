@@ -144,8 +144,10 @@ unused code correctly in one pass. Neither utility chooses module addresses.
 
 `moduleInit(const ModuleApi *)` runs once, the first time its mode is active.
 A negative result disables its update callback while retaining its memory.
-`moduleUpdate(void)` runs on subsequent matching return hooks, including the first
-one after initialization. Hooks can run more than once per video frame. Check
+`moduleUpdate(void)` runs after subsequent matching sync calls return, including the first
+one after initialization. Entry wrappers leave Horizon's return hook untouched.
+Callbacks can run more than once per video frame. Fully restart after updating
+from the old return-hook build to clear its old jump. Check
 level/player readiness before using game APIs; do not retain pointers into a
 previous level. Module BSS is zeroed at load time and persists across mode changes.
 The supplied API pointer remains valid and is updated when the mode changes.

@@ -1,12 +1,14 @@
-
-// Conditional campaign/multiplayer hooks; jump values come from the linked ELF.
-patch=1,EE,E0040000,extended,0012C990
-patch=1,EE,E003DFB0,extended,0012C992
-patch=1,EE,E0020020,extended,0012C998
-patch=1,EE,E00127BD,extended,0012C99A
-patch=1,EE,2012C994,extended,@CAMPAIGN@
-patch=1,EE,E0040000,extended,00139E90
-patch=1,EE,E003DFB0,extended,00139E92
-patch=1,EE,E0020020,extended,00139E98
-patch=1,EE,E00127BD,extended,00139E9A
-patch=1,EE,20139E94,extended,@MULTIPLAYER@
+// Sync entry wrapper; preserve the separate Horizon return hook.
+// Check untouched sd ra / jal instructions before writing J / NOP.
+patch=1,EE,E0050010,extended,0012C910
+patch=1,EE,E004FFBF,extended,0012C912
+patch=1,EE,E003B01E,extended,0012C914
+patch=1,EE,E0020C04,extended,0012C916
+patch=1,EE,2012C908,extended,@CAMPAIGN@
+patch=1,EE,2012C90C,extended,00000000
+patch=1,EE,E0050010,extended,00139E10
+patch=1,EE,E004FFBF,extended,00139E12
+patch=1,EE,E003E55E,extended,00139E14
+patch=1,EE,E0020C04,extended,00139E16
+patch=1,EE,20139E08,extended,@MULTIPLAYER@
+patch=1,EE,20139E0C,extended,00000000

@@ -107,6 +107,7 @@ static const unsigned int localRadarHooks[6] = {0x4a41b4, 0x4a620c, 0x49bb24, 0x
 int mapAllowOnline;
 unsigned int mapSceneRequest;
 static unsigned int wadReader = WAD_READ, soundInit = SOUND_INIT, soundCore = SOUND_CORE;
+static unsigned int nameHook = NAME_HOOK, nameTable = NAME_TABLE;
 static MapRecord active;
 static int armed, busy, failed, soundSent;
 static void* soundBuffer;
@@ -135,7 +136,7 @@ static int hookedName(void)
 	if (!mapOnlineDisabled() && level >= 40 && level <= 59) {
 		unsigned int base = 40 + (level - 40) % 10;
 		const char* name = mapRetailName(base);
-		char* dest = (char*)(NAME_TABLE + (base - 40) * 32);
+		char* dest = (char*)(nameTable + (base - 40) * 32);
 		if (mapSelection >= 0 && mapSelection < mapCount && base == mapRecords[mapSelection].base)
 			name = mapRecords[mapSelection].name;
 		for (i = 0; i < 31 && name[i]; ++i)
@@ -499,6 +500,10 @@ static void configureHooks(void)
 	for (i = 0; i < 6; ++i)
 		if (WORD(a[i]) != o[i] && WORD(a[i]) != JAL(hooks[i].replacement))
 			return;
+	/* The level ID changes before the old overlay finishes drawing its loading
+	 * screen. Keep its name table until the new overlay's code is present. */
+	nameHook = row[5];
+	nameTable = row[6];
 	for (i = 0; i < 6; ++i) {
 		hooks[i].address = a[i];
 		hooks[i].original = o[i];
@@ -551,8 +556,8 @@ void mapDisableHooks(void)
 			WORD(hooks[i].address) = hooks[i].original;
 			changed = 1;
 		}
-	if (WORD(NAME_HOOK) == (0x08000000U | ((unsigned int)hookedName >> 2)) && WORD(NAME_HOOK + 4) == 0x27bd0050) {
-		WORD(NAME_HOOK) = 0x03e00008;
+	if (WORD(nameHook) == (0x08000000U | ((unsigned int)hookedName >> 2)) && WORD(nameHook + 4) == 0x27bd0050) {
+		WORD(nameHook) = 0x03e00008;
 		changed = 1;
 	}
 	level = WORD(LEVEL_ID);
@@ -585,9 +590,9 @@ void mapInstallHooks(void)
 	if (WORD(LEVEL_ID) != 39)
 		savedSettings = 0;
 	/* Tail-hook the transition name builder, preserving its stack delay slot. */
-	if (WORD(NAME_HOOK) == 0x03e00008 && WORD(NAME_HOOK + 4) == 0x27bd0050 && WORD(NAME_HOOK - 4) == 0xdfbf0048 &&
-	    WORD(NAME_HOOK - 8) == 0xdfbe0040) {
-		WORD(NAME_HOOK) = 0x08000000U | ((unsigned int)hookedName >> 2);
+	if (WORD(nameHook) == 0x03e00008 && WORD(nameHook + 4) == 0x27bd0050 && WORD(nameHook - 4) == 0xdfbf0048 &&
+	    WORD(nameHook - 8) == 0xdfbe0040) {
+		WORD(nameHook) = 0x08000000U | ((unsigned int)hookedName >> 2);
 		changed = 1;
 	}
 	/* Install the loading group atomically: never combine our loader with a

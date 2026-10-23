@@ -594,7 +594,7 @@ static int loadModuleList(void)
 	return 1;
 }
 
-/* Called at the template/Horizon return hook, with the stack restored.
+/* Called after the original sync function returns through entry.S.
  * entry.S preserves its return registers. The busy flag prevents recursive
  * entry while file I/O or a module itself waits for the game/IOP.
  */

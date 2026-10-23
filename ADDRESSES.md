@@ -10,7 +10,8 @@ librac3's symbols for multiplayer or libuya's symbols for campaign.
 | sceClose | 0x001236c0 | 0x0012acc8 |
 | sceRead | 0x00123840 | 0x0012b080 |
 | FlushCache | 0x0011f0a0 | 0x001264e0 |
-| template / Horizon return hook | 0x0012c994 | 0x00139e94 |
+| Loader sync entry hook | 0x0012c908 | 0x00139e08 |
+| Original return / Horizon hook (untouched) | 0x0012c994 | 0x00139e94 |
 
 Campaign sources: `boot/core1/rac3.boot.{ntscu,pal}.v100.retail.core.0001.bin`
 and `rac3.boot.ntscj.v103.retail.core.0001.bin` in the supplied RAC3 extraction.
@@ -27,20 +28,35 @@ PAL and NTSC-U multiplayer SDK signatures and hooks also match all 22 supplied
 `eemem/multiplayer/` lobby/map dumps. These were found in the nested directory
 after the initial implementation. NTSC-J multiplayer is still unverified.
 
-The exact return/delay-slot instructions and SDK entry signatures were verified
-against those source binaries; the verified tables are checked in as C. Runtime checks refuse an
-unexpected SDK entry layout before file operations. Hook patches require the
-surrounding `ld s0, 0(sp)` and `addiu sp, sp, 32` instructions to match.
-`entry.S` preserves v0/v1, ra, and gp; it leaves the original delay slot intact.
+The sync entry sequences were checked against all three campaign core1 files
+and all 22 NTSC-U/PAL multiplayer lobby/map dumps. The first instructions are
+`addiu sp,sp,-32; sd s0,0(sp); sd ra,16(sp); jal helper`. PNACH replaces only
+the first two instructions with J/NOP, guarded by the untouched sd ra and jal
+words at entry+8 and entry+12. NTSC-J emits only the campaign hook.
 
-Campaign uses the `campaign/printf/template` hook at 0x0012c994 in all three
-regions. Multiplayer uses Horizon's 0x00139e94 hook for NTSC-U and PAL.
-These are matching return sequences in different resident layouts. The campaign
-EE snapshots already have the printf template jump at their hook; extracted
-boot cores retain the original return. NTSC-J emits only the campaign hook.
+`entry.S` saves the original caller's ra/gp, calls a trampoline which replays
+the displaced prologue, and resumes the original function at entry+8. After
+that function returns, it saves the full v0/v1 values, runs loaderTick, restores
+those values and ra/gp, and returns to the original caller. The original
+function restores s0 and its own stack. The wrapper reserves another 64 bytes.
+Module callbacks retain the old post-sync timing and call frequency.
 
-Remaining verification: cold boots, callback cadence, host0 availability, level
-changes, and campaign/multiplayer transitions in PCSX2 for each intended disc.
+The return instructions at 12C994/139E94 are no longer written by the loader.
+An existing Horizon return hook can therefore execute before control returns
+to the loader wrapper. This removes the shared hook-site conflict; it does not
+establish compatibility with Horizon's other memory reservations and hooks.
+Fully restart emulation when upgrading from the old return-hook build, so its
+old in-memory jump is cleared rather than calling the new wrapper recursively.
+
+All regional builds and existing native checks pass. PAL cold boot loaded all
+eight configured modules with the entry wrapper. The user confirmed boot-menu
+drawing and entry to Local Play staging. Forge selected Aquatos Aquadome,
+started the game, reloaded it, hopped to retail Bakisi Isles, and hopped back;
+all requests completed with state 3/error 0 and the expected level IDs.
+Live reads confirmed the original jr ra / stack restore at 12C994 during
+campaign boot and 139E94 in multiplayer. The user confirmed gameplay, HUD,
+and in-game Mod Menu drawing/navigation.
+NTSC-U/NTSC-J live testing and full Horizon coexistence remain unverified.
 
 ## Gameplay mode versus resident layout
 
@@ -161,3 +177,44 @@ gap is unused. PAL cold boot verified the installed bytes and all 11 kernel
 exception vectors targeting 98088. A controlled fault reached that entry, saved
 registers, and ran the renderer using 9C000. The loader payload and 9E000-A0000
 gap remained unchanged. The user confirmed a readable exception/register screen.
+
+## Loading-screen names during Forge hops
+
+The staging name-builder hook does not cover gameplay overlays. On PAL Korgon
+(base 43), a live reload breakpoint reached the corresponding builder return
+at 541048. Its table at 34F500 contained retail names; the staging table at
+352D20 was empty. The builder prologue constructs the table from its LUI s0 /
+ADDIU fp,s0 pair, followed by ADDIU s0,fp,40 hex. These instructions and the
+matching builder tails were checked in all 22 NTSC-U/PAL lobby/gameplay dumps.
+The existing hopAddresses rows now include each builder return and name table.
+Name-hook installation and cleanup use the active overlay's row, preserving
+retail names when no custom override is selected. Native tests cover all ten
+retail bases in both regions. PAL live testing completed an Aquatos Aquadome
+start/reload, a hop to retail Bakisi Isles, and a hop back to Aquadome without
+mailbox errors. During the reload, the active loading-name table contained
+Aquatos Aquadome in the base-43 slot. NTSC-U has build/static coverage only.
+
+The subsequent visual check still showed the retail name during a cross-base
+hop. A breakpoint at the old Korgon builder (541048) proved LEVEL_ID already
+held 40 while the Korgon overlay was still executing; nameTable had incorrectly
+switched to Bakisi's 357640. Name-hook/table changes now wait for the same code
+signature checks as the loading hooks. This keeps the source overlay's table
+through the transition. Both regional builds and regression tests pass,
+including a destination-ID-before-overlay case. PAL retesting started retail
+Bakisi Isles and hopped to Aquatos Aquadome successfully. During that transition,
+the source overlay's table at 357640 contained Aquatos Aquadome in slot 43.
+The user confirmed the correct visible loading-screen name, working gameplay,
+and HUD after the hop.
+
+## PAL online test with the downloaded Horizon patch
+
+At post-DNAS profile selection, context was ONLINE (4), all eight modules were
+inactive, and the staging input, name-builder, and six map-loading hooks were
+restored. After login, Horizon installed its return hook at 139E94 while the
+loader entry hook remained at 139E08. The downloaded patch still used A0000
+for its network callback pointer: live instructions at E2BA8, E2C3C, E2C54,
+E2C60, and E2CC0 read/write that old slot. A0000 contained the loader table
+pointer A35C0, while the new PAL callback slot 22F1A4 was zero. Execution
+stopped at PC 1 with v1=A35C0 and v0=1, consistent with interpreting the module
+table as callbacks. Online coexistence remains unverified until the deployed
+patch and its separately linked networking consumers use the new callback slot.
