@@ -1,2 +1,3 @@
 modmenu campaign,local
+bios-warning campaign,local
 maploader local

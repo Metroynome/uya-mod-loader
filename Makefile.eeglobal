@@ -2,7 +2,7 @@
 SHELL := /bin/sh
 REGION ?= all
 
-# A module's Makefile only includes this file. The root assigns safe addresses.
+# A module's Makefile only includes this file. The runtime assigns addresses.
 ifneq ($(wildcard Makefile.defs),)
 .DEFAULT_GOAL := all
 .PHONY: all clean
@@ -54,11 +54,12 @@ LINKFILE := module.ld
 MODE_ID_campaign = 1
 MODE_ID_multiplayer = 2
 MODE_ID_both = 3
-EE_LDFLAGS += -Wl,--defsym,MODULE_ADDRESS=$(ADDRESS),--defsym,MODULE_REGION=$(REGION_ID),--defsym,MODULE_MODES=$(MODE_ID_$(IMAGE_MODE))
+EE_LDFLAGS += -Wl,--defsym,MODULE_ADDRESS=0x000f0000,--defsym,MODULE_REGION=$(REGION_ID),--defsym,MODULE_MODES=$(MODE_ID_$(IMAGE_MODE))
 else
 IMAGE := mod-loader
 IMAGE_LIBRARY := none
 EE_OBJS := entry.o main.o platform.o strings.o config.o campaign-write.o
+EE_LIBS := -L$(PS2SDK)/ee/lib -lkernel
 SOURCE_DIR := .
 OBJDIR := $(WORK)
 LINKFILE := loader.ld
@@ -123,7 +124,7 @@ $(OBJDIR)/%.o: $(SOURCE_DIR)/%.S $(LIB_ARCHIVE) Makefile.eeglobal $(wildcard $(M
 # Relink to honor the address selected by the root build, even if objects are unchanged.
 .PHONY: image FORCE
 $(ELF): $(OBJECTS) $(LIB_ARCHIVE) $(LINKFILE) FORCE
-	$(EE_CC) $(EE_LDFLAGS) -Wl,-Map,$(@:.elf=.map) -o $@ $(OBJECTS) $(LIB_ARCHIVE) -lgcc
+	$(EE_CC) $(EE_LDFLAGS) -Wl,-Map,$(@:.elf=.map) -o $@ $(OBJECTS) $(LIB_ARCHIVE) $(EE_LIBS) -lgcc
 
 ifeq ($(MODULE),)
 BIN2CODE ?= bin2code
@@ -136,11 +137,19 @@ image: $(ELF)
 	  multiplayer=$$(printf '%08X' $$((0x08000000 | (multiplayer >> 2)))); \
 	  sed -e "s/@CAMPAIGN@/$$campaign/g" -e "s/@MULTIPLAYER@/$$multiplayer/g" template/footer.$(REGION).pnach >> $(WORK)/publish/loader.pnach
 else
-image: $(ELF)
+comma := ,
+HOST_CC ?= cc
+build/relocate: tools/relocate.c
+	@mkdir -p build
+	$(HOST_CC) -std=c99 -Wall -Wextra $< -o $@
+image: $(ELF) build/relocate
+	awk -f tools/sections.awk $(OBJDIR)/$(IMAGE).map module.ld > $(OBJDIR)/live.ld
+	$(EE_CC) $(filter-out -Wl$(comma)-T$(comma)$(LINKFILE) -Wl$(comma)--gc-sections,$(EE_LDFLAGS)) -Wl,--emit-relocs,-T,$(OBJDIR)/live.ld -o $(OBJDIR)/reloc.elf $(OBJECTS) $(LIB_ARCHIVE) -lgcc
 	@set -eu; end=$$($(EE_NM) $(ELF) | awk '$$3=="_image_end" {print "0x"$$1}'); \
-	  $(EE_OBJCOPY) -O binary --pad-to="$$end" $(ELF) $(BIN); \
-	  memory=$$($(EE_NM) $(ELF) | awk '$$3=="_memory_end" {print "0x"$$1}'); \
-	  printf '%u\n' $$((memory-$(ADDRESS))) > $(OBJDIR)/size.txt
+	  $(EE_OBJCOPY) -O binary --pad-to="$$end" $(ELF) $(OBJDIR)/flat.bin; \
+	  $(EE_OBJCOPY) -O binary --pad-to="$$end" $(OBJDIR)/reloc.elf $(OBJDIR)/reloc.bin
+	cmp $(OBJDIR)/flat.bin $(OBJDIR)/reloc.bin
+	build/relocate $(OBJDIR)/reloc.elf $(OBJDIR)/flat.bin $(BIN)
 	cp $(BIN) $(WORK)/publish/$(IMAGE).$(REGION).bin
 endif
 endif

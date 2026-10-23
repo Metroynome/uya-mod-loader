@@ -1,0 +1,27 @@
+# C file order: includes, defines, types/structs, prototypes, globals, functions.
+# Header order: includes, defines, types/structs, globals, function prototypes.
+# Section ordering is maintained manually; clang-format handles spacing.
+# Follow Horizon's C layout, using tabs for indentation with a width of four spaces.
+BasedOnStyle: LLVM
+Language: Cpp
+IndentWidth: 4
+TabWidth: 4
+ContinuationIndentWidth: 4
+UseTab: ForIndentation
+ColumnLimit: 120
+BreakBeforeBraces: Linux
+AllowShortFunctionsOnASingleLine: None
+AllowShortBlocksOnASingleLine: Never
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+BinPackArguments: false
+BinPackParameters: false
+PointerAlignment: Left
+DerivePointerAlignment: false
+AlignConsecutiveMacros: Consecutive
+SeparateDefinitionBlocks: Leave
+SortIncludes: Never
+IncludeBlocks: Preserve
+ReflowComments: false
+IndentCaseLabels: true

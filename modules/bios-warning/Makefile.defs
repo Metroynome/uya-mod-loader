@@ -1,0 +1,3 @@
+LIBRARY = none
+REGIONS = ntscu pal ntscj
+EE_OBJS = main.o

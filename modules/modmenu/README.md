@@ -222,3 +222,7 @@ loader directly.
 ### Progress popup
 
 The optional `setProgress(label, current, total)` API displays a modal progress bar and captures game input. Pass a nonpositive total while discovering work, then a positive total for measured progress. Pass `NULL` as the label to dismiss it, including when your mod deactivates. Check the API structure size before using this appended field.
+
+While Mod Menu or a progress popup captures input on the campaign boot menu,
+the preview-movie idle countdown is reset. Closing the menu lets the normal
+countdown begin again; campaign levels and multiplayer are unaffected.

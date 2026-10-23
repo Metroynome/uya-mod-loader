@@ -31,17 +31,18 @@ for variant in $variants; do
 
 /* No Mod Menu dependency. Use loader->context for context-specific behavior,
  * and the loader configuration API for optional settings (see CONFIG.md). */
-static const ModuleApi *loader;
-int moduleInit(const ModuleApi *api)
+static const ModuleApi* loader;
+
+int moduleInit(const ModuleApi* api)
 {
-    loader = api;
+	loader = api;
 SOURCE
         if [ "$lib" = none ]; then printer='loader->print'; else printer=printf; fi
-        printf '    %s("%s: initialized (region %%u, mode %%u)\\n", api->region, api->mode);\n' "$printer" "$output"
-        printf '    return 0;\n}\nvoid moduleUpdate(void)\n{\n'
-        if [ "$lib" = libuya ]; then printf '    uyaPreUpdate();\n'; fi
-        printf '    /* Check level/player readiness before calling game functions. */\n'
-        if [ "$lib" = libuya ]; then printf '    uyaPostUpdate();\n'; fi
+        printf '\t%s("%s: initialized (region %%u, mode %%u)\\n", api->region, api->mode);\n' "$printer" "$output"
+        printf '\treturn 0;\n}\n\nvoid moduleUpdate(void)\n{\n'
+        if [ "$lib" = libuya ]; then printf '\tuyaPreUpdate();\n'; fi
+        printf '\t/* Check level/player readiness before calling game functions. */\n'
+        if [ "$lib" = libuya ]; then printf '\tuyaPostUpdate();\n'; fi
         printf '}\n'
     } > "$folder/$variant.c"
     printf '%s disabled // choose campaign, local, online, or a supported combination\n' "$output" >> "$list"

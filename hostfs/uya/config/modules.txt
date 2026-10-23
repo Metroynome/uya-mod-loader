@@ -4,3 +4,4 @@ modmenu campaign,local
 # Explicit regions avoid attempting unsupported NTSC-J multiplayer hooks.
 maploader.ntscu local
 maploader.pal local
+bios-warning campaign,local // optional expanded-RAM BIOS warning; requires modmenu

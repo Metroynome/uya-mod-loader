@@ -137,11 +137,17 @@ The root `Makefile` provides the build commands and allocates module addresses.
 Only module creation and release packaging use shell helpers. The loader uses
 `bin2code` plus regional hooks in `template/` to produce PNACH files only.
 Modules are plain binaries; the loader validates them at runtime. No Python is needed.
+For runtime placement, `tools/relocate.c` packages the ELF's MIPS relocation
+records into the module binary. `tools/sections.awk` preserves the normal link's
+live sections because the older EE linker cannot retain relocations and discard
+unused code correctly in one pass. Neither utility chooses module addresses.
 
 `moduleInit(const ModuleApi *)` runs once, the first time its mode is active.
 A negative result disables its update callback while retaining its memory.
-`moduleUpdate(void)` runs on subsequent matching return hooks, including the first
-one after initialization. Hooks can run more than once per video frame. Check
+`moduleUpdate(void)` runs after subsequent matching sync calls return, including the first
+one after initialization. Entry wrappers leave Horizon's return hook untouched.
+Callbacks can run more than once per video frame. Fully restart after updating
+from the old return-hook build to clear its old jump. Check
 level/player readiness before using game APIs; do not retain pointers into a
 previous level. Module BSS is zeroed at load time and persists across mode changes.
 The supplied API pointer remains valid and is updated when the mode changes.
@@ -160,8 +166,9 @@ NTSC-U/PAL multiplayer. NTSC-J multiplayer retains the loader limitation below.
 See [the menu API guide](modules/modmenu/README.md) for integration and validation
 details.
 
-**The loader uses runtime API 4 with binary header version 2. Deploy the loader PNACH and all
-module binaries together, then cold-boot.** Old ABI-1 binaries are rejected.
+**The loader uses runtime API 4 with binary header version 4. For this upgrade,
+rebuild all modules and deploy them with the new PNACH, then cold-boot.**
+Old version-1/2/3 binaries are rejected. Subsequent version-4 modules can be replaced independently.
 The loader now supplies `publishService` / `findService` for versioned APIs.
 Service IDs belong to their publishing module; lookup requires an exact API
 version and an allowed owner mode/context. Failed initialization removes that module's
@@ -176,7 +183,7 @@ list with None and X to select. Maploader disables itself on an online lobby
 connection by default; `maploader-online.txt` provides an explicit future-server
 opt-in. Campaign replacement is not yet implemented.
 
-Requires a POSIX shell, GNU Make, `bin2code`, and the PS2 EE/IOP toolchain (a host C compiler is needed for tests). Release packaging also uses zip/unzip and sha256sum. No Python is needed. Set `PS2SDK` and put
+Requires a POSIX shell, GNU Make, a host C compiler, `bin2code`, and the PS2 EE/IOP toolchain. Release packaging also uses zip/unzip and sha256sum. No Python is needed. Set `PS2SDK` and put
 `ee-gcc`, `ee-nm`, and `ee-objcopy` on PATH. `EE_PREFIX` overrides `ee-`.
 
 ```sh
@@ -184,11 +191,17 @@ make                                       # all three regions
 make REGION=ntscu                          # one region
 ```
 
-Modules receive automatic, nonoverlapping, 64-byte-aligned addresses. No manual
-layout file or address selection is needed. All declared modules are built;
-`modules.txt` selects which ones load and the modes in which they run. The layout is recorded in
-`build/<region>/layout.txt`. Rebuild/deploy the complete module set together:
-adding or resizing a module can change later modules' linked addresses.
+Modules receive nonoverlapping, 64-byte-aligned addresses at runtime, in
+`modules.txt` order. Each module is built independently at the same link base;
+the loader adjusts its internal references after assigning space. Creators do
+not coordinate addresses or rebuild each other's modules. All declared modules
+are built; only enabled entries consume runtime memory. The limit remains eight
+modules. Space starts at the next 64-byte boundary after `_loader_end` (code,
+module table, and persistent state) and ends at `0x00100000`. An installed
+exception handler lives separately at `0x00098000-0x0009e000`, below the loader,
+so enabling it does not change the module pool.
+Allocations last until restart;
+individual unloading, compaction, and heap resizing are not implemented.
 
 Library defaults match this workspace:
 
@@ -255,15 +268,12 @@ make REGION=ntscu
 
 `make clean` at the root removes the generated build directory and regional
 hostfs binaries. It keeps module sources, `modules.txt`, and the optional debug
-payload. A module-folder clean removes only that module's objects/binaries and
-keeps its address. Rebuild the full set if it grows into a neighboring module.
+payload. A module-folder clean removes only that module's objects/binaries.
 Generated module folders include a Makefile.
 
-Single-module builds use the existing regional layout. If there is no layout,
-the first invocation builds all modules to establish one. If a module grows
-beyond its reserved size or the module set/library/mode configuration changes,
-run a full root build and deploy all binaries together. A `both` source folder
-rebuilds both of its library variants. Restart emulation to load new binaries.
+Single-module builds need no existing layout or full-set build. A `both` source
+folder rebuilds both of its library variants. Replace that module's binary and
+restart emulation to load it; the loader assigns space based on its current size.
 A fresh project still needs the root build to produce the loader PNACH itself.
 
 To work interactively using the Dockerfile image:
@@ -301,8 +311,7 @@ patches need to be enabled.
 
 ## Optional exception handler
 
-`hostfs/uya/mods/debug/exceptionhandler.bin` is an exact copy of the SM loader's
-payload (10,356 bytes). When present, the build copies it to
+`hostfs/uya/mods/debug/exceptionhandler.bin` is the SM/Horizon payload relocated to `0x98000` (10,356 bytes), with drawing scratch inside its reservation. When present, the build copies it to
 `build/dist/hostfs/uya/mods/debug/exceptionhandler.bin`. The loader attempts installation
 once per boot, on its first valid menu/gameplay/lobby hook, before initializing modules.
 It is separate from `modules.txt` and does not consume a module slot.
@@ -312,11 +321,11 @@ To keep it disabled across builds, remove/rename the source file too; the next
 build removes any stale packaged copy. Missing files simply log a message and
 normal module loading continues. Restart after adding it to enable it again.
 
-Installation requires the whole `0x000c8000?0x000ce000` range to be empty and
+Installation requires the whole `0x00098000-0x0009e000` range to be empty and
 checks the exact file size and FNV-1a hash before executing it. Corrupt, truncated,
 oversized, or unreadable payloads are skipped; occupied memory is left untouched.
-The binary patches kernel exception handlers, as in SM. Installation and crash
-output in UYA have not yet been tested in a live emulator.
+The binary patches kernel exception handlers, as in SM. PAL cold boot and a controlled exception verified installation, register capture,
+and bounded rendering. The user confirmed the exception/register screen is readable.
 
 ## Regions and validation status
 
@@ -353,10 +362,38 @@ its own low-memory range only when installed:
 
 | Range | Use |
 |---|---|
-| `0x000c8000?0x000ce000` | Optional exception handler, 24 KiB including workspace |
-| `0x000a0000-0x000afd00` | Loader code/data, maximum 64,768 bytes |
-| `0x000afd00-0x000b0000` | Persistent loader state, 768 bytes |
-| `0x000f2f80-0x00100000` | Modules, 53,376 bytes including BSS and Forge's mailbox when loaded |
+| `0x00098000-0x0009e000` | Optional exception handler, 24 KiB including workspace |
+| `0x000a0000-0x000a0030` | Fixed 48-byte loader discovery block |
+| `0x000a0030` to `_loader_end` | Loader code/data, module table, and persistent state |
+| `0x0009e000-0x000a0000` | Unused 8 KiB gap |
+| Aligned `_loader_end` to `0x00100000` | Module pool with normal RAM |
+| `0x02000000` to `0x08000000` | Module pool when PCSX2 exposes 128 MiB RAM |
+
+Ranges above have exclusive ends. At startup, the loader calls the BIOS
+`GetMemorySize` syscall. A 128 MiB result selects the expanded pool; other
+results keep the normal pool. The loader and exception handler stay at their
+fixed addresses. Module code, data, BSS, and Forge's mailbox move together;
+the same binaries work in either pool. Game `malloc` allocations are unchanged.
+Restart emulation after changing PCSX2's extra-memory setting. Discover module
+addresses through the table rather than assuming they remain below 1 MiB.
+The existing eight-module limit is unchanged.
+
+Expanded RAM requires a BIOS with the `_InitTLB` syscall for UYA's ELF
+transitions. The loader uses PS2SDK's `GetSyscallHandler(0x82)` to check for it
+without calling it. If absent, modules stay in normal RAM and the loader logs
+a warning. This fallback does not prevent the game's ELF-switch crash.
+BIOS 1.20 failed when entering multiplayer during testing; use a newer
+compatible BIOS. This is a known PCSX2 extra-memory/old-BIOS
+[compatibility issue](https://github.com/PCSX2/pcsx2/issues/11234), not something
+the module allocator patches around.
+
+The optional `bios-warning` module displays that warning once per boot using
+Mod Menu's UI. Enable it with `bios-warning campaign,local` in `modules.txt`;
+use `bios-warning disabled` to omit its code, text, and state from RAM. It
+requires `modmenu` and is enabled in release defaults. Cross or Triangle dismisses the
+popup; it does not fix the incompatible setting. Disable PCSX2's 128 MiB RAM
+option or select a compatible BIOS, then restart. The small loader check and
+console warning remain available without either UI module.
 
 Headers include ABI version, region, mode mask, link address, sizes, and entry
 point offsets. The loader rejects invalid ranges, oversized/truncated images,
@@ -365,7 +402,25 @@ Memory is cleared before loading; data/instruction caches are synchronized befor
 executing new code. State is outside PNACH-injected bytes so repeated cheat writes
 do not reset it. This area must remain free of other injected patches.
 
-The loader and its state reserve the full 64 KiB at `0x000a0000-0x000affff`.
+Version-4 module binaries contain a 40-byte file header, a 16-byte discovery
+header at the loaded base, code/data, then relocation records. The loader handles MIPS 32-bit pointers, jumps, and paired high/low
+address instructions; absolute game addresses remain unchanged. Older version-1/2/3
+binaries are rejected: rebuild them once with this version's module Makefiles.
+Unsupported relocation types fail packaging instead of producing broken code.
+
+Other modules can inspect `UYA_MODULE_TABLE` from `module.h`, discovered through
+the pointer at `0x000a0000`. The table itself is linker-placed.
+Check `magic == UYA_MODULE_TABLE_MAGIC`, `version == 1`, `entrySize == sizeof(ModuleInfo)`,
+and `count <= UYA_MODULE_LIMIT` before reading `entries[0..count-1]`. Each entry
+has a canonical filename, base `address`, allocated `size` (including BSS), and
+configured `modes`. These are loaded modules, not necessarily currently active.
+Never modify this table. Use the existing service APIs to call another mod's
+published functions; a module base address is not a function pointer.
+
+The loader and modules share `0x000a0000-0x000fffff` (384 KiB total).
+The loader reserves only its actual linked size; rebuilding a larger or smaller
+loader automatically shifts module placements on the next cold boot.
+The optional handler remains fixed below the loader. Failed loads do not consume module space. See ADDRESSES.md for its relocation and drawing workspace.
 Rebuild the Docker image after updating: the pinned libuya revision moves its
 network callback pointer out of this block. Older Horizon patch/downloader/game
 mode binaries still using `0x000a0000` must also be replaced before coexistence.
@@ -373,7 +428,9 @@ Relocation alone does not resolve shared hooks or implement online unloading.
 Replace the old PNACH files and fully restart the game; do not load an old savestate.
 
 `make release` builds every region and validates the generated ZIPs.
-Build-time binary size/header checks are omitted; runtime module checks remain.
+Build-time binary size limits are omitted; runtime module checks remain. Relocation
+packaging verifies that the retained-relocation link has the same payload as the
+normal link, to account for the old toolchain's behavior.
 Local native C regression tests run with `make test`; local tests remain excluded
 from version control by this project's `.gitignore`. The game runtime and
 modules are C; compilation and linking use shared Make rules.
@@ -415,8 +472,74 @@ from discovery while their provider is disabled. Modules must implement their
 own cleanup for persistent changes; skipping updates cannot undo arbitrary code.
 
 Deploy the new loader cheat and rebuilt modules together, then restart emulation.
-The binary header remains version 2; context/lifecycle fields arrived in API 3; configuration helpers use API 4.
+The binary header is version 4; the callback API remains version 4.
 Older modules that require runtime version exactly 2 must be rebuilt/updated.
+
+## Discovering modules and exported data
+
+Read the fixed discovery block at `0x000a0000` before following any pointers.
+All fields are unsigned 32-bit little-endian EE values:
+
+| Offset | Loader discovery field |
+|---|---|
+| 0x00 | Pointer to the current module table |
+| 0x04 | Magic `0x444C5955` (`UYLD`) |
+| 0x08 | Discovery version 1 |
+| 0x0C | Size: 48 bytes |
+| 0x10-0x2C | Eight reserved words, zero |
+
+The linker places the table and persistent state after the loader payload.
+Their addresses can change when the loader is rebuilt; never hard-code
+`0xAF800` or `0xAFD00`. In C, use `UYA_MODULE_TABLE` after checking
+`UYA_LOADER_DISCOVERY`. The table retains magic `0x554D5442`, version 1,
+count (maximum 8), and entrySize 124, followed by its existing entries.
+The table is initialized on the loader's first valid tick, so wait for its header.
+Code begins after the discovery block; PNACH hooks use the linked entry symbols.
+The loader, table, and state must still fit below `0xB0000`.
+
+Each entry's address points to a standard 16-byte module discovery header:
+
+| Offset | Module discovery field |
+|---|---|
+| 0x00 | Optional exports pointer; zero when there are no exports |
+| 0x04 | Magic `0x444D5955` (`UYMD`) |
+| 0x08 | Discovery version 1 |
+| 0x0C | Size: 16 bytes |
+
+The existing linker rules generate this header for every module. Its fields
+are read-only to clients. Entry offsets in the file header point past it to code.
+The runtime rebases its exports pointer; C pointers inside an exports structure
+are handled by the existing relocation records.
+
+Creators can optionally define the single global symbol `moduleExports` in
+one C file. Give the structure a mod-specific magic, version and size so clients
+can recognize it, then add the pointers they need. For example:
+
+```c
+#include "module.h"
+
+#define MY_EXPORTS_MAGIC 0x3158454dU
+
+typedef struct MyExports {
+	unsigned int magic, version, size;
+	volatile unsigned int* status;
+} MyExports;
+
+static volatile unsigned int status;
+const MyExports moduleExports UYA_MODULE_EXPORTS = {
+	MY_EXPORTS_MAGIC, 1, sizeof(MyExports), &status};
+```
+
+No extra files, build scripts, assembly, or Mod Menu dependency are needed.
+Omit the definition to leave exports null. Keep exported storage inside the
+module for its entire lifetime; never export a stack address. This discoverable
+data does not replace context-aware `publishService` / `findService` APIs.
+
+Before reading exports, validate the discovery headers and pointer bounds within
+the module's address/size. Loaded does not mean active: a client must follow the
+module's own readiness protocol. Rediscover after restart, module replacement,
+or savestate load; do not retain addresses across sessions. Forge's complete
+lookup and heartbeat protocol is in [PINE.md](modules/forge/PINE.md).
 
 ## Mod configuration files
 
