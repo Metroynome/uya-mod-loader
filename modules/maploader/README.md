@@ -67,6 +67,8 @@ staging-only. See the [Forge guide](../forge/README.md).
 The first Local Play staging visit after activation scans `host0:uya/`. Entering
 multiplayer menus or online staging does not scan. The progress popup captures
 input while discovery and metadata processing run across updates.
+Each update batches up to 32 scan steps within a 2 ms budget, reusing the same
+buffers. Individual synchronous file reads can exceed that budget.
 
 A successful catalog, including an empty one, stays in one heap allocation and
 is reused after leaving staging or quitting a game. **No `.idx` files are used**;

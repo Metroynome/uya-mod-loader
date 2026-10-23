@@ -3,7 +3,16 @@
 #ifndef MAP_SEEK
 #define MAP_SEEK ((int (*)(int, int, int))0x12ae40)
 #endif
+#define MAP_SCAN_STEPS (32)
+#define MAP_SCAN_TICKS (589824) /* 2 ms at the EE's 294.912 MHz. */
+#ifndef MAP_SCAN_CLOCK
+#define MAP_SCAN_CLOCK() (scanClock())
+#define MAP_SCAN_NATIVE_CLOCK (1)
+#endif
 
+#ifdef MAP_SCAN_NATIVE_CLOCK
+static u32 scanClock(void);
+#endif
 /* Keep repeated catalog moves out of the scan state machine. */
 void mapCopyRecord(mapRecord_t* to, const mapRecord_t* from) __attribute__((noinline));
 
@@ -11,7 +20,7 @@ const moduleApi_t* mapApi;
 mapRecord_t* mapRecords;
 int mapCount, mapSelection = -1;
 int mapCatalogReady;
-/* Scan state is driven one entry/RPC at a time from Local Play staging. */
+/* Scan work is batched within a small budget each Local Play update. */
 /* One retained allocation, refilled in place on explicit refresh. */
 static char selected[FORGE_FILENAME_SIZE];
 static int phase, candidates, current, kept, waitTicks;
@@ -300,17 +309,14 @@ void mapCopyRecord(mapRecord_t* to, const mapRecord_t* from)
 		d[i] = s[i];
 }
 
-int mapScanTick(void)
+/* 2 made progress, 0 waiting, 1 completed, -1 failed. */
+static int scanStep(void)
 {
 	int r, n, i;
 	char name[256];
 	mapRecord_t temp;
 	if (!phase)
 		return 0;
-	if (++waitTicks > 6000) {
-		finish(1);
-		return -1;
-	}
 	if (phase == 1) {
 		r = mapDirectoryReady();
 		if (r < 0) {
@@ -325,7 +331,7 @@ int mapScanTick(void)
 			phase = 2;
 			waitTicks = 0;
 		}
-		return 0;
+		return r > 0 ? 2 : 0;
 	}
 	if (phase == 2 || phase == 3 || phase == 5) {
 		r = mapDirectoryPoll(name);
@@ -338,7 +344,7 @@ int mapScanTick(void)
 				return -1;
 			}
 			phase = 4;
-			return 0;
+			return 2;
 		}
 		if (r < 0) {
 			mapDirectoryRequest(3);
@@ -351,7 +357,7 @@ int mapScanTick(void)
 				return -1;
 			}
 			phase = 5;
-			return 0;
+			return 2;
 		}
 		if (phase == 3) {
 			for (n = 0; name[n]; ++n)
@@ -373,7 +379,7 @@ int mapScanTick(void)
 			return -1;
 		}
 		phase = 3;
-		return 0;
+		return 2;
 	}
 	if (phase == 4 && current < candidates) {
 		r = inspect(&mapRecords[current]);
@@ -385,7 +391,7 @@ int mapScanTick(void)
 			mapCopyRecord(&mapRecords[kept++], &mapRecords[current]);
 		++current;
 		waitTicks = 0;
-		return 0;
+		return 2;
 	}
 	/* Sort the completed catalog by display name. */
 	for (n = 1; n < kept; ++n) {
@@ -410,6 +416,47 @@ int mapScanTick(void)
 	mapMessage("Custom maps refreshed");
 	finish(0);
 	return 1;
+}
+
+#ifdef MAP_SCAN_NATIVE_CLOCK
+/* EE Count advances at 294.912 MHz. Unsigned subtraction handles wraparound. */
+static u32 scanClock(void)
+{
+	u32 ticks;
+	__asm__ volatile("mfc0 %0, $9" : "=r"(ticks));
+	return ticks;
+}
+#endif
+
+int mapScanTick(void)
+{
+	u32 started;
+	int result, steps = 0;
+
+	if (!phase)
+		return 0;
+	/* Count timeout in frames, not polls within a frame. */
+	if (++waitTicks > 6000) {
+		finish(1);
+		return -1;
+	}
+
+	started = MAP_SCAN_CLOCK();
+	do {
+		result = scanStep();
+		if (result == -1 || result == 1)
+			return result;
+		/* Helper startup/rebind retries must still advance once per frame. */
+		if (phase == 1)
+			break;
+		if (result == 2)
+			++steps;
+		/* Allow pending RPCs to finish within this budget instead of always
+		 * waiting another frame. Reuse the same request and catalog buffers.
+		 * Metadata reads are synchronous: an individual read may exceed it. */
+	} while (steps < MAP_SCAN_STEPS && (u32)(MAP_SCAN_CLOCK() - started) < MAP_SCAN_TICKS);
+
+	return 0;
 }
 
 void mapScanRelease(void)
