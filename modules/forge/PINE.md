@@ -11,6 +11,113 @@ The protocol works without Mod Menu. Currently supported: NTSC-U and PAL Local P
 staging and supported in-match overlays 40-49. Online, campaign, boot menus,
 and transitions do not accept new map commands.
 
+## Quick guide: send a command
+
+First enable PINE in PCSX2, boot the game, and enter **Local Play staging** or
+a running Local Play game. Discover the mailbox using the pointer chain below;
+never hard-code a module or mailbox address. In these examples, `M` means the
+discovered mailbox address, and `id` is a fresh nonzero 32-bit request ID.
+
+Every command uses this same procedure:
+
+1. Verify the mailbox header and advancing heartbeat. Require `available != 0`
+   at `M + 0x1c` and the expected context at `M + 0x1d`: `1` for staging,
+   `2` for a running game. Wait for any previous command or menu-triggered
+   scan/load to finish. Do not send during a transition.
+2. Check the one-byte capabilities field at `M + 0x1e`:
+   `(capabilities & (1 << command)) != 0` must be true.
+3. Write the command number as **one byte** to `M + 0x1f`.
+4. Write a **129-byte, zero-filled ASCII buffer** to `M + 0x24`, containing
+   the filename or retail ID below. Leave it all zero for an empty argument.
+   Finish all payload writes before the next step.
+5. Write `id` as a **four-byte little-endian integer** to `M + 0x0c` **last**.
+   This submits the request. Do not write any game-owned fields or overwrite
+   the whole mailbox.
+6. Poll for this exact `id`. If `rejectedId` at `M + 0x18` matches, stop and
+   report `rejectError` at `M + 0x22`. Otherwise wait for `completedId` at
+   `M + 0x14` to match. Success requires `state == 3` at `M + 0x20` and
+   `error == 0` at `M + 0x21`. State `4` means failure; report `error`.
+   `acceptedId == id` only means accepted, **not finished**.
+
+Use one command at a time. Do not reset IDs to zero between commands. After
+reconnecting, read the existing IDs and choose an unused ID for that session;
+do not blindly start at `1`. If a command times out, report it and inspect the
+heartbeat/context before retrying; it may still be running. Never automatically
+resubmit a Start Game or hop with a new ID while its outcome is unknown.
+
+### Refresh the custom map list
+
+1. Finish copying/building all map files into `uya/` before requesting a scan.
+2. In staging or a running game, send **command `2`**, empty argument.
+3. Wait for successful completion. The catalog is now refreshed.
+
+Refreshing does **not** reload the current level or start a game. If map content
+changed and you want to load it immediately, use command `4` below instead.
+
+### Hop to a different custom map while playing
+
+1. Require context `2` (already in a Local Play game).
+2. Send **command `3`** with the map's filename stem, for example `minikisi`.
+   If it was just added or rebuilt, send **command `4`** instead: it refreshes
+   the catalog and then loads that map in one request.
+3. Wait for successful completion. The new map is playable in the existing
+   game; no return to staging or Start Game command is needed.
+
+Use the stem from `uya/minikisi.version`: `minikisi`, not the display name
+`Bakisi Mini`, not `minikisi.wad`, and not a full path. Use the same stem for
+PAL; do not append `.pal`. The loader chooses the regional assets.
+
+### Choose a custom map and start a new game from staging
+
+1. Require context `1` (Local Play staging).
+2. Send **command `3`**, argument `minikisi`, or **command `4`** if the map
+   was added/rebuilt and needs a refresh first.
+3. Wait for **successful completion**. The map is selected and its staging
+   name is updated, but the game has not started.
+4. Send **command `5`**, empty argument, using a **new request ID**.
+5. Wait for successful completion. Gameplay is ready on the selected map.
+
+Stop if selection fails; sending Start Game anyway would use the previous
+selection. To start whatever map is already selected, skip steps 2 and 3.
+Command `5` does not accept a map filename or change game settings.
+
+### Hop to a retail map or reload the current map
+
+- **Retail hop:** in a running game, send **command `6`**, argument `"43"`
+  for Korgon Outpost, and wait for success. The argument is ASCII decimal text,
+  not a binary integer. Supported retail IDs are listed below.
+- **Retail start:** in staging, send command `6`, wait for success, then send
+  command `5` with an empty argument and a new ID.
+- **Reload:** in a running game, send **command `1`**, empty argument, and
+  wait for success. It reloads the current retail/custom map. For a rebuilt
+  custom map whose metadata or file sizes changed, use command `4` with its
+  filename instead so the catalog is refreshed before loading.
+
+### Editor integration example
+
+This is pseudocode, not a new script or a PINE library API. `sendAndWait` means
+the six-step submission/completion procedure above and returns only on success;
+on rejection, failure, or timeout it stops the sequence and reports the result.
+
+```text
+refresh button:
+	sendAndWait(command = 2, filename = "", id = nextRequestId())
+
+test newly built custom map:
+	wait until all build output files are completely written
+	if context == 1:                         // staging
+		sendAndWait(command = 4, filename = "minikisi", id = nextRequestId())
+		sendAndWait(command = 5, filename = "", id = nextRequestId())
+	else if context == 2:                    // running game
+		sendAndWait(command = 4, filename = "minikisi", id = nextRequestId())
+	else:
+		report "Enter Local Play staging or a running Local Play game"
+```
+
+Recheck availability/context/capabilities before each submission. Keep the
+emulator running while waiting, and rediscover the mailbox after a restart or
+savestate load. Numeric states/errors and the full protocol are documented below.
+
 ## Layout
 
 Fields use the widths listed below; multibyte integers are little-endian. Strings are NUL-terminated ASCII.
