@@ -40,8 +40,7 @@ Edit `uya/config/modules.txt` (or `hostfs/uya/config/modules.txt` when building)
 modmenu       campaign,local
 bios-warning  campaign,local
 maploader     local
-# Optional: build/copy Forge first, then enable it.
-forge         disabled
+forge         campaign,local
 ```
 
 | Context | Where the module runs |
@@ -79,6 +78,9 @@ or replacing binaries.
 - **Forge:** reload the current map or hop to another retail/custom map without
   creating a new game. Enables the in-game Custom Maps list and offers PINE
   commands for refresh, selection, reload, and **Start Game** from staging.
+  It can boot directly to Local Play staging, select Siege/CTF/Deathmatch, and
+  save Chargeboots, Infinite Ammo, and custom-map Quick Load options. PINE
+  selection/start/reload requests accept an optional mode byte (default Siege).
   Supports NTSC-U/PAL Local Play bases 40–49; split-screen and NTSC-J hopping
   are disabled. Editor-side Forge v2 integration remains separate.
 - **BIOS Warning:** optional Mod Menu popup for incompatible expanded-RAM BIOS
@@ -87,7 +89,9 @@ or replacing binaries.
   `multiplayer-test` are available in source, excluded from release packages.
 
 Release defaults are controlled by [release/modules.txt](release/modules.txt).
-Forge is currently opt-in and must be built/copied separately.
+Forge is enabled for NTSC-U/PAL. Boot to Local Play defaults to OFF, so normal
+startup is preserved; its PINE command can still enter staging. Quick Load
+defaults to OFF and only speeds up custom maps.
 
 See the [Mod Menu API](modules/modmenu/README.md),
 [Map Loader guide](modules/maploader/README.md),

@@ -4,6 +4,7 @@
 int forgeBootAvailable(void);
 int forgeBootRequest(u32 requestId);
 u32 forgeBootState(void);
+void forgeSetGameMode(u8 mode);
 
 /* Part of Forge's BSS and module memory size, not a loader reservation.
  * PINE follows the module discovery header and exports table; see PINE.md. */
@@ -60,6 +61,7 @@ void forgeBridgeTick(const mapHopApi_t* hopApi)
 {
 	volatile forgeMailbox_t* mailbox = FORGE_MAILBOX;
 	u32 id, command, i;
+	u8 gameMode;
 	char name[FORGE_FILENAME_SIZE];
 	int error;
 	int bootAvailable = forgeBootAvailable();
@@ -88,6 +90,7 @@ void forgeBridgeTick(const mapHopApi_t* hopApi)
 	if (!id || id == lastRequestId)
 		return;
 	command = mailbox->command;
+	gameMode = mailbox->gameMode;
 	for (i = 0; i < sizeof(name); ++i)
 		name[i] = mailbox->filename[i];
 	if (id != mailbox->requestId)
@@ -103,6 +106,8 @@ void forgeBridgeTick(const mapHopApi_t* hopApi)
 	}
 	if (activeRequestId)
 		error = FORGE_ERROR_BUSY;
+	else if (command >= FORGE_SELECT && command <= FORGE_RELOAD && gameMode > FORGE_MODE_DM)
+		error = FORGE_ERROR_MODE;
 	else if (command == FORGE_LOCAL_PLAY)
 		error = forgeBootRequest(id);
 	else if (!hopApi)
@@ -114,6 +119,11 @@ void forgeBridgeTick(const mapHopApi_t* hopApi)
 		mailbox->rejectedId = id;
 		return;
 	}
+	/* Requests queue their transition for the next Map Loader tick. Capture
+	 * the mode now; reset the input so omitting it next time means Siege. */
+	if (command >= FORGE_SELECT && command <= FORGE_RELOAD)
+		forgeSetGameMode(gameMode);
+	mailbox->gameMode = FORGE_MODE_SIEGE;
 	mailbox->acceptedId = id;
 	activeRequestId = id;
 	bootRequest = command == FORGE_LOCAL_PLAY;

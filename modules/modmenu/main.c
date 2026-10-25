@@ -21,6 +21,7 @@ typedef struct item {
 	int handle, tab, enabled;
 	char label[48];
 	modMenuItem_t definition;
+	ModMenuListLabel valueLabel;
 } item_t;
 
 static int setTabVisibility(int tab, u32 contexts);
@@ -29,6 +30,7 @@ static int addTab(const char* key, const char* label, u32 modes);
 static int addItem(int tab, const modMenuItem_t* d);
 static int removeTab(int tab);
 static int setItemEnabled(int handle, int enabled);
+static int setItemValueLabel(int handle, ModMenuListLabel label);
 static int isOpen(void);
 static void closeMenu(void);
 static int getActiveTab(void);
@@ -52,7 +54,8 @@ static u32 previousButtons, previousMode, closingButtons;
 static const modMenuApi_t menuApi = {
     MODMENU_API_VERSION, sizeof(modMenuApi_t), addTab,      addItem,  removeTab,      setItemEnabled,   isOpen,
     closeMenu,           getActiveTab,       focusTab,    setList,  setListInfo,    setTabVisibility, setTabContexts,
-    menuConfigLoad,      menuConfigSave,     setProgress, setModal, menuBackendBox, menuBackendText, setTabAction};
+    menuConfigLoad,      menuConfigSave,     setProgress, setModal, menuBackendBox, menuBackendText, setTabAction,
+    setItemValueLabel};
 /* A window of whole tabs: measured text plus Horizon-style padding. Scroll
  * the first visible tab only when the focused tab would fall outside it. */
 static int firstTab;
@@ -164,6 +167,7 @@ static int addItem(int tab, const modMenuItem_t* d)
 			items[i].tab = tab;
 			items[i].enabled = 1;
 			items[i].definition = *d;
+			items[i].valueLabel = 0;
 			copyText(items[i].label, label, 48);
 			items[i].definition.label = items[i].label;
 			return items[i].handle;
@@ -198,6 +202,17 @@ static int setItemEnabled(int handle, int enabled)
 	for (i = 0; i < MODMENU_MAX_ITEMS; ++i)
 		if (items[i].handle == handle && handle) {
 			items[i].enabled = !!enabled;
+			return 0;
+		}
+	return -1;
+}
+
+static int setItemValueLabel(int handle, ModMenuListLabel label)
+{
+	int i;
+	for (i = 0; i < MODMENU_MAX_ITEMS; ++i)
+		if (items[i].handle == handle && handle && items[i].definition.type == MODMENU_RANGE) {
+			items[i].valueLabel = label;
 			return 0;
 		}
 	return -1;
@@ -387,7 +402,10 @@ static void activate(int direction)
 				*d->value = !*d->value;
 			else if (d->type == MODMENU_RANGE) {
 				long long next = (long long)*d->value + (direction < 0 ? -(long long)d->step : d->step);
-				value = next < d->minimum ? d->minimum : next > d->maximum ? d->maximum : (int)next;
+				if (items[i].valueLabel)
+					value = next < d->minimum ? d->maximum : next > d->maximum ? d->minimum : (int)next;
+				else
+					value = next < d->minimum ? d->minimum : next > d->maximum ? d->maximum : (int)next;
 				*d->value = value;
 			} else if (d->type != MODMENU_ACTION || direction < 0)
 				return;
@@ -583,7 +601,6 @@ static void draw(void)
 				/* Keep standard controls inside the same .11..89 content pane
                  * used by the home tab and custom-map list. */
 				menuBackendBox(.115f, y - .008f, .77f, .052f, 0x8018608f);
-				menuBackendText(.125f, y, color, ">");
 			}
 			if (items[i].definition.type == MODMENU_ACTION) {
 				/* Horizon config.c button: inset dark border, gray face, centered
@@ -601,8 +618,13 @@ static void draw(void)
 				menuBackendText(.865f - menuBackendWidth(state), y, color, state);
 			}
 			if (items[i].definition.type == MODMENU_RANGE) {
-				number(value, *items[i].definition.value);
-				menuBackendText(.865f - menuBackendWidth(value), y, color, value);
+				const char* label = items[i].valueLabel ?
+				    items[i].valueLabel(items[i].definition.context, *items[i].definition.value) : 0;
+				if (!label) {
+					number(value, *items[i].definition.value);
+					label = value;
+				}
+				menuBackendText(.865f - menuBackendWidth(label), y, color, label);
 			}
 		}
 	drawFooter();

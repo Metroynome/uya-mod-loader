@@ -36,6 +36,12 @@ typedef enum forgeContext {
 	FORGE_CONTEXT_BOOT
 } forgeContext_e;
 
+typedef enum forgeGameMode {
+	FORGE_MODE_SIEGE,
+	FORGE_MODE_CTF,
+	FORGE_MODE_DM
+} forgeGameMode_e;
+
 typedef enum forgeState {
 	FORGE_IDLE = 0,
 	FORGE_SCANNING = 1,
@@ -52,7 +58,8 @@ typedef enum forgeError {
 	FORGE_ERROR_NOT_FOUND = 5,
 	FORGE_ERROR_SCAN = 6,
 	FORGE_ERROR_LOAD = 7,
-	FORGE_ERROR_INACTIVE = 8
+	FORGE_ERROR_INACTIVE = 8,
+	FORGE_ERROR_MODE = 9
 } forgeError_e;
 
 /* Forge owns the capability; inactive modules must return false. */
@@ -61,6 +68,8 @@ typedef struct forgeApi {
 	/* 0x00 */ u32 version;
 	/* 0x04 */ u32 size;
 	/* 0x08 */ int (*active)(void);
+	/* 0x0c */ const int* quickLoadMaps;
+	/* 0x10 */ int (*applyGameMode)(void);
 } forgeApi_t;
 
 /* Requests execute asynchronously. reload() returns positive when queued;
@@ -93,7 +102,7 @@ typedef struct forgeMailbox {
 	/* 0x20 */ u8 state;
 	/* 0x21 */ u8 error;
 	/* 0x22 */ u8 rejectError;
-	/* 0x23 */ u8 reserved;
+	/* 0x23 */ u8 gameMode; /* Request: 0 Siege (default), 1 CTF, 2 Deathmatch. */
 	/* 0x24 */ char filename[FORGE_FILENAME_SIZE];
 	/* 0xa5 */ u8 padding[3];
 } forgeMailbox_t;

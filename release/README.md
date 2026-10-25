@@ -15,10 +15,25 @@ No build tools or libraries are needed to play.
 4. Preserve your `uya/config/*.ini` settings when upgrading. Replace the loader
    and module binaries together with files from the same release.
 
-Release defaults include Mod Menu, BIOS Warning, and Map Loader where supported,
-without tests/examples. NTSC-J supports campaign only. Forge is opt-in and must
-be built/copied separately. When upgrading to v2, replace older modules with
+Release defaults include Mod Menu, BIOS Warning, Map Loader, and Forge where supported,
+without tests/examples. NTSC-J supports campaign only. Forge is bundled for
+NTSC-U/PAL, enabled with `campaign,local`. When upgrading to v2, replace older modules with
 compatible version-4 binaries.
+
+## Forge map testing
+
+Forge can boot straight to Local Play staging, reload/hop retail or custom maps,
+and choose Siege, CTF, or Deathmatch. In-game mode changes wait for the next
+reload/hop; staging changes apply immediately. Chargeboots and Infinite Ammo
+default to ON. Quick Load defaults to OFF and only speeds up custom maps.
+Boot to Local Play defaults to OFF, preserving normal startup; the PINE command
+can still enter staging on demand. Save/Load Settings
+stores these choices in `uya/config/forge.<region>.ini`.
+
+Forge also accepts PINE commands without Mod Menu. Selection, Start Game, and
+reload requests use the optional mode byte at mailbox +`0x23`: 0 Siege (default),
+1 CTF, 2 Deathmatch. See the [Forge PINE guide](https://github.com/Metroynome/uya-mod-loader/blob/master/modules/forge/PINE.md)
+for command numbers, discovery, and complete examples.
 
 Online patch loading passed a user test on the current NTSC-U setup with default
 modules disabled online. Older Horizon builds using `0xa0000` for their network
@@ -45,7 +60,8 @@ Enter Local Play staging for the first scan. A progress popup captures input
 until it finishes. The catalog stays in memory across staging visits and games;
 no `.idx` files are used and new files are not detected automatically. Use
 Forge → Refresh Custom Maps or a PINE refresh command after changing maps.
-Without Forge, restart the game to rescan. Do not change assets while scanning
+Without Forge, press Square while the Custom Maps tab is focused in Local Play
+staging to rescan. Do not change assets while scanning
 or loading a game. Map packs requiring Horizon custom code/game modes are unsupported.
 
 `uya/mods/utils/` is also available for other mods' supporting files. Keep

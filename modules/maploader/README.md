@@ -62,6 +62,10 @@ With Forge active, the list is also available through the in-game pause menu's
 MOD MENU entry. Selecting a named retail/custom map hops to it; `None` remains
 staging-only. See the [Forge guide](../forge/README.md).
 
+Forge's **Quick Load Maps** setting optionally bypasses frame waits during
+custom-map starts, hops, and reloads. Map Loader restores its patches afterward
+and on deactivation. Retail loads retain normal timing; no loading popup is used.
+
 ## Scanning and refresh
 
 The first Local Play staging visit after activation scans `host0:uya/`. Entering

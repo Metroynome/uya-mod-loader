@@ -1,3 +1,4 @@
 modmenu campaign,local
 bios-warning campaign,local
 maploader local
+forge campaign,local

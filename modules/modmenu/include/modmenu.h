@@ -78,6 +78,8 @@ typedef struct modMenuApi {
 	/* Focused-tab Square action. Label is copied; NULL callback clears it.
 	 * Appended API-1 extension; EE function-pointer offset is 0x50. */
 	int (*setTabAction)(int tab, const char* label, ModMenuCallback callback, void* context);
+	/* Optional named values for a range selector; EE pointer offset 0x54. */
+	int (*setItemValueLabel)(int item, ModMenuListLabel label);
 } modMenuApi_t;
 
 /* Look this up again after mode changes; absence is normal, not fatal.

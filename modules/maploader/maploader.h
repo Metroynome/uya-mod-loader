@@ -60,6 +60,8 @@ int mapLoading(void);
 void mapClearLoad(void);
 void mapMessage(const char* message);
 int mapForgeActive(void);
+int mapQuickLoadEnabled(void);
+void mapQuickLoadBegin(void);
 int mapHopInGame(void);
 int mapHopAvailable(void);
 /* Nonnegative values are catalog indices; -40 through -49 select retail bases. */

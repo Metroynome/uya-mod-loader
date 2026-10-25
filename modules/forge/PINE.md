@@ -27,7 +27,9 @@ Every command uses this same procedure:
 2. Check the one-byte capabilities field at `M + 0x1e`:
    `(capabilities & (1 << command)) != 0` must be true.
 3. Write the command number as **one byte** to `M + 0x1f`.
-4. Write a **129-byte, zero-filled ASCII buffer** to `M + 0x24`, containing
+4. Optionally write the game mode as **one byte** to `M + 0x23`: `0` Siege,
+   `1` CTF, or `2` Deathmatch. Omitted means Siege; see below.
+   Write a **129-byte, zero-filled ASCII buffer** to `M + 0x24`, containing
    the filename or retail ID below. Leave it all zero for an empty argument.
    Finish all payload writes before the next step.
 5. Write `id` as a **four-byte little-endian integer** to `M + 0x0c` **last**.
@@ -91,7 +93,7 @@ PAL; do not append `.pal`. The loader chooses the regional assets.
 
 Stop if selection fails; sending Start Game anyway would use the previous
 selection. To start whatever map is already selected, skip steps 2 and 3.
-Command `6` does not accept a map filename or change game settings.
+Command `6` does not accept a map filename. Its mode byte chooses the game mode.
 
 ### Hop to a retail map or reload the current map
 
@@ -104,6 +106,35 @@ Command `6` does not accept a map filename or change game settings.
   wait for success. It reloads the current retail/custom map. For a rebuilt
   custom map whose metadata or file sizes changed, use command `4` with its
   filename instead so the catalog is refreshed before loading.
+
+### Choose the game mode
+
+Commands **3, 4, 5, 6, and 7** accept the optional byte at `M + 0x23`.
+This selects a mode for the existing command, not a separate command number:
+
+| Value | Mode |
+| --- | --- |
+| 0 | Siege (default) |
+| 1 | CTF |
+| 2 | Deathmatch |
+
+Write the byte before publishing the request ID. Accepted requests reset it to
+zero, so omitting it on the next request selects Siege. Client helpers should
+explicitly write zero when their optional mode argument is omitted, including
+a retry after rejection. Values above 2 are rejected with error 9.
+Refresh (2) and Enter Local Play (1) ignore this byte.
+
+In staging, selection commands also update the game mode and its UI label.
+Start Game (6) uses its own mode byte: to select a map and then start CTF, write
+`1` for **both** requests. During gameplay, a select/hop or reload applies the
+requested mode with UYA's native objective/team defaults. The map must contain
+the objectives needed by that mode. Requests do not automatically save settings.
+
+Examples:
+
+`sendAndWait(command = 7, filename = "", gameMode = 2)` reloads in Deathmatch.
+The next `sendAndWait(command = 7, filename = "")` reloads in Siege.
+`sendAndWait(command = 5, filename = "40", gameMode = 1)` hops to Bakisi Isles in CTF.
 
 ### Editor integration example
 
@@ -203,7 +234,7 @@ The mailbox is 168 bytes (was 172) while accepting 128 filename characters.
 | 0x20 | 1 | state | Game: accepted operation state |
 | 0x21 | 1 | error | Game: accepted operation error |
 | 0x22 | 1 | rejectError | Game: rejected operation error |
-| 0x23 | 1 | reserved | Zero; do not write |
+| 0x23 | 1 | gameMode | Host: 0 Siege (default), 1 CTF, 2 Deathmatch |
 | 0x24 | 129 | filename | Host: up to 128 ASCII characters plus NUL |
 | 0xa5 | 3 | padding | Zero; do not write |
 
@@ -267,8 +298,9 @@ catalog only: use command 7 or 4 to load changed map content.
    advances when emulation is running. A stopped heartbeat may simply mean pause.
 2. Wait for earlier accepted work to complete. Choose a fresh nonzero request ID;
    never reuse an ID in a session (skip zero on wraparound).
-3. Write command and a zero-padded 129-byte filename field. For commands 1/2/6/7,
-   an empty filename is sufficient. Wait for these PINE writes to complete.
+3. Write command, optional gameMode (zero for Siege), and a zero-padded 129-byte
+   filename field. For commands 1/2/6/7, an empty filename is sufficient.
+   Wait for these PINE writes to complete.
 4. Write requestId **last**, in a separate completed write.
 5. Poll: `rejectedId == id` reports rejection; `acceptedId == id` acknowledges
    work; `completedId == id` reports terminal state/error. Do not interpret an
@@ -283,7 +315,7 @@ completion marker again around status reads if submitting consecutive requests.
 
 States: 0 idle, 1 scanning, 2 loading/queued transition, 3 complete, 4 failed.
 Errors: 0 none, 1 wrong context, 2 busy, 3 unknown command, 4 invalid filename,
-5 map not found, 6 scan failure, 7 selection/loading/HUD failure, 8 inactive.
+5 map not found, 6 scan failure, 7 selection/loading/HUD failure, 8 inactive, 9 invalid game mode.
 Rejected requests have separate ID/error fields and do not replace the accepted operation.
 
 Leaving Local Play cancels pending map responses. Command 1 carries its request
@@ -299,9 +331,10 @@ is implemented here; access control belongs to the emulator's PINE endpoint.
 ## Verification
 
 Protocol-v2 layout, 128-character names, and unterminated-name rejection are
-covered by native checks. The live gameplay results below are from protocol v1;
-v2 has not yet been exercised through PCSX2/PINE.
-
+covered by native checks, along with explicit/default mode values and invalid
+mode rejection. Direct PINE tests on PAL selected Bakisi Isles in CTF, started
+the game in CTF, and reloaded without writing the mode byte; that request
+submitted zero and completed in Siege with its native rules restored.
 
 Native tests cover request ordering, duplicate IDs, busy rejection, inactivity,
 invalid filenames, context restrictions, and scan failures. Live NTSC-U checks
@@ -309,7 +342,8 @@ covered refresh, selection, Start Game, custom/retail hops, and repeated reloads
 with working gameplay and HUD. PAL covered Bakisi Isles and Aquatos Aquadome
 starts, reloads, and hops, including the custom loading-screen name fix.
 
-These tests used MCP debugger reads/writes to the EE mailbox. Editor-side PINE
-transport still needs integration verification. Temple of Shaar's PAL loading
+Earlier map-transition tests used MCP debugger reads/writes to the EE mailbox;
+the mode tests above used PCSX2's PINE endpoint. Forge v2 editor integration
+still needs verification. Temple of Shaar's PAL loading
 failure remains unresolved; campaign, online, NTSC-J, and split-screen hopping
 are unsupported. See [Forge support notes](README.md#support-and-limitations).

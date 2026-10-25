@@ -14,6 +14,9 @@
 #define CREATE_GAME (0x6ac860)
 #define UI_MANAGER (0x247914)
 #define NET_INFO (0x1a5cc0)
+#define GAME_SETTINGS (0x241640)
+#define GAME_MODE (0x240628)
+#define MODE_PRESET (0x19ae90)
 #else
 #define BOOT_SITE (0x381590)
 #define BOOT_ORIGINAL (0x0c0e8f8c)
@@ -26,6 +29,9 @@
 #define CREATE_GAME (0x6a9f10)
 #define UI_MANAGER (0x247a74)
 #define NET_INFO (0x1a5e40)
+#define GAME_SETTINGS (0x2417c0)
+#define GAME_MODE (0x2407a8)
+#define MODE_PRESET (0x19afd0)
 #endif
 
 #define WORD(address) (*(volatile u32*)(address))
@@ -35,6 +41,9 @@
 #define UI_ACTIVE (0x1c5c110)
 #define BOOT_EXEC_CALL (BOOT_MULTIPLAYER + 0x4c)
 #define BOOT_PARSED_OPTIONS (0x1d551d)
+#ifndef FORGE_MODE_PRESET
+#define FORGE_MODE_PRESET(mode) ((void (*)(int))MODE_PRESET)(mode)
+#endif
 
 typedef enum forgeBootStage {
 	FORGE_BOOT_INITIAL,
@@ -56,16 +65,26 @@ void forgeBridgeDisable(void);
 void forgeBridgeTick(const mapHopApi_t*);
 void forgeBridgeResume(u32 requestId);
 static int active(void);
+static int applyGameMode(void);
 
 static const moduleApi_t* loader;
 static const modMenuApi_t* menu;
 static int enabled, tab, item, refreshItem, lastReady = -1, lastRefresh = -1;
-static int bootToLocalPlay = 1, bootRequested;
+static int bootToLocalPlay, bootRequested;
+static int quickLoadMaps;
+static int chargeboots = 1, infiniteAmmo = 1;
+static int selectedGameMode, lastGameContext = -1;
 static forgeBootStage_e bootStage;
 static forgeState_e bootResult;
 static u32 bootRequestId;
-static const moduleConfigField_t settings[] = {{"bootToLocalPlay", &bootToLocalPlay, 0, 1}};
-static const forgeApi_t service = {FORGE_API_VERSION, sizeof(forgeApi_t), active};
+static const moduleConfigField_t settings[] = {
+	{"bootToLocalPlay", &bootToLocalPlay, 0, 1},
+	{"quickLoadMaps", &quickLoadMaps, 0, 1},
+	{"chargeboots", &chargeboots, 0, 1},
+	{"infiniteAmmo", &infiniteAmmo, 0, 1},
+	{"gameMode", &selectedGameMode, FORGE_MODE_SIEGE, FORGE_MODE_DM}
+};
+static const forgeApi_t service = {FORGE_API_VERSION, sizeof(forgeApi_t), active, &quickLoadMaps, applyGameMode};
 
 static int active(void)
 {
@@ -231,9 +250,96 @@ int forgeBootRequest(u32 requestId)
 	return 0;
 }
 
+/* libuya GameOptions starts at GameSettings + 0x188. Forge owns only these
+ * two byte-sized flags while active, including in Local Play staging. */
+static void applyGameOptions(void* unused)
+{
+	u32 gameSettings;
+	volatile u8* options;
+	(void)unused;
+	if (!active() || loader->mode != UYA_MODE_MULTIPLAYER)
+		return;
+	gameSettings = WORD(GAME_SETTINGS);
+	if (gameSettings < 0x100000 || gameSettings > 0x1fffe00 || (gameSettings & 3))
+		return;
+	options = (volatile u8*)(gameSettings + 0x188);
+	options[0x12] = chargeboots;
+	options[0x13] = infiniteAmmo;
+	*(volatile u8*)(GAME_SETTINGS + 8 + 0x12) = chargeboots;
+	*(volatile u8*)(GAME_SETTINGS + 8 + 0x13) = infiniteAmmo;
+}
+
+static const char* gameModeLabel(void* unused, int mode)
+{
+	static const char* names[] = {"Siege", "CTF", "Deathmatch"};
+	(void)unused;
+	return mode >= FORGE_MODE_SIEGE && mode <= FORGE_MODE_DM ? names[mode] : "Unavailable";
+}
+
+/* The Create Game selector calls this resident preset routine. It resets the
+ * 22 setup rule bytes, then applies the selected mode's objective defaults.
+ * Copy those rules into the active settings as well; hops reuse that object. */
+static int applyGameMode(void)
+{
+	u32 gameSettings, i;
+	volatile u8* options;
+	const volatile u8* setup = (void*)(GAME_SETTINGS + 8);
+	if (!active() || loader->mode != UYA_MODE_MULTIPLAYER ||
+	    selectedGameMode < FORGE_MODE_SIEGE || selectedGameMode > FORGE_MODE_DM)
+		return 0;
+	gameSettings = WORD(GAME_SETTINGS);
+	if (gameSettings < 0x100000 || gameSettings > 0x1fffe00 || (gameSettings & 3) ||
+	    WORD(MODE_PRESET) != 0x27bdfff0 || WORD(MODE_PRESET + 4) != 0xffb00000 ||
+	    WORD(MODE_PRESET + 8) != 0xffbf0008 || WORD(MODE_PRESET + 20) != 0x24030001)
+		return 0;
+	/* Leave existing rules intact when a reload keeps the current mode. */
+	if (WORD(gameSettings + 0x180) != (u32)selectedGameMode) {
+		FORGE_MODE_PRESET(selectedGameMode);
+		options = (void*)(gameSettings + 0x188);
+		for (i = 0; i < 22; ++i)
+			options[i] = setup[i];
+		options[0x15] = selectedGameMode != FORGE_MODE_DM;
+		*(volatile u8*)(GAME_SETTINGS + 8 + 0x15) = options[0x15];
+		WORD(gameSettings + 0x180) = selectedGameMode;
+	}
+	WORD(GAME_MODE) = selectedGameMode;
+	applyGameOptions(0);
+	return 1;
+}
+
+static void gameModeChanged(void* unused)
+{
+	u32 current, child, i;
+	const char* name;
+	(void)unused;
+	/* Staging's label is child 2; retail builds it from GAME_MODE on entry. */
+	if (lastGameContext != FORGE_CONTEXT_STAGING || !applyGameMode())
+		return;
+	current = activeMenu(23);
+	if (!current || WORD(current + 0x10c) < 3)
+		return;
+	child = WORD(current + 0x118);
+	if (child < 0x100000 || child > 0x1ffff80 || (child & 3))
+		return;
+	name = gameModeLabel(0, selectedGameMode);
+	for (i = 0; i < 31 && name[i]; ++i)
+		((volatile char*)child)[0x14 + i] = name[i];
+	((volatile char*)child)[0x14 + i] = 0;
+}
+
+void forgeSetGameMode(u8 mode)
+{
+	selectedGameMode = mode;
+	gameModeChanged(0);
+}
+
 static void configAction(void* saving)
 {
-	int result = saving ? loader->saveConfig("forge", settings, 1) : loader->loadConfig("forge", settings, 1);
+	u32 count = sizeof(settings) / sizeof(settings[0]);
+	int result = saving ? loader->saveConfig("forge", settings, count) : loader->loadConfig("forge", settings, count);
+	applyGameOptions(0);
+	if (!saving && result >= 0)
+		gameModeChanged(0);
 	loader->print("forge: %s settings result=%d\n", saving ? "save" : "load", result);
 }
 
@@ -279,6 +385,7 @@ static void deactivate(void)
 	menu = 0;
 	tab = 0;
 	lastReady = -1;
+	lastGameContext = -1;
 }
 
 int moduleInit(const moduleApi_t* api)
@@ -287,7 +394,7 @@ int moduleInit(const moduleApi_t* api)
 	forgeBridgeInit();
 	if (api->version < UYA_API_VERSION || api->size < sizeof(*api))
 		return -1;
-	api->loadConfig("forge", settings, 1);
+	api->loadConfig("forge", settings, sizeof(settings) / sizeof(settings[0]));
 	resumeBoot();
 	api->restrictContexts(UYA_CONTEXT_CAMPAIGN | UYA_CONTEXT_LOCAL);
 	api->setLifecycle(activate, deactivate);
@@ -303,14 +410,30 @@ void moduleUpdate(void)
 		forgeBridgeTick(0);
 		return;
 	}
+	applyGameOptions(0);
 	const mapHopApi_t* p = hop();
 	int ready = p && p->available();
+	int context = p ? p->context() : FORGE_CONTEXT_UNAVAILABLE;
+	u32 current = WORD(GAME_SETTINGS);
 	static const modMenuItem_t action = {"Reload Current Map", MODMENU_ACTION, 0, 0, 0, 0, reload, 0};
 	static const modMenuItem_t refreshAction = {"Refresh Custom Maps", MODMENU_ACTION, 0, 0, 0, 0, refresh, 0};
 	static const modMenuItem_t boot = {"Boot to Local Play", MODMENU_TOGGLE, &bootToLocalPlay, 0, 1, 1, 0, 0};
+	static const modMenuItem_t quick = {"Quick Load Maps", MODMENU_TOGGLE, &quickLoadMaps, 0, 1, 1, 0, 0};
+	static const modMenuItem_t boots = {"Chargeboots", MODMENU_TOGGLE, &chargeboots, 0, 1, 1, applyGameOptions, 0};
+	static const modMenuItem_t ammo = {"Infinite Ammo", MODMENU_TOGGLE, &infiniteAmmo, 0, 1, 1, applyGameOptions, 0};
+	static const modMenuItem_t mode = {
+		"Game Mode", MODMENU_RANGE, &selectedGameMode, FORGE_MODE_SIEGE, FORGE_MODE_DM, 1, gameModeChanged, 0
+	};
 	static const modMenuItem_t save = {"Save Settings", MODMENU_ACTION, 0, 0, 0, 0, configAction, (void*)1};
 	static const modMenuItem_t load = {"Load Settings", MODMENU_ACTION, 0, 0, 0, 0, configAction, 0};
 	int canRefresh = p && p->context() && p->state() != FORGE_SCANNING && p->state() != FORGE_LOADING;
+	/* Adopt each game's actual mode. In-game edits remain pending until a
+	 * reload/hop calls applyGameMode; staging edits update settings immediately. */
+	if (context && (context == FORGE_CONTEXT_STAGING || context != lastGameContext) &&
+	    current >= 0x100000 && current <= 0x1fffe00 && !(current & 3) &&
+	    WORD(current + 0x180) <= FORGE_MODE_DM)
+		selectedGameMode = WORD(current + 0x180);
+	lastGameContext = context;
 	forgeBridgeTick(p);
 	if (menu && p && (p->state() == FORGE_SCANNING || p->state() == FORGE_LOADING))
 		menu->close();
@@ -326,6 +449,10 @@ void moduleUpdate(void)
 		item = menu->addItem(tab, &action);
 		refreshItem = menu->addItem(tab, &refreshAction);
 		menu->addItem(tab, &boot);
+		menu->setItemValueLabel(menu->addItem(tab, &mode), gameModeLabel);
+		menu->addItem(tab, &quick);
+		menu->addItem(tab, &boots);
+		menu->addItem(tab, &ammo);
 		menu->addItem(tab, &save);
 		menu->addItem(tab, &load);
 		lastReady = lastRefresh = -1;

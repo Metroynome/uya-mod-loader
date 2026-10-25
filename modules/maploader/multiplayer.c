@@ -38,6 +38,7 @@
 #define SOUND_PARAMS    (0x240180)
 #define SOUND_RPC       (0x240100)
 #define SOUND_FLUSH     (0x193590)
+#define TIME_BANDIT     (0x195c94)
 #else
 #define IMAGE_SET       (0x67e990)
 #define MESSAGE         (0x599618)
@@ -70,6 +71,7 @@
 #define SOUND_PARAMS    (0x240300)
 #define SOUND_RPC       (0x240280)
 #define SOUND_FLUSH     (0x193680)
+#define TIME_BANDIT     (0x195d84)
 #endif
 /* Resolve the retail name from GameLevel, never from a label that may already
  * contain a custom name (including after a live module reload). */
@@ -94,6 +96,7 @@ static void hookedSoundInit(void);
 static void hookedSoundCore(void);
 static void hookedLoad(void* dest, u32 sector, u32 sectors);
 static int hookedSync(int mode);
+static void quickLoadEnd(void);
 
 #if UYA_MODULE_REGION == 2
 static const u32 radarHooks[10] = {
@@ -112,6 +115,8 @@ static mapRecord_t active;
 static int armed, busy, failed, soundSent;
 static void* soundBuffer;
 static u32 savedSettings, savedBase, forcedBase;
+static u32 quickLoadSites[5], quickLoadPatched;
+static int quickLoadOverlay = -1;
 static hook_t hooks[] = {{TOC_HOOK, JAL(TOC_READ), hookedTable},
                               {WAD_HOOK, JAL(WAD_READ), hookedLoad},
                               {SYNC_HOOK, JAL(CD_SYNC), hookedSync},
@@ -308,6 +313,7 @@ static int writable(void* dest, u32 size)
 static void hookedTable(u32 sector, u32 count, void* dest)
 {
 	u32 level = WORD(MAP_ID);
+	mapQuickLoadBegin();
 	((void (*)(u32, u32, void*))TOC_READ)(sector, count, dest);
 	mapHopOnLoad();
 	armed = failed = soundSent = 0;
@@ -544,11 +550,80 @@ int mapHooksReady(void)
 	return 1;
 }
 
+/* VSync calls live in each source overlay's transition/fade routines. Keep
+ * their addresses until loading ends; GameLevel changes before that overlay
+ * is replaced. Never restore instructions into the destination's code. */
+static int quickLoadOverlayReady(int index)
+{
+	const u32* row = hopAddresses[index];
+	u32 wad = WORD(row[0]), sound = WORD(row[0] + 0x2c);
+	return (wad == JAL(row[1]) || wad == JAL(hookedLoad)) &&
+	       (sound == JAL(row[2]) || sound == JAL(hookedSoundInit));
+}
+
+static void quickLoadEnd(void)
+{
+	u32 i;
+	if (!quickLoadPatched)
+		return;
+	if (quickLoadOverlayReady(quickLoadOverlay))
+		for (i = 0; i < 5; ++i)
+			if ((quickLoadPatched & (1 << i)) && WORD(quickLoadSites[i]) == 0)
+				WORD(quickLoadSites[i]) = JAL(0x139e08);
+	if ((quickLoadPatched & (1 << 5)) && WORD(TIME_BANDIT) == 0)
+		WORD(TIME_BANDIT) = 0xac620128;
+	quickLoadPatched = 0;
+	quickLoadOverlay = -1;
+	mapApi->flushCache(0);
+	mapApi->flushCache(2);
+}
+
+void mapQuickLoadBegin(void)
+{
+	u32 i, index;
+	const u32* row;
+	if (!mapQuickLoadEnabled() || !mapMultiplayerReady() || mapOnlineDisabled())
+		return;
+	if (quickLoadPatched) {
+		if (quickLoadOverlayReady(quickLoadOverlay))
+			return;
+		quickLoadEnd();
+	}
+	for (index = 0; index < 11; ++index)
+		if (hooks[1].address == hopAddresses[index][0] && quickLoadOverlayReady(index))
+			break;
+	if (index == 11)
+		return;
+	row = hopAddresses[index];
+	quickLoadSites[0] = row[7];
+	quickLoadSites[1] = row[7] + 0xa4;
+	quickLoadSites[2] = row[8];
+	quickLoadSites[3] = row[8] + 0xd4;
+	quickLoadSites[4] = row[8] + 0x108;
+	/* Require the complete retail group before bypassing frame waits. */
+	for (i = 0; i < 5; ++i)
+		if (WORD(quickLoadSites[i]) != JAL(0x139e08) || WORD(quickLoadSites[i] + 4) != 0x0000202d)
+			return;
+	quickLoadOverlay = index;
+	for (i = 0; i < 5; ++i) {
+		WORD(quickLoadSites[i]) = 0;
+		quickLoadPatched |= 1 << i;
+	}
+	/* Resident network frame throttling also runs inside the loading loop. */
+	if (WORD(TIME_BANDIT) == 0xac620128) {
+		WORD(TIME_BANDIT) = 0;
+		quickLoadPatched |= 1 << 5;
+	}
+	mapApi->flushCache(0);
+	mapApi->flushCache(2);
+}
+
 void mapDisableHooks(void)
 {
 	u32 i, changed = 0, level;
 	if (!mapMultiplayerReady() || busy)
 		return;
+	quickLoadEnd();
 	/* Restore only instructions still owned by this module. A competing
      * patch must never be replaced with our saved retail instructions. */
 	for (i = 0; i < sizeof(hooks) / sizeof(hooks[0]); ++i)
@@ -639,6 +714,10 @@ void mapInstallHooks(void)
 	}
 	changed |= reclaimLocalHooks();
 	configureHooks();
+	if (!mapQuickLoadEnabled() || (WORD(SCENE) == 1 && mapHopResult != 1))
+		quickLoadEnd();
+	else if (WORD(SCENE) != 1)
+		mapQuickLoadBegin();
 	if (WORD(LEVEL_ID) != 39)
 		savedSettings = 0;
 	/* Tail-hook the transition name builder, preserving its stack delay slot. */

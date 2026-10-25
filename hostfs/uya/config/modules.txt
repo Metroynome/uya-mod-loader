@@ -5,3 +5,4 @@ modmenu campaign,local
 maploader.ntscu local
 maploader.pal local
 bios-warning campaign,local // optional expanded-RAM BIOS warning; requires modmenu
+forge campaign,local // normal startup; Boot to Local Play defaults to OFF

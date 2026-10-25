@@ -277,3 +277,34 @@ Once multiplayer is ready, Forge dispatches native select event 7 on Local Play
 `0x00247a74` / `0x00247914`, next-menu field +`0x284`. These functions were
 matched in the extracted regional lobby overlays. Completion waits for the
 actual staging object; no Start Game callback is invoked.
+
+### Optional custom-map quick loading
+
+Forge exposes its saved `quickLoadMaps` toggle through `forgeApi_t` at +`0x0c`.
+Map Loader bypasses five `JAL 0x00139e08` calls in the source overlay's fade and
+transition loops, plus the resident TimeBandit store at `0x00195d84` (NTSC-U) /
+`0x00195c94` (PAL). The regional `hopAddresses` rows include the first transition
+and fade sites; the other calls are at +`0xa4` and +`0xd4`/`0x108`, respectively.
+All five calls and their delay slots were matched in level 39–49 memory images.
+The NTSC-U fade's second call is `0x00589560`, not the adjacent store at
+`0x0058955c` used by the old standalone cheat.
+
+Only Local Play custom-map loads opt in. Restoration tracks the source overlay
+and owned instructions, so a newly loaded overlay is never patched with saved
+instructions from the previous map. Normal timing returns after loading and
+on deactivation. Retail loads and campaign are unchanged.
+
+### Forge game modes
+
+UYA's native Create Game mode selector calls `0x0019afd0` (NTSC-U) /
+`0x0019ae90` (PAL). This resident routine copies 22 default rule bytes to the
+local setup at `0x002417c8` / `0x00241648`, then applies Siege/CTF/Deathmatch
+presets. Forge copies those rules to `GameSettings + 0x188` when changing modes,
+sets team play for objective modes, and reapplies its two saved rule overrides.
+The active mode is at `GameSettings + 0x180`; local setup's mode is at
+`0x002407a8` / `0x00240628`. Staging uses child 2 (`menu + 0x118`) for its mode
+label, as seen in the native NTSC-U staging builder at `0x006ab678`.
+
+The appended `forgeApi_t.applyGameMode` callback at +`0x10` runs immediately
+before Map Loader's Start Game or hop request. Menu changes during gameplay
+only change the pending value; the current game keeps running its existing mode.

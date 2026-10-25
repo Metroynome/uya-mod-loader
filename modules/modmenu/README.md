@@ -107,6 +107,7 @@ fields. Recheck availability across context changes.
 | `addItem(tab, definition)` | Copy a control into the tab; return its handle |
 | `removeTab(tab)` | Remove a tab and its controls |
 | `setItemEnabled(item, enabled)` | Enable or disable a control |
+| `setItemValueLabel(item, callback)` | Display names for a range selector; named ranges wrap at either end |
 | `isOpen()` / `close()` | Query or close the menu |
 | `getActiveTab()` / `focusTab(tab)` | Read or change the selected visible tab |
 | `setTabVisibility(tab, mask)` | Set the screen filter described below |

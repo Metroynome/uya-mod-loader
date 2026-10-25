@@ -83,10 +83,25 @@ static int restoreHud(u32 level)
 	return 1;
 }
 
+static int prepareGameMode(void)
+{
+	const forgeApi_t* forge = mapApi->findService(FORGE_SERVICE_ID, FORGE_API_VERSION);
+	return forge && forge->version == FORGE_API_VERSION && forge->size >= sizeof(*forge) &&
+	       forge->active() && (!forge->applyGameMode || forge->applyGameMode());
+}
+
 int mapForgeActive(void)
 {
 	const forgeApi_t* p = mapApi->findService(FORGE_SERVICE_ID, FORGE_API_VERSION);
 	return p && p->version == FORGE_API_VERSION && p->size >= sizeof(*p) && p->active();
+}
+
+int mapQuickLoadEnabled(void)
+{
+	const forgeApi_t* forge = mapApi->findService(FORGE_SERVICE_ID, FORGE_API_VERSION);
+	return mapApi->context == UYA_CONTEXT_LOCAL && mapSelection >= 0 && mapSelection < mapCount &&
+	       forge && forge->version == FORGE_API_VERSION && forge->size >= sizeof(*forge) &&
+	       forge->active() && forge->quickLoadMaps && *forge->quickLoadMaps;
 }
 
 int mapHopInGame(void)
@@ -181,12 +196,13 @@ void mapHopTick(void)
 		return;
 	if (phase == 3) {
 		u32 menu = startGameMenu();
-		if (!menu || !mapForgeActive() || mapLoading()) {
+		if (!menu || !mapForgeActive() || mapLoading() || !prepareGameMode()) {
 			mapHopCancel();
 			return;
 		}
 		phase = 4;
 		mapMessage("Starting game...");
+		mapQuickLoadBegin();
 		MAP_START_GAME_CALL(menu);
 		return;
 	}
@@ -208,12 +224,17 @@ void mapHopTick(void)
 			return;
 		}
 		requestAddress = findRequest();
+		if (!prepareGameMode()) {
+			mapHopCancel();
+			return;
+		}
 		base = targetBase;
 		mapSelection = queued < 0 ? -1 : queued;
 		mapClearLoad();
 		WORD(settings + 0x17c) = base;
 		phase = 2;
 		mapMessage("Loading map...");
+		mapQuickLoadBegin();
 		MAP_HOP_CALL(requestAddress, base);
 		return;
 	}

@@ -7,7 +7,8 @@ to Horizon Forge v2 are included; its developer can integrate the documented
 
 ## Setup and use
 
-Build/copy Forge and its dependencies, then enable:
+Forge and its dependencies are enabled in NTSC-U/PAL releases. For a custom
+module list, use these entries in `uya/config/modules.txt`:
 
 ```text
 modmenu local
@@ -15,19 +16,32 @@ maploader local
 forge campaign,local
 ```
 
-Restart emulation after installing binaries or changing `modules.txt`. Forge is
-opt-in and is not currently included by the release module allowlist. See the
+Restart emulation after installing binaries or changing `modules.txt`. See the
 [root build instructions](../../README.md#build-with-docker).
 
 - **Reload Current Map:** open MOD MENU from the in-game pause menu, then choose
   Forge → Reload Current Map. Works with retail and custom maps.
 - **Change maps:** choose a named map in the in-game Custom Maps list and press
   Cross. The menu closes and a normal loading transition begins.
+- **Game Mode:** scroll left/right through Siege, CTF, and Deathmatch. In staging,
+  the settings and mode label update immediately. During gameplay, the choice
+  stays pending until Reload Current Map or a map hop. Changing modes uses the
+  native objective defaults and team rules; unchanged modes retain their rules.
+  Save/Load Settings includes the selected mode. Each new staging/game context
+  starts with its actual mode, as in DL Forge.
+- **Quick Load Maps:** bypasses loading-loop VSync waits for custom maps when
+  starting, hopping, or reloading. Off by default; Save/Load Settings retains
+  the toggle in `uya/config/forge.<region>.ini`. Retail maps keep normal VSync.
+  No loading popup is added, and normal frame timing returns after loading.
+- **Chargeboots / Infinite Ammo:** both default to ON, matching DL Forge.
+  Forge applies these game rules in Local Play staging and gameplay. Turn either
+  off in the Forge tab; Save/Load Settings retains both choices per region.
 - **Refresh Custom Maps:** use the Forge tab in staging or supported gameplay
   after changing map files. Refresh updates the catalog; it does not reload the
-  current level. Without Forge, restart to discover changes.
-- **Boot to Local Play:** on by default. Cold startup enters multiplayer and
-  follows the native Local Play/Create Game flow to staging without starting
+  current level. Without Forge, Square refreshes the focused Custom Maps tab
+  in Local Play staging.
+- **Boot to Local Play:** off by default, preserving normal startup. When on,
+  cold startup follows the native Local Play/Create Game flow to staging without starting
   a game. Save Settings retains the toggle; Load Settings restores it from
   `uya/config/forge.<region>.ini`. Turning it off keeps normal startup.
   Enable Forge for `campaign,local` so it can run before the multiplayer ELF.
@@ -61,9 +75,11 @@ Game with a new request ID. Accepted work is not necessarily finished: always
 check completion and error fields. Busy or unsupported requests are rejected.
 
 PINE works without Mod Menu. Discover the mailbox through the loader/module
-headers; never hard-code its address. [PINE.md](PINE.md) defines the exact layout,
-commands, ordering, readiness checks, and error codes. Tests used debugger EE
-memory writes; actual editor-side PINE transport still needs integration testing.
+headers; never hard-code its address. Selection, Start Game, and reload commands
+accept an optional mode byte: 0 Siege (default), 1 CTF, or 2 Deathmatch.
+[PINE.md](PINE.md) defines the exact layout, commands, ordering, readiness checks,
+and error codes. Direct PCSX2 PINE tests passed; integration into the Forge v2
+editor remains separate.
 
 ## Support and limitations
 
@@ -80,6 +96,9 @@ Live NTSC-U tests covered Temple of Shaar reloads, hops to Bakisi Mini, repeated
 reloads, retail Korgon Outpost, and return hops with working gameplay/HUD.
 PAL tests covered Bakisi Isles and Aquatos Aquadome starts/reloads and hops in
 both directions, including the corrected custom loading-screen name.
+PAL also passed PINE CTF selection/Start Game, a reload defaulting to Siege,
+and invalid-mode rejection. Aquadome quick reloads measured about 4.8 seconds
+versus 11 seconds with Quick Load off on the test emulator; retail timing is unchanged.
 Temple of Shaar's PAL normal-start and hop crashes remain unresolved. Other map
 bases/player counts are not all live-qualified. See [ADDRESSES.md](../../docs/ADDRESSES.md).
 
