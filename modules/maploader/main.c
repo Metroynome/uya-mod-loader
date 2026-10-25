@@ -139,7 +139,7 @@ static int commandRequest(u32 command, const char* name)
 		return FORGE_ERROR_BUSY;
 	if (!context)
 		return FORGE_ERROR_CONTEXT;
-	if (command < FORGE_RELOAD || command > FORGE_SELECT_RETAIL)
+	if (command < FORGE_REFRESH || command > FORGE_RELOAD)
 		return FORGE_ERROR_COMMAND;
 	if (command == FORGE_RELOAD && context != 2)
 		return FORGE_ERROR_CONTEXT;

@@ -12,7 +12,7 @@ Build/copy Forge and its dependencies, then enable:
 ```text
 modmenu local
 maploader local
-forge local
+forge campaign,local
 ```
 
 Restart emulation after installing binaries or changing `modules.txt`. Forge is
@@ -26,6 +26,12 @@ opt-in and is not currently included by the release module allowlist. See the
 - **Refresh Custom Maps:** use the Forge tab in staging or supported gameplay
   after changing map files. Refresh updates the catalog; it does not reload the
   current level. Without Forge, restart to discover changes.
+- **Boot to Local Play:** on by default. Cold startup enters multiplayer and
+  follows the native Local Play/Create Game flow to staging without starting
+  a game. Save Settings retains the toggle; Load Settings restores it from
+  `uya/config/forge.<region>.ini`. Turning it off keeps normal startup.
+  Enable Forge for `campaign,local` so it can run before the multiplayer ELF.
+  PINE command 1 can request staging from the boot menu while the setting is off.
 
 Retail and custom maps share an alphabetical list. `None` is staging-only;
 choose a named retail entry to leave a custom map during gameplay. The in-game
@@ -42,12 +48,13 @@ The module-owned mailbox accepts:
 
 | Command | Purpose |
 | --- | --- |
-| Reload current | Reload the active retail/custom map |
+| Enter Local Play | Boot menu to staging; preserves the saved boot option |
 | Refresh | Rescan available map packs |
 | Select/load filename | Select in staging; hop during gameplay |
 | Refresh and select/load | Rescan before selection/hopping |
-| Start Game | Start from staging with current map/settings |
 | Select/load retail | Select or hop to retail base 40–49 |
+| Start Game | Start from staging with current map/settings |
+| Reload current | Reload the active retail/custom map |
 
 To start a newly selected map, wait for selection to complete, then send Start
 Game with a new request ID. Accepted work is not necessarily finished: always
@@ -65,7 +72,8 @@ memory writes; actual editor-side PINE transport still needs integration testing
 - No automatic file watching, build-triggered reload, or position restoration.
 - Map assets must pass Map Loader validation. Do not update files during a scan
   or load. A failure after teardown may require restarting the game.
-- Mod Menu is optional for commands; Map Loader is required. Unavailable
+- Mod Menu is optional for commands; Map Loader is required for map commands,
+  but not Enter Local Play. Unavailable
   dependencies disable actions rather than enabling unsupported transitions.
 
 Live NTSC-U tests covered Temple of Shaar reloads, hops to Bakisi Mini, repeated

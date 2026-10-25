@@ -6,15 +6,15 @@ Use PINE EE memory reads/writes; this is not a host-process pointer. Forge v2
 needs no plugin-specific transport. The Forge mod consumes commands on its
 normal game-thread update. No editor source changes are included here.
 
-Enable `forge local`, `maploader`, and optionally `modmenu` in modules.txt.
+Enable `forge campaign,local`, `maploader local`, and optionally `modmenu` in modules.txt.
 The protocol works without Mod Menu. Currently supported: NTSC-U and PAL Local Play
-staging and supported in-match overlays 40-49. Online, campaign, boot menus,
-and transitions do not accept new map commands.
+staging and supported in-match overlays 40-49. Command 1 can also enter Local Play from the boot menu. Online, loaded campaign levels,
+and transitions do not accept new commands.
 
 ## Quick guide: send a command
 
 First enable PINE in PCSX2, boot the game, and enter **Local Play staging** or
-a running Local Play game. Discover the mailbox using the pointer chain below;
+a running Local Play game (or the boot menu for command 1). Discover the mailbox using the pointer chain below;
 never hard-code a module or mailbox address. In these examples, `M` means the
 discovered mailbox address, and `id` is a fresh nonzero 32-bit request ID.
 
@@ -22,7 +22,7 @@ Every command uses this same procedure:
 
 1. Verify the mailbox header and advancing heartbeat. Require `available != 0`
    at `M + 0x1c` and the expected context at `M + 0x1d`: `1` for staging,
-   `2` for a running game. Wait for any previous command or menu-triggered
+   `2` for a running game, `3` for the boot menu. Wait for any previous command or menu-triggered
    scan/load to finish. Do not send during a transition.
 2. Check the one-byte capabilities field at `M + 0x1e`:
    `(capabilities & (1 << command)) != 0` must be true.
@@ -44,6 +44,18 @@ reconnecting, read the existing IDs and choose an unused ID for that session;
 do not blindly start at `1`. If a command times out, report it and inspect the
 heartbeat/context before retrying; it may still be running. Never automatically
 resubmit a Start Game or hop with a new ID while its outcome is unknown.
+
+### Enter Local Play from the boot menu
+
+Enable Forge for `campaign,local`. With `bootToLocalPlay=0`, discover the mailbox
+at the campaign boot menu and require context `3` with capability bit `0x02`.
+Send command **1**, empty filename, writing the command to `M + 0x1f` and the
+request ID to `M + 0x0c` last. Wait for successful completion: Local Play staging
+is open, but no game has started. Then select a map and use command 6 if needed.
+
+This request does not change the saved boot option. It survives the brief
+unavailable context while the multiplayer ELF loads. Do not resend it during
+that transition. Map Loader and Mod Menu are not required for command 1.
 
 ### Refresh the custom map list
 
@@ -74,21 +86,21 @@ PAL; do not append `.pal`. The loader chooses the regional assets.
    was added/rebuilt and needs a refresh first.
 3. Wait for **successful completion**. The map is selected and its staging
    name is updated, but the game has not started.
-4. Send **command `5`**, empty argument, using a **new request ID**.
+4. Send **command `6`**, empty argument, using a **new request ID**.
 5. Wait for successful completion. Gameplay is ready on the selected map.
 
 Stop if selection fails; sending Start Game anyway would use the previous
 selection. To start whatever map is already selected, skip steps 2 and 3.
-Command `5` does not accept a map filename or change game settings.
+Command `6` does not accept a map filename or change game settings.
 
 ### Hop to a retail map or reload the current map
 
-- **Retail hop:** in a running game, send **command `6`**, argument `"43"`
+- **Retail hop:** in a running game, send **command `5`**, argument `"43"`
   for Korgon Outpost, and wait for success. The argument is ASCII decimal text,
   not a binary integer. Supported retail IDs are listed below.
-- **Retail start:** in staging, send command `6`, wait for success, then send
-  command `5` with an empty argument and a new ID.
-- **Reload:** in a running game, send **command `1`**, empty argument, and
+- **Retail start:** in staging, send command `5`, wait for success, then send
+  command `6` with an empty argument and a new ID.
+- **Reload:** in a running game, send **command `7`**, empty argument, and
   wait for success. It reloads the current retail/custom map. For a rebuilt
   custom map whose metadata or file sizes changed, use command `4` with its
   filename instead so the catalog is refreshed before loading.
@@ -107,7 +119,7 @@ test newly built custom map:
 	wait until all build output files are completely written
 	if context == 1:                         // staging
 		sendAndWait(command = 4, filename = "minikisi", id = nextRequestId())
-		sendAndWait(command = 5, filename = "", id = nextRequestId())
+		sendAndWait(command = 6, filename = "", id = nextRequestId())
 	else if context == 2:                    // running game
 		sendAndWait(command = 4, filename = "minikisi", id = nextRequestId())
 	else:
@@ -156,9 +168,9 @@ No memory scan is needed. All pointers are 32-bit little-endian EE addresses.
 
 The headers and exports table are read-only to the host. The exports and mailbox
 pointers exist as soon as Forge is loaded, but the mailbox header is initialized
-only when Forge first initializes in Local Play. Loaded does not imply active.
-If the header is not ready or the heartbeat is stopped, wait for running Local
-Play instead of writing commands. A paused emulator also stops the heartbeat.
+only when Forge first initializes in an allowed context. Loaded does not imply
+active. If the header is not ready or the heartbeat is stopped, wait for the
+boot menu or running Local Play. A paused emulator also stops the heartbeat.
 
 Cache addresses only for the current session. Rediscover after restart,
 savestate load, module replacement, changed header, or stopped heartbeat.
@@ -170,7 +182,7 @@ the mailbox uses a new magic and version. Forge/Map Loader service ABI is now 2
 so mismatched modules cannot silently truncate filenames.
 
 The 48-byte advisory message was removed. Display status from `state`, `error`,
-and `rejectError`; command numbers and numeric results are unchanged. IDs and
+and `rejectError`. Command IDs follow the table below. IDs and
 heartbeat remain 32-bit to avoid short-counter rollover during editor sessions.
 The mailbox is 168 bytes (was 172) while accepting 128 filename characters.
 
@@ -184,8 +196,8 @@ The mailbox is 168 bytes (was 172) while accepting 128 filename characters.
 | 0x10 | 4 | acceptedId | Game: most recently accepted request |
 | 0x14 | 4 | completedId | Game: most recently completed request |
 | 0x18 | 4 | rejectedId | Game: most recently rejected request |
-| 0x1c | 1 | available | Game: compatible Map Loader available |
-| 0x1d | 1 | context | Game: 0 unavailable, 1 staging, 2 game |
+| 0x1c | 1 | available | Game: Map Loader or boot backend available |
+| 0x1d | 1 | context | Game: 0 unavailable, 1 staging, 2 game, 3 boot menu |
 | 0x1e | 1 | capabilities | Game: bit `(1 << command)` |
 | 0x1f | 1 | command | Host: command number |
 | 0x20 | 1 | state | Game: accepted operation state |
@@ -202,30 +214,30 @@ game. Write filename separately, then the aligned 32-bit request ID last.
 
 | Number | Command | Staging | In match |
 |---|---|---|---|
-| 1 | Reload current | Reject: no active game | Reload the current retail or custom map |
+| 1 | Enter Local Play | Boot menu only; enters staging | Reject |
 | 2 | Refresh | Rescan catalog | Rescan catalog |
-| 3 | Select/load filename | Select map and update staging name; user still presses Start | Hop to map |
-| 4 | Refresh and select/load filename | Rescan, find and select map | Rescan, find and hop to map |
-| 5 | Start Game | Start with the current map and settings | Reject: already in a game |
-| 6 | Select/load retail map | Clear custom override and select retail base | Hop to retail base |
+| 3 | Select/load custom map | Select custom map | Hop to custom map |
+| 4 | Refresh and select/load custom map | Rescan and select custom map | Rescan and hop to custom map |
+| 5 | Select/load retail map | Clear custom override and select retail base | Hop to retail base |
+| 6 | Start Game | Start with the selected map/settings | Reject |
+| 7 | Reload current map | Reject | Reload the current retail/custom map |
 
 Start Game takes no filename. Select a map with command 3 or 4 first if needed,
-wait for that request to finish, then submit command 5 with a new ID. Retail maps
+wait for that request to finish, then submit command 6 with a new ID. Retail maps
 also work: whatever is selected in staging is used. The command defers the normal
 retail Start Game callback until the next update, allowing Mod Menu to close,
 and reports completion only when gameplay is ready. It preserves the game's
 normal roster, settings, overlay selection and HUD initialization. The callback
 is signature-checked; unavailable code or invalid selected map files reject the
 request. Leaving staging before execution cancels it. It cannot start online games.
-Staging capabilities are now `0x7c`; in-game capabilities are `0x5e`.
-Older builds without bit `(1 << 5)` do not implement Start Game.
+Capabilities are `0x02` at boot (command 1 only), `0x7c` in staging, and `0xbc` in game.
 
-Command 6 (`FORGE_SELECT_RETAIL`) uses the existing filename field as a
+Command 5 (`FORGE_SELECT_RETAIL`) uses the existing filename field as a
 NUL-terminated **decimal base-map ID**, for example `"43"`. Exactly `40` through
 `49` are accepted. It takes no host path and does not scan custom maps. Check
-capability bit `(1 << 6)` before sending it. In staging, wait for completion and
-then send command 5 if you want to start the game. In gameplay, completion means
-the retail transition and HUD setup finished. Command 1 subsequently reloads that
+capability bit `(1 << 5)` before sending it. In staging, wait for completion and
+then send command 6 if you want to start the game. In gameplay, completion means
+the retail transition and HUD setup finished. Command 7 subsequently reloads that
 retail map; commands 3/4 can switch back to custom maps.
 
 | ID | Retail map |
@@ -247,7 +259,7 @@ colons, wildcards, leading dots and unterminated strings are rejected. Files mus
 pass Map Loader's usual map-pack validation. A missing map is an explicit error.
 Refresh preserves selection by filename when present; removed maps lose selection.
 In-game refresh requires the same mapscan helper as staging. It updates the
-catalog only: use command 1 or 4 to load changed map content.
+catalog only: use command 7 or 4 to load changed map content.
 
 ## Submission and completion
 
@@ -255,7 +267,7 @@ catalog only: use command 1 or 4 to load changed map content.
    advances when emulation is running. A stopped heartbeat may simply mean pause.
 2. Wait for earlier accepted work to complete. Choose a fresh nonzero request ID;
    never reuse an ID in a session (skip zero on wraparound).
-3. Write command and a zero-padded 129-byte filename field. For commands 1/2/5,
+3. Write command and a zero-padded 129-byte filename field. For commands 1/2/6/7,
    an empty filename is sufficient. Wait for these PINE writes to complete.
 4. Write requestId **last**, in a separate completed write.
 5. Poll: `rejectedId == id` reports rejection; `acceptedId == id` acknowledges
@@ -274,7 +286,10 @@ Errors: 0 none, 1 wrong context, 2 busy, 3 unknown command, 4 invalid filename,
 5 map not found, 6 scan failure, 7 selection/loading/HUD failure, 8 inactive.
 Rejected requests have separate ID/error fields and do not replace the accepted operation.
 
-Leaving Local Play marks Forge unavailable and cancels its pending response.
+Leaving Local Play cancels pending map responses. Command 1 carries its request
+ID through the native ELF argument handoff and resumes in multiplayer. The
+loader may reload Forge and reset its heartbeat during this operation;
+rediscover its mailbox while waiting, retaining the same request ID.
 Requests posted while inactive are discarded on reactivation. Restarting the
 game resets the mailbox; reconnect and recheck the handshake. Savestate rewind
 can rewind IDs and heartbeat, so the editor should abandon outstanding requests

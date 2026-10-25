@@ -18,15 +18,23 @@
 #define FORGE_MAILBOX (&forgeMailbox)
 #endif
 
-/* Values are shared with PINE clients; keep their numeric assignments stable. */
+/* Shared command order: boot, catalog/selection, then game loading controls. */
 typedef enum forgeCommand {
-	FORGE_RELOAD = 1,
+	FORGE_LOCAL_PLAY = 1,
 	FORGE_REFRESH = 2,
 	FORGE_SELECT = 3,
 	FORGE_REFRESH_SELECT = 4,
-	FORGE_START_GAME = 5,
-	FORGE_SELECT_RETAIL = 6
+	FORGE_SELECT_RETAIL = 5,
+	FORGE_START_GAME = 6,
+	FORGE_RELOAD = 7
 } forgeCommand_e;
+
+typedef enum forgeContext {
+	FORGE_CONTEXT_UNAVAILABLE,
+	FORGE_CONTEXT_STAGING,
+	FORGE_CONTEXT_GAME,
+	FORGE_CONTEXT_BOOT
+} forgeContext_e;
 
 typedef enum forgeState {
 	FORGE_IDLE = 0,

@@ -250,3 +250,30 @@ After installing the fix, the user verified that returning from Horizon online
 play to Local Play staging shows the map list and that Square refreshes it.
 This confirms the NTSC-U menu handoff and refresh path. PAL logout handoff and
 starting a custom-map game after this handoff still need live verification.
+
+## Forge boot-to-Local-Play handoff
+
+The supplied NTSC-U code replaces the call at `0x00381590` (`0x0c0e8f8c`)
+with `J 0x00398040`. Matching the boot overlay's instructions gives PAL's
+corresponding call at `0x00381568` (`0x0c0e8fdc`) and target `0x00398128`.
+Forge applies this jump from a campaign tick; retail executes it after the tick
+returns, so an ELF switch cannot leave the loader's recursion guard set.
+
+The target calls the native boot-settings encoder at `0x0013b0c8`. It encodes
+eight settings bytes as sixteen hex characters in a `BOPT=` argument. Forge
+keeps this payload unchanged. The target's final Exec wrapper call is at
+`0x0039808c` (NTSC-U) / `0x00398174` (PAL), calling `0x00397fb8` / `0x003980a0`.
+Forge wraps that call to append a separate `FORGE=<eight hex digits>` argument.
+The multiplayer startup argument blocks are `0x001ebf80` / `0x001ebe00`, with
+argc at +`0x00`, sixteen argv pointers at +`0x04`, and string storage at +`0x44`.
+The received tag restores the boot route and PINE request ID after Forge reloads.
+The native parsed-options byte at `0x001d551d` distinguishes a cold campaign boot
+from a return carrying settings, preventing automatic redirection on return.
+
+Once multiplayer is ready, Forge dispatches native select event 7 on Local Play
+(entry 1) in landing menu 24. Its update functions are `0x006ae328` (NTSC-U) /
+`0x006b0c90` (PAL). Local Create Game (menu 21) submits through `0x006a9f10` /
+`0x006ac860`, then requests staging menu 23 via the native UI manager at
+`0x00247a74` / `0x00247914`, next-menu field +`0x284`. These functions were
+matched in the extracted regional lobby overlays. Completion waits for the
+actual staging object; no Start Game callback is invoked.
