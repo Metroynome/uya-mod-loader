@@ -30,6 +30,15 @@ Boot to Local Play defaults to OFF, preserving normal startup; the PINE command
 can still enter staging on demand. Save/Load Settings
 stores these choices in `uya/config/forge.<region>.ini`.
 
+Free Cam defaults to ON in NTSC-U/PAL Local Play. Press L1 + D-pad Up in game
+to enter/exit; Square toggles Render All, L1/R1 select fast/slow movement, and
+L2/R2 move vertically. HUD and reticle hide while active and return on exit.
+Free Cam, Airwalk and lock preferences can be saved; camera bookmarks are
+in-memory only. L1 + D-pad Up + Circle reloads the current map once per press.
+Camera input/hooks are released before reloads and hops recreate the player.
+Forge's Game Settings and Free Cam Settings headings organize its options;
+scrolling keeps the viewport fixed until selection reaches either edge.
+
 Forge also accepts PINE commands without Mod Menu. Selection, Start Game, and
 reload requests use the optional mode byte at mailbox +`0x23`: 0 Siege (default),
 1 CTF, 2 Deathmatch. See the [Forge PINE guide](https://github.com/Metroynome/uya-mod-loader/blob/master/modules/forge/PINE.md)
