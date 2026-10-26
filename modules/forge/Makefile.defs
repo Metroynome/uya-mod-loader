@@ -1,5 +1,13 @@
 # Module settings; shared build rules are in ../../Makefile.eeglobal.
-LIBRARY = none
+LIBRARY = libuya
 MODE = both
 REGIONS = ntscu pal
-EE_OBJS = main.o bridge.o
+EE_OBJS = main.o bridge.o freecam.o campaign-library.o
+# Select the correct library CRT while this module crosses the ELF boundary.
+EE_LDFLAGS += -Wl,--wrap=memset
+
+# Namespace librac3's entry points so both game libraries can coexist.
+build/$(REGION)/modules/forge/campaign-library.o: modules/forge/Makefile.defs
+	$(MAKE) -f Makefile.eeglobal MODULE=modules/forge REGION=$(REGION) IMAGE_LIBRARY=librac3 build/$(REGION)/libraries/librac3/lib/librac3$(REGION).a
+	@mkdir -p $(@D)
+	$(EE_OBJCOPY) --prefix-symbols=campaign_ build/$(REGION)/libraries/librac3/obj/functions.o $@

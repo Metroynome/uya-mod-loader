@@ -81,7 +81,8 @@ init/update; combine tab cleanup with any other cleanup your mod needs.
 | `MODMENU_ACTION` | Horizon-style button; invokes its required callback on Cross or Right |
 | `MODMENU_TOGGLE` | Toggles the pointed-to integer between 0 and 1 |
 | `MODMENU_RANGE` | Adjusts an integer by a positive step within inclusive bounds |
-| `MODMENU_LABEL` | Nonselectable text |
+| MODMENU_LABEL | Nonselectable text |
+| MODMENU_HEADER | Centered, nonselectable section heading |
 
 Toggle/range callbacks are optional and run after the value changes. Callbacks
 receive their context on the game thread; they must not block. Definitions and

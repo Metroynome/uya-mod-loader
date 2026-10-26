@@ -1,6 +1,10 @@
 /* Development-only Local Play controls. Map Loader owns all transition work. */
 #include "modules/forge/include/forge.h"
 #include "modules/modmenu/include/modmenu.h"
+#include "freecam.h"
+#include <libuya/pad.h>
+#include <libuya/game.h>
+#include <libuya/player.h>
 
 #if UYA_MODULE_REGION == 2
 #define BOOT_SITE (0x381568)
@@ -64,6 +68,9 @@ void forgeBridgeInit(void);
 void forgeBridgeDisable(void);
 void forgeBridgeTick(const mapHopApi_t*);
 void forgeBridgeResume(u32 requestId);
+/* Namespaced librac3 entry point; libuya supplies __real_memset. */
+void* campaignMemset(void* dest, int value, int size) __asm__("campaign_memset");
+void* __real_memset(void* dest, int value, u32 size);
 static int active(void);
 static int applyGameMode(void);
 
@@ -71,7 +78,7 @@ static const moduleApi_t* loader;
 static const modMenuApi_t* menu;
 static int enabled, tab, item, refreshItem, lastReady = -1, lastRefresh = -1;
 static int bootToLocalPlay, bootRequested;
-static int quickLoadMaps;
+static int quickLoadMaps, reloadHeld = 1;
 static int chargeboots = 1, infiniteAmmo = 1;
 static int selectedGameMode, lastGameContext = -1;
 static forgeBootStage_e bootStage;
@@ -82,7 +89,11 @@ static const moduleConfigField_t settings[] = {
 	{"quickLoadMaps", &quickLoadMaps, 0, 1},
 	{"chargeboots", &chargeboots, 0, 1},
 	{"infiniteAmmo", &infiniteAmmo, 0, 1},
-	{"gameMode", &selectedGameMode, FORGE_MODE_SIEGE, FORGE_MODE_DM}
+	{"gameMode", &selectedGameMode, FORGE_MODE_SIEGE, FORGE_MODE_DM},
+	{"freecam", &forgeFreecam.enabled, 0, 1},
+	{"freecamAirwalk", &forgeFreecam.airwalk, 0, 1},
+	{"freecamLockPosition", &forgeFreecam.lockPosition, 0, 1},
+	{"freecamLockAnimation", &forgeFreecam.lockAnimation, 0, 1}
 };
 static const forgeApi_t service = {FORGE_API_VERSION, sizeof(forgeApi_t), active, &quickLoadMaps, applyGameMode};
 
@@ -292,6 +303,9 @@ static int applyGameMode(void)
 	    WORD(MODE_PRESET) != 0x27bdfff0 || WORD(MODE_PRESET + 4) != 0xffb00000 ||
 	    WORD(MODE_PRESET + 8) != 0xffbf0008 || WORD(MODE_PRESET + 20) != 0x24030001)
 		return 0;
+	/* Map Loader calls this before player teardown for every start/reload/hop.
+	 * Release camera input while the original player and overlay are valid. */
+	forgeFreecamReset();
 	/* Leave existing rules intact when a reload keeps the current mode. */
 	if (WORD(gameSettings + 0x180) != (u32)selectedGameMode) {
 		FORGE_MODE_PRESET(selectedGameMode);
@@ -357,6 +371,34 @@ static void reload(void* unused)
 		menu->close();
 }
 
+/* Match DL Forge. A fresh press is required after menus and loading. */
+static void reloadShortcut(const mapHopApi_t* p)
+{
+	int i, held = 0;
+	if (!active() || !p || p->context() != FORGE_CONTEXT_GAME || !isInGame() ||
+	    (menu && menu->isOpen())) {
+		reloadHeld = 1;
+		return;
+	}
+	for (i = 0; i < GAME_MAX_PLAYERS; ++i) {
+		Player* player = playerGetFromSlot(i);
+		PAD* pad;
+		if (!player || !player->isLocal || player->fps.vars.cam_slot < 0 ||
+		    player->fps.vars.cam_slot >= GAME_MAX_LOCALS)
+			continue;
+		if (player->pauseOn || player->pauseTimer) {
+			reloadHeld = 1;
+			return;
+		}
+		pad = playerGetPad(player);
+		if (player->fps.vars.cam_slot == 0 && pad)
+			held = (pad->btns & (PAD_L1 | PAD_UP | PAD_CIRCLE)) == 0;
+	}
+	if (held && !reloadHeld && p->available())
+		reload(0);
+	reloadHeld = held;
+}
+
 static void refresh(void* unused)
 {
 	const mapHopApi_t* p = hop();
@@ -369,11 +411,14 @@ static void activate(void)
 {
 	forgeBridgeDisable();
 	enabled = 1;
+	reloadHeld = 1;
 }
 
 static void deactivate(void)
 {
+	forgeFreecamReset();
 	enabled = 0;
+	reloadHeld = 1;
 	if (bootResult == FORGE_LOADING && loader->mode == UYA_MODE_MULTIPLAYER &&
 	    WORD(NET_INFO + 0x130) >= 5 && WORD(NET_INFO + 0x130) <= 12) {
 		bootResult = FORGE_FAILED;
@@ -394,6 +439,7 @@ int moduleInit(const moduleApi_t* api)
 	forgeBridgeInit();
 	if (api->version < UYA_API_VERSION || api->size < sizeof(*api))
 		return -1;
+	forgeFreecamInit(api);
 	api->loadConfig("forge", settings, sizeof(settings) / sizeof(settings[0]));
 	resumeBoot();
 	api->restrictContexts(UYA_CONTEXT_CAMPAIGN | UYA_CONTEXT_LOCAL);
@@ -407,6 +453,8 @@ void moduleUpdate(void)
 {
 	bootLocalPlay();
 	if (loader->mode != UYA_MODE_MULTIPLAYER) {
+		reloadHeld = 1;
+		forgeFreecamUpdate(0, 0);
 		forgeBridgeTick(0);
 		return;
 	}
@@ -424,6 +472,13 @@ void moduleUpdate(void)
 	static const modMenuItem_t mode = {
 		"Game Mode", MODMENU_RANGE, &selectedGameMode, FORGE_MODE_SIEGE, FORGE_MODE_DM, 1, gameModeChanged, 0
 	};
+	static const modMenuItem_t gameHeader = {"Game Settings", MODMENU_HEADER, 0, 0, 0, 0, 0, 0};
+	static const modMenuItem_t freecamHeader = {"Free Cam Settings", MODMENU_HEADER, 0, 0, 0, 0, 0, 0};
+	static const modMenuItem_t freecam = {"Free Cam", MODMENU_TOGGLE, &forgeFreecam.enabled, 0, 1, 1, 0, 0};
+	static const modMenuItem_t freecamHelp = {"L1 + \x1d: toggle free cam in game", MODMENU_LABEL, 0, 0, 0, 0, 0, 0};
+	static const modMenuItem_t airwalk = {"Free Cam Airwalk", MODMENU_TOGGLE, &forgeFreecam.airwalk, 0, 1, 1, 0, 0};
+	static const modMenuItem_t lockPosition = {"Free Cam Lock Position", MODMENU_TOGGLE, &forgeFreecam.lockPosition, 0, 1, 1, 0, 0};
+	static const modMenuItem_t lockAnimation = {"Free Cam Lock Animation", MODMENU_TOGGLE, &forgeFreecam.lockAnimation, 0, 1, 1, 0, 0};
 	static const modMenuItem_t save = {"Save Settings", MODMENU_ACTION, 0, 0, 0, 0, configAction, (void*)1};
 	static const modMenuItem_t load = {"Load Settings", MODMENU_ACTION, 0, 0, 0, 0, configAction, 0};
 	int canRefresh = p && p->context() && p->state() != FORGE_SCANNING && p->state() != FORGE_LOADING;
@@ -439,6 +494,8 @@ void moduleUpdate(void)
 		menu->close();
 	if (!menu)
 		menu = modmenuFind(loader);
+	forgeFreecamUpdate(menu && menu->isOpen(), p && p->state() == FORGE_LOADING);
+	reloadShortcut(p);
 	if (!menu)
 		return;
 	if (tab <= 0) {
@@ -449,10 +506,17 @@ void moduleUpdate(void)
 		item = menu->addItem(tab, &action);
 		refreshItem = menu->addItem(tab, &refreshAction);
 		menu->addItem(tab, &boot);
-		menu->setItemValueLabel(menu->addItem(tab, &mode), gameModeLabel);
 		menu->addItem(tab, &quick);
+		menu->addItem(tab, &gameHeader);
+		menu->setItemValueLabel(menu->addItem(tab, &mode), gameModeLabel);
 		menu->addItem(tab, &boots);
 		menu->addItem(tab, &ammo);
+		menu->addItem(tab, &freecamHeader);
+		menu->addItem(tab, &freecam);
+		menu->addItem(tab, &freecamHelp);
+		menu->addItem(tab, &airwalk);
+		menu->addItem(tab, &lockPosition);
+		menu->addItem(tab, &lockAnimation);
 		menu->addItem(tab, &save);
 		menu->addItem(tab, &load);
 		lastReady = lastRefresh = -1;
@@ -467,10 +531,10 @@ void moduleUpdate(void)
 	}
 }
 
-void* memset(void* dest, int value, u32 size)
+/* Shared module state is cleared with the library for the current ELF. */
+void* __wrap_memset(void* dest, int value, u32 size)
 {
-	u8* p = dest;
-	while (size--)
-		*p++ = (u8)value;
-	return dest;
+	if (loader && loader->mode == UYA_MODE_CAMPAIGN)
+		return campaignMemset(dest, value, size);
+	return __real_memset(dest, value, size);
 }

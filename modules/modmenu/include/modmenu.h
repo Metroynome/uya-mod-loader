@@ -9,6 +9,7 @@
 #define MODMENU_TOGGLE            (2)
 #define MODMENU_RANGE             (3)
 #define MODMENU_LABEL             (4)
+#define MODMENU_HEADER            (5)
 #define MODMENU_SHOW_MAIN_MENU    (1)
 #define MODMENU_SHOW_CAMPAIGN     (2)
 #define MODMENU_SHOW_MULTIPLAYER  (4)

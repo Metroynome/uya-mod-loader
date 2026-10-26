@@ -50,11 +50,54 @@ Restart emulation after installing binaries or changing `modules.txt`. See the
 Retail and custom maps share an alphabetical list. `None` is staging-only;
 choose a named retail entry to leave a custom map during gameplay. The in-game
 list is available only while Forge is active. L3 + R3 remains disabled during
-gameplay; no reload button combo is implemented.
+gameplay. Press **L1 + D-pad Up + Circle** to reload the current map during
+Local Play gameplay. The shortcut is blocked in staging, menus and loading;
+holding it reloads once, and it does not toggle Free Cam.
 
 Hops use the existing game session and settings, with player recreation and HUD
 setup. They are full loading transitions, not seamless geometry updates or a
 promise to preserve transient player state, scores, or timers.
+
+## Free Cam
+
+Free Cam defaults to ON in NTSC-U and PAL Local Play. During gameplay, press
+**L1 + D-pad Up** to enter/exit. The Forge toggle arms the shortcut; it does not
+activate the camera immediately. Campaign and online play are excluded.
+
+| Control | Action |
+| --- | --- |
+| Left stick | Move forward/back and sideways |
+| Right stick | Look with the game's camera sensitivity and inversion |
+| L1 / R1 | Fast / slow movement (2.0 / 0.12; default 0.5) |
+| L2 / R2 | Move down / up |
+| Hold L3 | Keep left-stick movement horizontal |
+| D-pad Left | Switch between character and camera control |
+| D-pad Right | Toggle character-camera orientation |
+| D-pad Down | Hide/show the control legend |
+| Square | Toggle occlusion; OFF renders normally hidden geometry |
+| Select + Triangle | Save a camera bookmark in memory |
+| Select + Square | Restore the bookmark |
+| D-pad Up | Capture/release character state when Lock Animation is ON |
+
+Forge also provides Airwalk, Lock Position and Lock Animation, matching DL Forge.
+Save/Load Settings includes these preferences and the Free Cam toggle. Free Cam
+defaults to ON; the three auxiliary options default to OFF. Saved values override
+the defaults. Bookmarks and active camera sessions are not saved.
+
+Free Cam hides the HUD through its native pause-only update path and suppresses
+the shared weapon-reticle draw call. Both hooks are restored on exit.
+
+Gameplay inputs are blocked while controlling the camera. Menu/pause inputs
+suspend camera movement. Exiting restores the HUD, camera offset/orientation,
+input timer and occlusion. Reloading, hopping, death or leaving gameplay ends the
+camera session; map transitions restore input/hooks before player teardown and
+clear bookmarks. The enabled preference
+survives transitions. Other camera/occlusion mods may conflict.
+
+Regional hooks were checked against all ten extracted retail multiplayer
+overlays in NTSC-U and PAL. NTSC-U automatic boot, PINE custom-map startup and
+camera-hook activation were exercised in PCSX2. Visual/control verification
+and PAL/split-screen gameplay coverage remain separate from build checks.
 
 ## External commands
 
