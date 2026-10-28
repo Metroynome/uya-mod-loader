@@ -86,7 +86,7 @@ or replacing binaries.
   selection/start/reload requests accept an optional mode byte (default Siege).
   Supports NTSC-U/PAL Local Play bases 40–49; split-screen and NTSC-J hopping
   are disabled. Editor-side Forge v2 integration remains separate.
-- **[Bots](modules/bots/README.md):** 0-7 Local Play training bots (up to 3 online), with Idle as the default
+- **[Bots](modules/bots/README.md):** 0-7 training bots in Local Play or hosted online games, with Idle as the default
   behavior. Remembers selections between games/reloads without saving a file.
   Online support preserves the original local training behavior.
 - **BIOS Warning:** optional Mod Menu popup for incompatible expanded-RAM BIOS

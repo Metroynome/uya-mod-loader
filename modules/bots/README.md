@@ -32,9 +32,12 @@ when the game ends or reloads.
 The module runs online as host-side training AI and only uses vacant player
 slots. It does not add network clients or synchronize new bot players to other
 consoles. This preserves the original local training behavior.
-Online currently caps the chosen count at three; the seven-bot path is Local
-Play only until its online lifecycle is verified. The selected count remains
-available when returning to Local Play.
+Online permits up to seven bots when the host has enough vacant roster slots.
+Bots whose roster IDs exceed three reuse the game's remote-player objects;
+their local AI simulation suppresses native pad broadcasts. The session flag
+and client roster are restored after construction/simulation. Small private
+camera and network-data buffers remain necessary for locally controlled AI;
+there are no additional full player-object allocations.
 
 Bots only activates online when its entire image is below Horizon's reserved
 area at 0xc8000, or in expanded RAM. Otherwise it stays Local Play only.
@@ -53,3 +56,10 @@ reads confirmed all three bots active and the online session flag restored.
 The user also confirmed Marcadia loading online and the online Bots tab.
 Other maps and PAL gameplay
 still need live verification.
+NTSC-U Bakisi Deathmatch also ran online with Horizon and all seven bot
+records active. Debugger checks confirmed Deathmatch settings, restored
+constructor instructions and the online session flag. The extra four actors
+used native remote-player objects; their private camera/network-data buffers
+total 5,056 bytes. The user confirmed all eight players were present and
+spectating every bot worked after refreshing the extra actors' FPS-camera
+positions with the native camera routine.

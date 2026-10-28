@@ -133,8 +133,34 @@ VariableAddress_t vaPAD_PadUpdate = {
 #endif
 };
 
+static VariableAddress_t vaSetFpsCamera = {
+#if UYA_PAL
+	.Bakisi = 0x00518c98,
+	.Hoven = 0x0051adb0,
+	.OutpostX12 = 0x00510688,
+	.KorgonOutpost = 0x0050de20,
+	.Metropolis = 0x0050d170,
+	.BlackwaterCity = 0x0050aa08,
+	.CommandCenter = 0x0050a7c8,
+	.BlackwaterDocks = 0x0050d048,
+	.AquatosSewers = 0x0050c348,
+	.MarcadiaPalace = 0x0050bcc8,
+#else
+	.Bakisi = 0x005164c0,
+	.Hoven = 0x00518518,
+	.OutpostX12 = 0x0050de30,
+	.KorgonOutpost = 0x0050b648,
+	.Metropolis = 0x0050a998,
+	.BlackwaterCity = 0x005081b0,
+	.CommandCenter = 0x00508130,
+	.BlackwaterDocks = 0x0050a970,
+	.AquatosSewers = 0x00509cb0,
+	.MarcadiaPalace = 0x005095f0,
+#endif
+};
+
 /* The native remote pool has eight objects, unlike the four local heroes.
- * Only vacant roster slots are used; online retains the established path. */
+ * Only vacant roster slots are used, retaining local training inputs. */
 static VariableAddress_t vaCreateRemoteHero = {
 #if UYA_PAL
 	.Bakisi = 0x00538618,
@@ -217,7 +243,7 @@ static Player* createExtraPlayer(int id)
 	GameCamera camera;
 	Player* player;
 	u32 address;
-	int i, ordinal = 0;
+	int i;
 
 	/* These instruction layouts were checked in every supported map overlay.
 	 * Refuse an unfamiliar/modified constructor instead of touching its pool. */
@@ -244,10 +270,10 @@ static Player* createExtraPlayer(int id)
 	 * four-entry arrays with a network player ID (4-7). Restore the roster
 	 * and camera before returning to the game's normal frame. */
 	memcpy(clients, settings->PlayerClients, sizeof(clients));
-	for (i = 0; i < id; ++i) {
-		if (settings->PlayerClients[i] == GAME_CLIENT_ID && ordinal++ >= BOT_SCRATCH_SLOT)
-			settings->PlayerClients[i] = -1;
-	}
+	/* Remote humans may precede the vacant slot online. Present exactly
+	 * three local ordinals to this constructor, then restore every client. */
+	for (i = 0; i < id; ++i)
+		settings->PlayerClients[i] = i < BOT_SCRATCH_SLOT ? GAME_CLIENT_ID : -1;
 	memcpy(&camera, scratch, sizeof(camera));
 	original[0] = create[1];
 	original[1] = create[3];
@@ -337,13 +363,9 @@ void createSimPlayer(simulatedPlayer_t* sPlayer, int idx)
 		if (gameSettings->PlayerClients[j] == GAME_CLIENT_ID)
 			++localSlot;
 	}
-	int extra = localSlot >= 4;
-	if (extra && BotsOnline) {
-		gameSettings->PlayerClients[id] = saved->client;
-		gameSettings->PlayerSkins[id] = saved->skin;
-		gameSettings->PlayerTeams[id] = saved->team;
-		return;
-	}
+	/* Net-data storage is indexed by roster ID, not local ordinal. A bot
+	 * after remote humans needs the extended path even with a low ordinal. */
+	int extra = id >= 4;
 	if (extra)
 		localSlot = BOT_SCRATCH_SLOT;
 	sPlayer->Pad.id = localSlot;
@@ -476,12 +498,6 @@ void onSimulateHeros(void)
 			((void (*)(struct PAD*, void*, int))GetAddress(&vaPAD_PadUpdate))(
 			    &SimPlayers[i].Pad, SimPlayers[i].Pad.rdata, 0x14);
 
-			/* Extra objects are outside the native four-hero update loop. */
-			if (SimPlayers[i].Extra && SimPlayers[i].Active) {
-				scopedPlayer = SimPlayers[i].Player;
-				SimPlayers[i].vtable->Update(SimPlayers[i].Player);
-				scopedPlayer = 0;
-			}
 		}
 	}
 }
@@ -585,6 +601,29 @@ void startBots(void) // gameStart
 	}
 	frameTick();
 	gameTick();
+
+	/* Simulate extra local AI under the loader's re-entry guard. The local
+	 * net-data path isn't a registered online client: suppress its native
+	 * pad broadcasts without changing the session outside this call. */
+	int i;
+	for (i = 0; i < SimPlayerCount; ++i) {
+		simulatedPlayer_t* bot = &SimPlayers[i];
+		if (!bot->Extra || !bot->Active || !bot->Player ||
+		    playerGetAll()[bot->Player->mpIndex] != bot->Player)
+			continue;
+		int onlyLocal = GAME_NET_INFO->onlyLocalPlayers;
+		GAME_NET_INFO->onlyLocalPlayers = 1;
+		scopedPlayer = bot->Player;
+		bot->vtable->Update(bot->Player);
+		/* These actors have no native local camera pass. Refresh the FPS
+		 * position explicitly so Horizon spectates their current body, not
+		 * the position cached before their first respawn. */
+		u32* camera = (u32*)GetAddressImmediate(&vaSetFpsCamera);
+		if (camera && camera[0] == 0x27bdffb0 && camera[1] == 0x44800800)
+			((void (*)(Player*))camera)(bot->Player);
+		scopedPlayer = 0;
+		GAME_NET_INFO->onlyLocalPlayers = onlyLocal;
+	}
 }
 
 /* Settings live in main.c. Only per-level objects and our owned hook reset. */

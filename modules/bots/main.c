@@ -53,7 +53,6 @@ static void registerMenu(void)
 	static const modMenuItem_t amount = {"Bots", MODMENU_RANGE, &count, 0, TRAINING_MAX_BOTS, 1, 0, 0};
 	static const modMenuItem_t style = {"Behavior", MODMENU_RANGE, &behavior, 0, 2, 1, 0, 0};
 	static const modMenuItem_t help = {"Bot count applies on the next game or reload", MODMENU_LABEL, 0, 0, 0, 0, 0, 0};
-	static const modMenuItem_t online = {"Online currently supports up to 3 bots", MODMENU_LABEL, 0, 0, 0, 0, 0, 0};
 	const modMenuApi_t* current = modmenuFind(loader);
 	if (!current)
 		return;
@@ -70,7 +69,6 @@ static void registerMenu(void)
 	menu->addItem(tab, &amount);
 	menu->setItemValueLabel(menu->addItem(tab, &style), behaviorLabel);
 	menu->addItem(tab, &help);
-	menu->addItem(tab, &online);
 }
 
 static int onlineCompatible(void)
@@ -120,8 +118,6 @@ void moduleUpdate(void)
 		resetGame();
 	if (!running) {
 		SimPlayerCount = count;
-		if (BotsOnline && SimPlayerCount > 3)
-			SimPlayerCount = 3;
 		lastMap = map;
 		loadTime = settings->GameLoadStartTime;
 		running = 1;
