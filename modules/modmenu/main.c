@@ -22,6 +22,9 @@ typedef struct item {
 	char label[48];
 	modMenuItem_t definition;
 	ModMenuListLabel valueLabel;
+	int buttonCount, buttonCursor;
+	char buttonLabels[MODMENU_MAX_ROW_BUTTONS][24];
+	modMenuButton_t buttons[MODMENU_MAX_ROW_BUTTONS];
 } item_t;
 
 static int setTabVisibility(int tab, u32 contexts);
@@ -31,6 +34,9 @@ static int addItem(int tab, const modMenuItem_t* d);
 static int removeTab(int tab);
 static int setItemEnabled(int handle, int enabled);
 static int setItemValueLabel(int handle, ModMenuListLabel label);
+static int setItemButtons(int handle, const modMenuButton_t* buttons, int count);
+static int itemShown(const item_t* item);
+static void selectItem(int direction);
 static int isOpen(void);
 static void closeMenu(void);
 static int getActiveTab(void);
@@ -55,7 +61,7 @@ static const modMenuApi_t menuApi = {
     MODMENU_API_VERSION, sizeof(modMenuApi_t), addTab,      addItem,  removeTab,      setItemEnabled,   isOpen,
     closeMenu,           getActiveTab,         focusTab,    setList,  setListInfo,    setTabVisibility, setTabContexts,
     menuConfigLoad,      menuConfigSave,       setProgress, setModal, menuBackendBox, menuBackendText,  setTabAction,
-    setItemValueLabel};
+    setItemValueLabel,   setItemButtons};
 /* A window of whole tabs: measured text plus Horizon-style padding. Scroll
  * the first visible tab only when the focused tab would fall outside it. */
 static int firstTab;
@@ -152,7 +158,7 @@ static int addItem(int tab, const modMenuItem_t* d)
 	char label[48];
 	if (tabIndex(tab) < 0 || !d || !copyText(label, d->label, sizeof(label)))
 		return -1;
-	if (d->type < MODMENU_ACTION || d->type > MODMENU_HEADER)
+	if (d->type < MODMENU_ACTION || d->type > MODMENU_BUTTON_ROW)
 		return -1;
 	if (d->type == MODMENU_ACTION && !d->callback)
 		return -1;
@@ -169,6 +175,7 @@ static int addItem(int tab, const modMenuItem_t* d)
 			items[i].enabled = 1;
 			items[i].definition = *d;
 			items[i].valueLabel = 0;
+			items[i].buttonCount = items[i].buttonCursor = 0;
 			copyText(items[i].label, label, 48);
 			items[i].definition.label = items[i].label;
 			return items[i].handle;
@@ -216,6 +223,39 @@ static int setItemValueLabel(int handle, ModMenuListLabel label)
 			items[i].valueLabel = label;
 			return 0;
 		}
+	return -1;
+}
+
+static int itemShown(const item_t* item)
+{
+	return item->handle && (item->definition.type != MODMENU_BUTTON_ROW || item->buttonCount > 0);
+}
+
+static int setItemButtons(int handle, const modMenuButton_t* buttons, int count)
+{
+	int i, j;
+	char labels[MODMENU_MAX_ROW_BUTTONS][24];
+	if (count < 0 || count > MODMENU_MAX_ROW_BUTTONS || (count && !buttons))
+		return -1;
+	for (j = 0; j < count; ++j)
+		if (!buttons[j].callback || !copyText(labels[j], buttons[j].label, sizeof(labels[j])))
+			return -1;
+	for (i = 0; i < MODMENU_MAX_ITEMS; ++i) {
+		item_t* item = &items[i];
+		if (item->handle != handle || !handle || item->definition.type != MODMENU_BUTTON_ROW)
+			continue;
+		for (j = 0; j < count; ++j) {
+			copyText(item->buttonLabels[j], labels[j], sizeof(item->buttonLabels[j]));
+			item->buttons[j] = buttons[j];
+			item->buttons[j].label = item->buttonLabels[j];
+		}
+		item->buttonCount = count;
+		if (item->buttonCursor >= count)
+			item->buttonCursor = 0;
+		if (!count && selectedItem == handle)
+			selectItem(1);
+		return 0;
+	}
 	return -1;
 }
 
@@ -372,7 +412,7 @@ static void selectItem(int direction)
 		index = direction > 0 ? -1 : 0;
 	for (i = 0; i < MODMENU_MAX_ITEMS; ++i) {
 		index = (index + direction + MODMENU_MAX_ITEMS) % MODMENU_MAX_ITEMS;
-		if (items[index].handle && items[index].tab == selectedTab && items[index].enabled &&
+		if (itemShown(&items[index]) && items[index].tab == selectedTab && items[index].enabled &&
 		    items[index].definition.type != MODMENU_LABEL && items[index].definition.type != MODMENU_HEADER) {
 			selectedItem = items[index].handle;
 			return;
@@ -397,6 +437,18 @@ static void activate(int direction)
 			int value;
 			if (!items[i].enabled || !visible(items[i].tab))
 				return;
+			if (d->type == MODMENU_BUTTON_ROW) {
+				item_t* item = &items[i];
+				if (!item->buttonCount)
+					return;
+				if (direction) {
+					item->buttonCursor = (item->buttonCursor + direction + item->buttonCount) % item->buttonCount;
+				} else {
+					modMenuButton_t button = item->buttons[item->buttonCursor];
+					button.callback(button.context);
+				}
+				return;
+			}
 			callback = d->callback;
 			context = d->context;
 			if (d->type == MODMENU_TOGGLE)
@@ -580,7 +632,7 @@ static void draw(void)
 		return;
 	}
 	for (i = 0; i < MODMENU_MAX_ITEMS; ++i)
-		if (items[i].handle && items[i].tab == selectedTab) {
+		if (itemShown(&items[i]) && items[i].tab == selectedTab) {
 			if (items[i].handle == selectedItem)
 				selectedRow = row;
 			++row;
@@ -595,7 +647,7 @@ static void draw(void)
 	}
 	row = 0;
 	for (i = 0; i < MODMENU_MAX_ITEMS; ++i)
-		if (items[i].handle && items[i].tab == selectedTab) {
+		if (itemShown(&items[i]) && items[i].tab == selectedTab) {
 			float y;
 			u32 color = items[i].enabled ? 0x8069cbf2 : 0x80606060;
 			if (row++ < start)
@@ -603,7 +655,7 @@ static void draw(void)
 			if (row > start + 8)
 				break;
 			y = .32f + (row - start - 1) * .058f;
-			if (items[i].handle == selectedItem) {
+			if (items[i].handle == selectedItem && items[i].definition.type != MODMENU_BUTTON_ROW) {
 				color = 0x8069cbf2;
 				/* Keep standard controls inside the same .11..89 content pane
                  * used by the home tab and custom-map list. */
@@ -612,6 +664,25 @@ static void draw(void)
 			if (items[i].definition.type == MODMENU_HEADER) {
 				/* Horizon's section labels are centered and nonselectable. */
 				menuBackendText(.5f - menuBackendWidth(items[i].label) * .5f, y, 0x8069cbf2, items[i].label);
+				continue;
+			}
+			if (items[i].definition.type == MODMENU_BUTTON_ROW) {
+				item_t* item = &items[i];
+				float x = .865f;
+				int j;
+				menuBackendText(.15f, y, color, item->label);
+				for (j = item->buttonCount - 1; j >= 0; --j) {
+					const char* label = item->buttons[j].label;
+					float width = menuBackendWidth(label) + .035f;
+					int focused = item->handle == selectedItem && j == item->buttonCursor;
+					x -= width;
+					if (focused)
+						menuBackendBox(x - .006f, y - .008f, width + .012f, .052f, 0x8018608f);
+					menuBackendBox(x, y - .004f, width, .044f, 0x80303030);
+					menuBackendBox(x + .004f, y, width - .008f, .036f, 0x80505050);
+					menuBackendText(x + .0175f, y, color, label);
+					x -= .018f;
+				}
 				continue;
 			}
 			if (items[i].definition.type == MODMENU_ACTION) {

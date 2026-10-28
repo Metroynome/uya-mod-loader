@@ -85,6 +85,7 @@ init/update; combine tab cleanup with any other cleanup your mod needs.
 | `MODMENU_RANGE` | Adjusts an integer by a positive step within inclusive bounds |
 | MODMENU_LABEL | Nonselectable text |
 | MODMENU_HEADER | Centered, nonselectable section heading |
+| `MODMENU_BUTTON_ROW` | Left label with independently focused, text-width buttons on the right |
 
 Toggle/range callbacks are optional and run after the value changes. Callbacks
 receive their context on the game thread; they must not block. Definitions and
@@ -111,6 +112,7 @@ fields. Recheck availability across context changes.
 | `removeTab(tab)` | Remove a tab and its controls |
 | `setItemEnabled(item, enabled)` | Enable or disable a control |
 | `setItemValueLabel(item, callback)` | Display names for a range selector; named ranges wrap at either end |
+| `setItemButtons(item, buttons, count)` | Copy up to four buttons into a button row; zero hides the row |
 | `isOpen()` / `close()` | Query or close the menu |
 | `getActiveTab()` / `focusTab(tab)` | Read or change the selected visible tab |
 | `setTabVisibility(tab, mask)` | Set the screen filter described below |
@@ -123,6 +125,15 @@ fields. Recheck availability across context changes.
 | `loadConfig(...)` / `saveConfig(...)` | Compatibility wrappers for loader persistence |
 
 Ordinary mutation functions return zero on success and negative on failure.
+
+For a button row, add an item with type `MODMENU_BUTTON_ROW`, then call
+`setItemButtons` with `modMenuButton_t` entries containing a label, callback,
+and context. Button labels allow 23 characters; definitions and labels are
+copied. Keep labels short enough to fit beside the row label. Context pointers
+must stay valid. Up/down selects rows, left/right moves between buttons, and X
+invokes the focused button. Only that button highlights. Hidden rows do not
+consume visible space or receive focus. This API-1 extension is at EE offset
+`0x58`; older clients can continue using their existing table prefix.
 `close`, drawing, and progress functions return no value. `setModal` returns
 zero when another popup owns the slot; see the header for exact signatures.
 

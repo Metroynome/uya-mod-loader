@@ -3,6 +3,7 @@
 #include <libuya/game.h>
 #include <libuya/gamesettings.h>
 #include <libuya/uya.h>
+#include <libuya/stdio.h>
 #include "training/training.h"
 
 #define HORIZON_ARENA_START (0x000c8000)
@@ -10,6 +11,10 @@
 void moduleUpdate(void);
 
 extern int SimPlayerCount;
+extern int Initialized;
+extern simulatedPlayer_t SimPlayers[];
+
+static void refreshBotList(void);
 
 static const moduleApi_t* loader;
 static const modMenuApi_t* menu;
@@ -21,6 +26,56 @@ static int lastTime = -1;
 static int lastMap = -1;
 static int loadTime = -1;
 static int running;
+static int spawnItem;
+static int pendingSpawn, pendingRemove;
+static int listMask = -1;
+static int botItems[TRAINING_MAX_BOTS];
+
+static int canManageBots(void)
+{
+	return running && isInGame() && gameGetSettings() && (!BotsOnline || gameAmIHost());
+}
+
+static void spawnBot(void* context)
+{
+	(void)context;
+	if (canManageBots())
+		pendingSpawn = 1;
+}
+
+static void kickBot(void* context)
+{
+	if (canManageBots())
+		pendingRemove = (int)context;
+}
+
+static void refreshBotList(void)
+{
+	int i, mask = 0, vacant = 0;
+	if (!menu || menu != modmenuFind(loader) || tab <= 0)
+		return;
+	int enabled = canManageBots();
+	if (enabled) {
+		GameSettings* settings = gameGetSettings();
+		Player** players = playerGetAll();
+		for (i = 1; i < GAME_MAX_PLAYERS; ++i)
+			if (!players[i] && (!BotsOnline || settings->PlayerClients[i] < 0))
+				vacant = 1;
+		for (i = 0; i < SimPlayerCount; ++i)
+			if (SimPlayers[i].Created && SimPlayers[i].Player)
+				mask |= 1 << i;
+	}
+	menu->setItemEnabled(spawnItem, enabled && vacant);
+	for (i = 0; i < TRAINING_MAX_BOTS; ++i)
+		menu->setItemEnabled(botItems[i], enabled);
+	if (mask == listMask)
+		return;
+	listMask = mask;
+	for (i = 0; i < TRAINING_MAX_BOTS; ++i) {
+		modMenuButton_t kick = {"Kick", kickBot, (void*)(i + 1)};
+		menu->setItemButtons(botItems[i], &kick, (mask & (1 << i)) ? 1 : 0);
+	}
+}
 
 static const char* behaviorLabel(void* context, int index)
 {
@@ -34,6 +89,8 @@ static void resetGame(void)
 	botsReset(loader->mode == UYA_MODE_MULTIPLAYER);
 	running = 0;
 	lastTime = lastMap = loadTime = -1;
+	pendingSpawn = pendingRemove = 0;
+	listMask = -1;
 }
 
 static void deactivate(void)
@@ -53,6 +110,8 @@ static void registerMenu(void)
 	static const modMenuItem_t amount = {"Bots", MODMENU_RANGE, &count, 0, TRAINING_MAX_BOTS, 1, 0, 0};
 	static const modMenuItem_t style = {"Behavior", MODMENU_RANGE, &behavior, 0, 2, 1, 0, 0};
 	static const modMenuItem_t help = {"Bot count applies on the next game or reload", MODMENU_LABEL, 0, 0, 0, 0, 0, 0};
+	static const modMenuItem_t spawn = {"Spawn Bot", MODMENU_ACTION, 0, 0, 0, 0, spawnBot, 0};
+	static const modMenuItem_t list = {"Bot List", MODMENU_HEADER, 0, 0, 0, 0, 0, 0};
 	const modMenuApi_t* current = modmenuFind(loader);
 	if (!current)
 		return;
@@ -69,6 +128,16 @@ static void registerMenu(void)
 	menu->addItem(tab, &amount);
 	menu->setItemValueLabel(menu->addItem(tab, &style), behaviorLabel);
 	menu->addItem(tab, &help);
+	spawnItem = menu->addItem(tab, &spawn);
+	menu->addItem(tab, &list);
+	int i;
+	for (i = 0; i < TRAINING_MAX_BOTS; ++i) {
+		char label[16];
+		sprintf(label, "Fake %d", i);
+		modMenuItem_t row = {label, MODMENU_BUTTON_ROW, 0, 0, 0, 0, 0, 0};
+		botItems[i] = menu->addItem(tab, &row);
+	}
+	listMask = -1;
 }
 
 static int onlineCompatible(void)
@@ -103,6 +172,7 @@ void moduleUpdate(void)
 	int time, map;
 	BotsOnline = loader->context == UYA_CONTEXT_ONLINE;
 	registerMenu();
+	refreshBotList();
 	settings = gameGetSettings();
 	if (!settings || !isInGame()) {
 		if (running)
@@ -126,10 +196,23 @@ void moduleUpdate(void)
 	                  : behavior == 1 ? TRAINING_AGGRESSION_PASSIVE
 	                                  : TRAINING_AGGRESSION_AGGRO;
 	time = gameGetTime();
-	if (time == lastTime || !SimPlayerCount)
+	if ((time == lastTime || !SimPlayerCount) && !pendingSpawn && !pendingRemove)
 		return;
 	lastTime = time;
 	uyaPreUpdate();
 	startBots();
+	if (pendingRemove) {
+		if (botsRemove(pendingRemove - 1) && count > 0)
+			--count;
+		pendingRemove = 0;
+	}
+	if (pendingSpawn) {
+		int result = botsSpawn();
+		if (result >= 0)
+			pendingSpawn = 0;
+		if (result > 0 && count < TRAINING_MAX_BOTS)
+			++count;
+	}
+	refreshBotList();
 	uyaPostUpdate();
 }

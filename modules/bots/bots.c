@@ -37,6 +37,13 @@ typedef struct botSlot {
 	/* 0x0a */ char name[16];
 } botSlot_t;
 
+/* EE pointer layout; host pointer widths may differ. */
+typedef struct botNotifications {
+	/* 0x00 */ volatile int* count;
+	/* 0x04 */ volatile int* timers;
+	/* 0x08 */ char* messages;
+} botNotifications_t;
+
 void modeProcessPlayer(int pIndex);
 void modeTick(void);
 void modeInitTarget(simulatedPlayer_t* sPlayer);
@@ -184,6 +191,32 @@ static VariableAddress_t vaCreateRemoteHero = {
 	.BlackwaterDocks = 0x0052a248,
 	.AquatosSewers = 0x00529588,
 	.MarcadiaPalace = 0x00528ec8,
+#endif
+};
+
+static VariableAddress_t vaPlayerLeave = {
+#if UYA_PAL
+	.Bakisi = 0x00538f48,
+	.Hoven = 0x0053b060,
+	.OutpostX12 = 0x00530938,
+	.KorgonOutpost = 0x0052e0d0,
+	.Metropolis = 0x0052d420,
+	.BlackwaterCity = 0x0052acb8,
+	.CommandCenter = 0x0052aa78,
+	.BlackwaterDocks = 0x0052d2f8,
+	.AquatosSewers = 0x0052c5f8,
+	.MarcadiaPalace = 0x0052bf78,
+#else
+	.Bakisi = 0x005366c8,
+	.Hoven = 0x00538720,
+	.OutpostX12 = 0x0052e038,
+	.KorgonOutpost = 0x0052b850,
+	.Metropolis = 0x0052aba0,
+	.BlackwaterCity = 0x005283b8,
+	.CommandCenter = 0x00528338,
+	.BlackwaterDocks = 0x0052ab78,
+	.AquatosSewers = 0x00529eb8,
+	.MarcadiaPalace = 0x005297f8,
 #endif
 };
 
@@ -415,6 +448,8 @@ void createSimPlayer(simulatedPlayer_t* sPlayer, int idx)
 	sPlayer->Active = 0;
 	sPlayer->Created = 1;
 	sPlayer->Extra = extra;
+	/* A reused slot must be eligible for another native leave notification. */
+	GAME_NET_INFO->unk_07e5[id] = 0;
 }
 
 void targetUpdate(simulatedPlayer_t* sPlayer)
@@ -497,7 +532,6 @@ void onSimulateHeros(void)
 			// update pad (THIS IS CORRECT! :D)
 			((void (*)(struct PAD*, void*, int))GetAddress(&vaPAD_PadUpdate))(
 			    &SimPlayers[i].Pad, SimPlayers[i].Pad.rdata, 0x14);
-
 		}
 	}
 }
@@ -576,6 +610,8 @@ void gameTick(void)
 {
 	int i;
 	for (i = 0; i < SimPlayerCount; ++i) {
+		if (SimPlayers[i].Removed)
+			continue;
 		if (!SimPlayers[i].Active || playerIsDead(SimPlayers[i].Player)) {
 			spawnTarget(&SimPlayers[i]);
 			// if (!playerGetRespawnTimer(SimPlayers[i].Player)) {
@@ -583,6 +619,131 @@ void gameTick(void)
 			// }
 		}
 	}
+}
+
+static int notificationFeed(botNotifications_t* feed)
+{
+	u32* leave = (u32*)GetAddressImmediate(&vaPlayerLeave);
+	if (!leave || (leave[0x88 / 4] & 0xfc000000) != 0x0c000000)
+		return 0;
+	/* Use the same eight-entry notification feed as native player leaves.
+	 * Its instruction layout was checked in all supported map overlays. */
+	u32* notification = (u32*)((leave[0x88 / 4] & 0x03ffffff) << 2);
+	if (notification[0] != 0x27bdffe0 || notification[1] != 0x24030030 ||
+	    (notification[3] & 0xffff0000) != 0x3c020000 || notification[4] != 0x3c100025 ||
+	    (notification[5] & 0xffff0000) != 0x8e100000 || (notification[6] & 0xffff0000) != 0x24420000 ||
+	    notification[20] != 0x3c040025 || (notification[21] & 0xffff0000) != 0x24840000)
+		return 0;
+	feed->count = (int*)((notification[4] << 16) + (s16)notification[5]);
+	feed->timers = (int*)((notification[20] << 16) + (s16)notification[21]);
+	feed->messages = (char*)((notification[3] << 16) + (s16)notification[6]);
+	int count = *feed->count;
+	if ((u32)feed->count - (u32)feed->timers != 8 * sizeof(int) || count < 0 || count > 8)
+		return 0;
+	/* Native leaves assume space is available. Live kick/spawn cycles can
+	 * fill the feed, so discard the oldest message before either event. */
+	if (count == 8) {
+		int i;
+		for (i = 0; i < 7; ++i) {
+			memcpy(feed->messages + i * 48, feed->messages + (i + 1) * 48, 48);
+			feed->timers[i] = feed->timers[i + 1];
+		}
+		*feed->count = 7;
+	}
+	return 1;
+}
+
+static void notifyBotJoined(Player* player)
+{
+	botNotifications_t feed;
+	GameSettings* settings = gameGetSettings();
+	if (!settings || !player || !notificationFeed(&feed))
+		return;
+	int index = *feed.count;
+	sprintf(feed.messages + index * 48, "%.15s joined the game.", settings->PlayerNames[player->mpIndex]);
+	feed.timers[index] = 0x708;
+	*feed.count = index + 1;
+}
+
+int botsSpawn(void)
+{
+	int i;
+	if (!Initialized)
+		return -1;
+	for (i = 0; i < TRAINING_MAX_BOTS; ++i) {
+		if (i < SimPlayerCount && SimPlayers[i].Created)
+			continue;
+		SimPlayers[i].Idx = i;
+		SimPlayers[i].Removed = 0;
+		spawnTarget(&SimPlayers[i]);
+		if (!SimPlayers[i].Created) {
+			SimPlayers[i].Removed = 1;
+			return 0;
+		}
+		if (i >= SimPlayerCount)
+			SimPlayerCount = i + 1;
+		notifyBotJoined(SimPlayers[i].Player);
+		return 1;
+	}
+	return 0;
+}
+
+int botsRemove(int index)
+{
+	u32* leave = (u32*)GetAddressImmediate(&vaPlayerLeave);
+	GameSettings* settings = gameGetSettings();
+	if (!Initialized || !settings || index < 0 || index >= SimPlayerCount || !leave || leave[0] != 0x27bdffd0 ||
+	    leave[1] != 0x3c02001a || (leave[0xcc / 4] & 0xfc000000) != 0x0c000000 || leave[0xd0 / 4] != 0x0280202d)
+		return 0;
+	simulatedPlayer_t* bot = &SimPlayers[index];
+	Player* player = bot->Player;
+	if (!bot->Created || !player || player->mpIndex < 1 || player->mpIndex >= GAME_MAX_PLAYERS ||
+	    playerGetAll()[player->mpIndex] != player || player->pPad != &bot->Pad || !player->pNetPlayer)
+		return 0;
+	int id = player->mpIndex;
+	u32* net = (u32*)player->pNetPlayer;
+	int wasLocal = player->isLocal;
+	bot->Active = 0;
+	botNotifications_t feed;
+	notificationFeed(&feed);
+	/* The native leave notification reads the cached network-player name.
+	 * Local training construction doesn't populate this remote-player field. */
+	memcpy((u8*)net + 0x1b0, settings->PlayerNames[id], 16);
+	*((char*)net + 0x1bf) = 0;
+	/* Invoke the native per-player departure, never client disconnection:
+	 * all these local training actors share the host's client ID. */
+	u32 clientLeave = leave[0xcc / 4];
+	/* The final call migrates/deletes every object owned by the departing
+	 * client. A bot leaves individually; its human host remains connected.
+	 * Keep hero/equipment cleanup and notification, skip client teardown. */
+	leave[0xcc / 4] = 0;
+	flushCode();
+	player->isLocal = 0;
+	((void (*)(void*))leave)(net);
+	player->isLocal = wasLocal;
+	leave[0xcc / 4] = clientLeave;
+	flushCode();
+	if (playerGetAll()[id] == player) {
+		bot->Active = 1;
+		return 0;
+	}
+	/* Our local net data isn't a server-owned allocation. Release its slot
+	 * without deleting a network object or disconnecting the host. */
+	net[0] = (u32)-1;
+	net[1] = 0;
+	*(u16*)((u8*)net + 0x1a0) = 0;
+	*(u16*)((u8*)net + 0x1a2) = 0;
+	*(u16*)((u8*)net + 0x1a4) = 0;
+	*(u16*)((u8*)net + 0x1a6) = 0;
+	botSlot_t* saved = &savedSlots[index];
+	settings->PlayerClients[id] = saved->client;
+	settings->PlayerSkins[id] = saved->skin;
+	settings->PlayerTeams[id] = saved->team;
+	memcpy(settings->PlayerNames[id], saved->name, sizeof(saved->name));
+	memset(bot, 0, sizeof(*bot));
+	bot->Idx = index;
+	bot->Removed = 1;
+	return 1;
 }
 
 void startBots(void) // gameStart
@@ -608,8 +769,7 @@ void startBots(void) // gameStart
 	int i;
 	for (i = 0; i < SimPlayerCount; ++i) {
 		simulatedPlayer_t* bot = &SimPlayers[i];
-		if (!bot->Extra || !bot->Active || !bot->Player ||
-		    playerGetAll()[bot->Player->mpIndex] != bot->Player)
+		if (!bot->Extra || !bot->Active || !bot->Player || playerGetAll()[bot->Player->mpIndex] != bot->Player)
 			continue;
 		int onlyLocal = GAME_NET_INFO->onlyLocalPlayers;
 		GAME_NET_INFO->onlyLocalPlayers = 1;

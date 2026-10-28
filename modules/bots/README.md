@@ -14,6 +14,16 @@ next game or reload; behavior changes apply immediately. Choices stay in module
 memory between games, reloads, and online/local transitions, without an INI or
 Save button. Restarting emulation restores defaults.
 
+During a game, **Spawn Bot** adds a bot to a vacant player slot. **Bot List**
+shows normal rows with the bot name on the left and a **Kick** button on the
+right. Highlight Kick and press X to make that bot leave. Spawning displays
+"<bot name> joined the game." in the native notification feed.
+These actions update the remembered bot
+count for subsequent games. Online controls are available to the host only.
+Removal uses the native per-player leave callback to clean up the hero,
+equipment and player slot. Its client-wide ownership cleanup is skipped so
+the shared human host and its objects remain intact.
+
 `bots.c` handles simulated players and controller pads. `training/` holds the
 original training structures and movement/aiming routines. The experimental
 five-bot timer and flyby patches are excluded. Local Play supports up to seven

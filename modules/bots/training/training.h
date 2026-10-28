@@ -188,6 +188,7 @@ typedef struct simulatedPlayer {
 	/* 0x9d0 */ float WanderAngle;
 	/* 0x9d4 */ u32 TicksToWanderSwitch;
 	/* 0x9d8 */ u8 Extra;
+	/* 0x9d9 */ u8 Removed;
 } simulatedPlayer_t;
 
 typedef struct trainingGameData {
@@ -218,5 +219,7 @@ PlayerVTable* playerGetVTable(Player* player);
 void startBots(void);
 void botsReset(int multiplayer);
 int botsLevelChanged(void);
+int botsSpawn(void);
+int botsRemove(int index);
 
 #endif // TRAINING_GAME_H
