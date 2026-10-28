@@ -37,10 +37,12 @@ uya/
 Edit `uya/config/modules.txt` (or `hostfs/uya/config/modules.txt` when building):
 
 ```text
-modmenu       campaign,local
+modmenu       campaign,local,online
 bios-warning  campaign,local
 maploader     local
 forge         campaign,local
+# Optional training bots; see modules/bots/README.md for online requirements.
+# bots        local,online
 ```
 
 | Context | Where the module runs |
@@ -68,7 +70,8 @@ or replacing binaries.
 ## Included modules
 
 - **Mod Menu:** extensible tabs, toggles, values, and actions. Use **L3 + R3** in
-  front-end menus; during gameplay, choose **MOD MENU** from the pause menu.
+  offline front-end menus; during gameplay, choose **MOD MENU** from pause.
+  Online, it is a separate row below Continue/Patch Menu, preserving Horizon.
   L1/R1 change tabs, the D-pad navigates, Cross selects, and Triangle closes.
 - **Map Loader:** Horizon-format custom maps plus retail maps in one alphabetical
   list. Scans on the first Local Play staging visit and retains the catalog in
@@ -83,6 +86,9 @@ or replacing binaries.
   selection/start/reload requests accept an optional mode byte (default Siege).
   Supports NTSC-U/PAL Local Play bases 40–49; split-screen and NTSC-J hopping
   are disabled. Editor-side Forge v2 integration remains separate.
+- **[Bots](modules/bots/README.md):** 0-3 training bots, with Idle as the default
+  behavior. Remembers selections between games/reloads without saving a file.
+  Online support preserves the original local training behavior.
 - **BIOS Warning:** optional Mod Menu popup for incompatible expanded-RAM BIOS
   configurations. Cross or Triangle dismisses it.
 - **Examples/tests:** `hello`, `menu-example`, `campaign-test`, and
@@ -269,8 +275,9 @@ regional library are available. Build success alone does not verify gameplay.
 Live NTSC-U/PAL coverage and remaining limitations are recorded in
 [ADDRESSES.md](docs/ADDRESSES.md) and the module guides.
 
-Default modules deactivate at the post-DNAS profile screen and reactivate on
-return to Local Play. The loader uses a separate hook from Horizon. The user
+Forge, Map Loader and the test modules deactivate at the post-DNAS profile
+screen and reactivate on return to Local Play. Mod Menu and Bots can remain
+active online. The loader uses a separate hook from Horizon. The user
 confirmed online patch loading without a crash on the current NTSC-U setup.
 Older Horizon builds that use `0xa0000` as their network callback slot conflict
 with the loader; this was observed in an earlier PAL test. This result does not

@@ -53,6 +53,21 @@ static u32 campaignTables[3][50], campaignSources[3];
 static const campaignPause_t* campaignActive;
 static void (*campaignOpen)(void);
 
+#if UYA_MODULE_REGION != 3
+/* Verified pause routines use the same offsets on all NTSC-U/PAL MP bases.
+ * Redirect every table reference and extend creation/navigation to seven rows.
+ * The last three edits preserve the positions of the original hidden rows. */
+static const u16 onlinePauseOffsets[] = {0x1d8, 0x3dc, 0x5d8, 0x678, 0x794, 0x84c, 0x948, 0x1f4, 0x3e4,
+                                         0x410, 0x5e0, 0x680, 0x79c, 0x7f0, 0x858, 0x8b4, 0x950, 0x1cc,
+                                         0x3d8, 0x5b4, 0x670, 0x7b4, 0x800, 0x9c0, 0x424, 0x434, 0x458};
+static u32 onlineRows[7][4] __attribute__((aligned(16)));
+static u32 onlineResume[23] __attribute__((aligned(16)));
+static u32 onlineOriginal[27], onlineReplacement[27];
+static const pauseEntry_t* onlineActive;
+static char* onlineLabel;
+static char onlineLabelOriginal[9];
+#endif
+
 /* Regional font differences are verified by the renderer-table generator. */
 static u32 rendererFont(const menuRenderer_t* r)
 {
@@ -287,8 +302,7 @@ void menuBackendRelease(void)
 	if (inputHook) {
 		/* The delay slot identifies the same lobby call site even if an
          * overlay was replaced while closing the menu. */
-		if (*(volatile u32*)inputHook == 0x24020000 &&
-		    *(volatile u32*)(inputHook + 4) == 0x0240202d) {
+		if (*(volatile u32*)inputHook == 0x24020000 && *(volatile u32*)(inputHook + 4) == 0x0240202d) {
 			*(volatile u32*)inputHook = inputOriginal;
 			if (*(volatile u32*)0x1264e0 == 0x24030064) {
 				MENU_FLUSH(0);
@@ -330,18 +344,8 @@ void menuBackendBox(float x, float y, float width, float height, u32 color)
 
 void menuBackendText(float x, float y, u32 color, const char* text)
 {
-	typedef int (*Print)(float,
-	                     float,
-	                     float,
-	                     float,
-	                     float,
-	                     float,
-	                     u32,
-	                     const char*,
-	                     unsigned long long,
-	                     unsigned long long,
-	                     int,
-	                     u32);
+	typedef int (*Print)(
+	    float, float, float, float, float, float, u32, const char*, unsigned long long, unsigned long long, int, u32);
 	float height;
 	if (!active)
 		return;
@@ -438,9 +442,108 @@ static void campaignPause(void (*openMenu)(void))
 	((void (*)(int))0x11f0a0)(2);
 }
 
+#if UYA_MODULE_REGION != 3
+static void onlinePauseRestore(void)
+{
+	u32 i, changed = 0;
+	/* A replaced overlay can contain unrelated instructions at these addresses.
+	 * Require our private table pointer before restoring any individual word. */
+	if (onlineActive && PAUSE_WORD(onlineActive->callback + onlinePauseOffsets[0]) == onlineReplacement[0] &&
+	    PAUSE_WORD(onlineActive->callback + onlinePauseOffsets[7]) == onlineReplacement[7]) {
+		for (i = 0; i < 27; ++i) {
+			u32 address = onlineActive->callback + onlinePauseOffsets[i];
+			if (PAUSE_WORD(address) == onlineReplacement[i]) {
+				PAUSE_WORD(address) = onlineOriginal[i];
+				changed = 1;
+			}
+		}
+	}
+	if (onlineLabel) {
+		for (i = 0; i < 9 && onlineLabel[i] == "MOD MENU"[i]; ++i) {
+		}
+		if (i == 9) {
+			for (i = 0; i < 9; ++i)
+				onlineLabel[i] = onlineLabelOriginal[i];
+		}
+	}
+	onlineActive = 0;
+	onlineLabel = 0;
+	if (changed && PAUSE_WORD(0x1264e0) == 0x24030064) {
+		MENU_FLUSH(0);
+		MENU_FLUSH(2);
+	}
+}
+
+static void onlinePause(const pauseEntry_t* p, void (*openMenu)(void))
+{
+	u32 i, j, address = (u32)onlineRows;
+	if (onlineActive == p) {
+		for (i = 0; i < 27; ++i)
+			if (PAUSE_WORD(p->callback + onlinePauseOffsets[i]) != onlineReplacement[i])
+				break;
+		if (i != 27)
+			onlinePauseRestore();
+	}
+	if (onlineActive != p) {
+		char* label;
+		onlinePauseRestore();
+		if (!p->onlineHash || hash((void*)(p->callback + 0x1c0), 0x828) != p->onlineHash ||
+		    hash((void*)p->callback, 84) != p->callbackHash || hash((void*)p->message, 64) != p->messageHash)
+			return;
+		label = ((char* (*)(int))p->message)(0x1116); /* Albuquerque, not Horizon's 0x1115. */
+		if ((u32)label < 0x100000 || (u32)label > 0x1fffff0)
+			return;
+		for (i = 0; i < 8 && label[i]; ++i) {
+		}
+		if (i != 8)
+			return;
+		onlineLabel = label;
+		for (i = 0; i < 9; ++i) {
+			onlineLabelOriginal[i] = label[i];
+			label[i] = "MOD MENU"[i];
+		}
+		/* All six original rows remain, including the quit-confirmation rows.
+		 * The copy receives changes Horizon makes to Continue/Patch Menu. */
+		for (i = 0; i < 6; ++i)
+			for (j = 0; j < 4; ++j)
+				onlineRows[i ? i + 1 : 0][j] = PAUSE_WORD(p->entry - 4 + i * 16 + j * 4);
+		onlineRows[1][0] = 0xd0016;
+		onlineRows[1][1] = 0x1116;
+		onlineRows[1][2] = 1;
+		onlineRows[1][3] = (u32)onlineResume;
+		/* The verified Continue body has only absolute calls, no external
+		 * relative branches. Its own copy closes pause and opens our menu;
+		 * Horizon's original callback and patched return are never changed. */
+		for (i = 0; i < 21; ++i)
+			onlineResume[i] = PAUSE_WORD(p->callback + i * 4);
+		onlineResume[21] = 0x08000000 | (((u32)openMenu >> 2) & 0x03ffffff);
+		onlineResume[22] = 0x27bd0010;
+		for (i = 0; i < 27; ++i) {
+			u32 original = PAUSE_WORD(p->callback + onlinePauseOffsets[i]);
+			onlineOriginal[i] = original;
+			if (i < 7)
+				onlineReplacement[i] = (original & 0xffff0000) | ((address + 0x8000) >> 16);
+			else if (i < 17)
+				onlineReplacement[i] = (original & 0xffff0000) | (address & 0xffff);
+			else
+				onlineReplacement[i] = original + (i < 24 ? 1 : 16);
+		}
+		onlineActive = p;
+		for (i = 0; i < 27; ++i)
+			PAUSE_WORD(p->callback + onlinePauseOffsets[i]) = onlineReplacement[i];
+		MENU_FLUSH(0);
+		MENU_FLUSH(2);
+	}
+	/* Refresh source flags/labels without losing the inserted row. */
+	for (i = 0; i < 6; ++i)
+		for (j = 0; j < 4; ++j)
+			onlineRows[i ? i + 1 : 0][j] = PAUSE_WORD(p->entry - 4 + i * 16 + j * 4);
+}
+#endif
+
 /* Same Continue tail-hook as Horizon main.c, separately verified for local
  * overlays. The retail callback closes the pause screen before opening us. */
-void menuBackendPause(u32 mode, void (*openMenu)(void))
+void menuBackendPause(u32 mode, u32 context, void (*openMenu)(void))
 {
 	pauseOpen = openMenu;
 	if (mode == UYA_MODE_CAMPAIGN) {
@@ -458,6 +561,11 @@ void menuBackendPause(u32 mode, void (*openMenu)(void))
 		volatile u32 *entry = (void*)p->entry, *tail = (void*)(p->callback + 0x54);
 		if (p->level != levelId)
 			continue;
+		if (context == UYA_CONTEXT_ONLINE) {
+			onlinePause(p, openMenu);
+			return;
+		}
+		onlinePauseRestore();
 		if (entry[2] != p->callback || entry[1] != 1 || (entry[0] != 0x2cc && entry[0] != 0x1115) ||
 		    (*tail != 0x03e00008 && *tail != jump) || tail[1] != 0x27bd0010 ||
 		    hash((void*)p->callback, 84) != p->callbackHash || hash((void*)p->message, 64) != p->messageHash)
@@ -482,6 +590,7 @@ void menuBackendPause(u32 mode, void (*openMenu)(void))
 	}
 #else
 	(void)mode;
+	(void)context;
 	(void)openMenu;
 #endif
 }
@@ -492,6 +601,7 @@ void menuBackendDeactivate(void)
 	u32 i, changed = 0;
 	menuBackendRelease();
 #if UYA_MODULE_REGION != 3
+	onlinePauseRestore();
 	for (i = 0; i < sizeof(pauseEntries) / sizeof(pauseEntries[0]); ++i) {
 		const pauseEntry_t* p = &pauseEntries[i];
 		u32 jump = 0x08000000U | ((u32)pauseOpen >> 2);

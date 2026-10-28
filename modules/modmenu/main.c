@@ -1,5 +1,5 @@
-/* Offline menu core. Other modules own gameplay behavior; this module owns
- * registration, selection, input and drawing. No Horizon/server state is used. */
+/* Shared menu core. Other modules own gameplay behavior; this module owns
+ * registration, selection, input and drawing. No server connection is needed. */
 #include "modules/modmenu/include/modmenu.h"
 #include "backend.h"
 #include "version.h"
@@ -50,11 +50,11 @@ static int homeTab;
 static char progressLabel[64];
 static int progressCurrent, progressTotal, progressPulse;
 static int nextHandle = 1, opened, selectedTab, selectedItem, lastLevel = -999;
-static u32 previousButtons, previousMode, closingButtons;
+static u32 previousButtons, previousMode, previousContext, closingButtons;
 static const modMenuApi_t menuApi = {
     MODMENU_API_VERSION, sizeof(modMenuApi_t), addTab,      addItem,  removeTab,      setItemEnabled,   isOpen,
-    closeMenu,           getActiveTab,       focusTab,    setList,  setListInfo,    setTabVisibility, setTabContexts,
-    menuConfigLoad,      menuConfigSave,     setProgress, setModal, menuBackendBox, menuBackendText, setTabAction,
+    closeMenu,           getActiveTab,         focusTab,    setList,  setListInfo,    setTabVisibility, setTabContexts,
+    menuConfigLoad,      menuConfigSave,       setProgress, setModal, menuBackendBox, menuBackendText,  setTabAction,
     setItemValueLabel};
 /* A window of whole tabs: measured text plus Horizon-style padding. Scroll
  * the first visible tab only when the focused tab would fall outside it. */
@@ -97,8 +97,8 @@ static int visible(int tab)
 {
 	int i = tabIndex(tab), level = menuBackendLevel();
 	u32 context = loader->mode == UYA_MODE_MULTIPLAYER
-	                           ? (level == 39 ? MODMENU_SHOW_MAIN_MENU : MODMENU_SHOW_MULTIPLAYER)
-	                           : (level < 0 ? MODMENU_SHOW_MAIN_MENU : MODMENU_SHOW_CAMPAIGN);
+	                  ? (level == 39 ? MODMENU_SHOW_MAIN_MENU : MODMENU_SHOW_MULTIPLAYER)
+	                  : (level < 0 ? MODMENU_SHOW_MAIN_MENU : MODMENU_SHOW_CAMPAIGN);
 	return i >= 0 && (tabs[i].modes & loader->mode) && (tabs[i].contexts & context) &&
 	       (tabs[i].executionContexts & loader->context);
 }
@@ -630,8 +630,9 @@ static void draw(void)
 				menuBackendText(.865f - menuBackendWidth(state), y, color, state);
 			}
 			if (items[i].definition.type == MODMENU_RANGE) {
-				const char* label = items[i].valueLabel ?
-				    items[i].valueLabel(items[i].definition.context, *items[i].definition.value) : 0;
+				const char* label = items[i].valueLabel
+				                        ? items[i].valueLabel(items[i].definition.context, *items[i].definition.value)
+				                        : 0;
 				if (!label) {
 					number(value, *items[i].definition.value);
 					label = value;
@@ -691,15 +692,16 @@ void moduleUpdate(void)
 	}
 	level = menuBackendLevel();
 	buttons = menuBackendButtons(loader->mode);
-	if (previousMode != loader->mode || level != lastLevel) {
+	if (previousMode != loader->mode || level != lastLevel || previousContext != loader->context) {
 		closeMenu();
-		menuBackendRelease();
+		menuBackendDeactivate();
 		closingButtons = 0;
 		previousButtons = buttons;
 		previousMode = loader->mode;
+		previousContext = loader->context;
 		lastLevel = level;
 	}
-	menuBackendPause(loader->mode, openFromPause);
+	menuBackendPause(loader->mode, loader->context, openFromPause);
 	if (modal && (modalStarted || menuBackendPopupReady(loader->mode))) {
 		modalStarted = 1;
 		menuBackendCapture(loader->mode);
@@ -719,8 +721,8 @@ void moduleUpdate(void)
 	pressed = buttons & ~previousButtons;
 	/* Thumbstick shortcuts belong to front-end menus, not gameplay.
      * In-game opening is exclusively through the pause-menu callback. */
-	if ((loader->mode == UYA_MODE_MULTIPLAYER ? level == 39 : level < 0) && (buttons & 6) == 6 &&
-	    (previousButtons & 6) != 6) {
+	if (loader->context != UYA_CONTEXT_ONLINE && (loader->mode == UYA_MODE_MULTIPLAYER ? level == 39 : level < 0) &&
+	    (buttons & 6) == 6 && (previousButtons & 6) != 6) {
 		opened = !opened;
 		if (!opened)
 			closingButtons = buttons;

@@ -1,15 +1,17 @@
 # Mod Menu API
 
 `modmenu` provides shared tabs and controls for campaign and NTSC-U/PAL
-multiplayer. NTSC-J supports campaign only. No Horizon connection is required;
-the default configuration keeps the menu offline.
+multiplayer. NTSC-J supports campaign only. No Horizon connection is required.
+Online gameplay adds a separate **MOD MENU** row below Continue/Patch Menu,
+moving Options and Quit Game down. Horizon's original row and callback remain
+intact. The other native rows, including quit confirmation, are preserved.
 
 ```text
-modmenu       campaign,local
+modmenu       campaign,local,online
 menu-example  campaign,local
 ```
 
-Use **L3 + R3** in front-end menus. During campaign or multiplayer gameplay,
+Use **L3 + R3** in offline front-end menus. During campaign or multiplayer gameplay,
 choose **MOD MENU** from the pause menu instead. L1/R1 switch tabs, Up/Down
 navigate, Left/Right adjust values, Cross selects, and Triangle closes.
 The menu captures game input but does not pause simulation. It closes when the
@@ -175,11 +177,14 @@ Persistence belongs to the loader and works without a menu. New mods should use
 
 `main.c` owns registration and UI; `backend.c` handles rendering and input.
 Checked-in tables identify supported overlays, with runtime signature guards.
-Campaign adds a pause-menu row; multiplayer replaces Continue with MOD MENU.
+Campaign adds a pause-menu row. Local Play replaces Continue with MOD MENU;
+online gameplay inserts its own row after Continue/Patch Menu.
 Input is captured before gameplay receives buttons/sticks and restored on close.
 
 Offline campaign and Local Play navigation/input capture have passed user tests.
 PAL testing also covered the new loader hook and in-game menu after map hops.
+The user verified the new NTSC-U online pause row and Mod Menu with Horizon.
+Live memory checks confirmed all seven rows and Horizon's unchanged callback.
 This does not qualify every level, split-screen setup, or online configuration.
 See [ADDRESSES.md](../../docs/ADDRESSES.md) for regional evidence and online limits.
 

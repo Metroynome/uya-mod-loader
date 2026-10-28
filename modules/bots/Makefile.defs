@@ -1,0 +1,3 @@
+LIBRARY = libuya
+REGIONS = ntscu pal
+EE_OBJS = main.o bots.o training/trainingmode.o
