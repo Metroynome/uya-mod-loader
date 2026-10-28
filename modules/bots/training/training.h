@@ -8,6 +8,7 @@
 
 /* Struct offsets describe the EE ABI, including 16-byte VECTOR alignment. */
 #define TPS                      (GAME_FPS)
+#define TRAINING_MAX_BOTS        (7)
 #define TARGET_MOBY_ID           (0x251c)
 #define TRAINING_MAX_SPAWNPOINTS (25)
 #define MIN_FLOAT_MAGNITUDE      (0.0001)
@@ -186,6 +187,7 @@ typedef struct simulatedPlayer {
 	/* 0x9cc */ Moby* targetJumpPad;
 	/* 0x9d0 */ float WanderAngle;
 	/* 0x9d4 */ u32 TicksToWanderSwitch;
+	/* 0x9d8 */ u8 Extra;
 } simulatedPlayer_t;
 
 typedef struct trainingGameData {

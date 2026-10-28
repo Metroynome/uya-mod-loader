@@ -19,7 +19,15 @@
 #include <libuya/math3d.h>
 #include "training/training.h"
 
-#define BOT_PAD_LOCATION ((u32)PAD_POINTER + 0xc)
+#define BOT_PAD_LOCATION  ((u32)PAD_POINTER + 0xc)
+#define BOT_LOCAL_STRIDE  (0x4500)
+#define BOT_REMOTE_STRIDE (0x4dc0)
+#define BOT_SCRATCH_SLOT  (3)
+#if UYA_PAL
+#define BOT_NET_DATA_COPY (0x0019a39c)
+#else
+#define BOT_NET_DATA_COPY (0x0019a4dc)
+#endif
 
 typedef struct botSlot {
 	/* 0x00 */ int id;
@@ -37,6 +45,9 @@ void FlushCache(int operation);
 void modeUpdateTarget(simulatedPlayer_t* sPlayer);
 void frameTick(void);
 void gameTick(void);
+static Player* botGetFromSlot(int slot);
+
+extern VariableAddress_t vaGetMissionDef;
 
 VariableAddress_t vaInit_RunUpdateFunctions = {
 #if UYA_PAL
@@ -122,14 +133,48 @@ VariableAddress_t vaPAD_PadUpdate = {
 #endif
 };
 
+/* The native remote pool has eight objects, unlike the four local heroes.
+ * Only vacant roster slots are used; online retains the established path. */
+static VariableAddress_t vaCreateRemoteHero = {
+#if UYA_PAL
+	.Bakisi = 0x00538618,
+	.Hoven = 0x0053a730,
+	.OutpostX12 = 0x00530008,
+	.KorgonOutpost = 0x0052d7a0,
+	.Metropolis = 0x0052caf0,
+	.BlackwaterCity = 0x0052a388,
+	.CommandCenter = 0x0052a148,
+	.BlackwaterDocks = 0x0052c9c8,
+	.AquatosSewers = 0x0052bcc8,
+	.MarcadiaPalace = 0x0052b648,
+#else
+	.Bakisi = 0x00535d98,
+	.Hoven = 0x00537df0,
+	.OutpostX12 = 0x0052d708,
+	.KorgonOutpost = 0x0052af20,
+	.Metropolis = 0x0052a270,
+	.BlackwaterCity = 0x00527a88,
+	.CommandCenter = 0x00527a08,
+	.BlackwaterDocks = 0x0052a248,
+	.AquatosSewers = 0x00529588,
+	.MarcadiaPalace = 0x00528ec8,
+#endif
+};
+
 int Initialized = 0;
 int BotsOnline;
 trainingState_t State;
 static int startDelay = 15;
 static u32 updateHook;
-static botSlot_t savedSlots[3];
+static botSlot_t savedSlots[TRAINING_MAX_BOTS];
 static GameSettings* savedSettings;
 static int savedLoadTime;
+static u32 getterHook;
+static u32 getterOriginal[2];
+static Player* localHeroes;
+static Player* scopedPlayer;
+static GameCamera extraCameras[TRAINING_MAX_BOTS - 3];
+static u8 extraNetData[TRAINING_MAX_BOTS - 3][0x90] __attribute__((aligned(16)));
 
 extern int TargetTeam;
 extern int SimPlayerCount;
@@ -141,6 +186,101 @@ const char* TRAINING_AGGRO_NAMES[] = {
     [TRAINING_AGGRESSION_PASSIVE] "PASSIVE",
     [TRAINING_AGGRESSION_IDLE] "IDLE",
 };
+
+static void flushCode(void)
+{
+	FlushCache(0);
+	FlushCache(2);
+}
+
+/* Native camera helpers ask for a local ordinal. During an extra bot's
+ * constructor/update, route its scratch ordinal to that bot's own object. */
+static Player* botGetFromSlot(int slot)
+{
+	if (scopedPlayer && slot == BOT_SCRATCH_SLOT)
+		return scopedPlayer;
+	return (Player*)((u32)localHeroes + slot * BOT_LOCAL_STRIDE);
+}
+
+static Player* createExtraPlayer(int id)
+{
+	u32* remote = (u32*)GetAddressImmediate(&vaCreateRemoteHero);
+	u32* create = (u32*)GetAddressImmediate(&vaCreateHero);
+	u32* getter = (u32*)GetAddressImmediate(&vaGetMissionDef);
+	u32 original[3];
+	u32 netOriginal[3];
+	u32* net = (u32*)BOT_NET_DATA_COPY;
+	u32 netAddress = (u32)extraNetData[id - 4] - id * 0x90;
+	short clients[GAME_MAX_PLAYERS];
+	GameSettings* settings = gameGetSettings();
+	GameCamera* scratch = cameraGetGameCamera(BOT_SCRATCH_SLOT);
+	GameCamera camera;
+	Player* player;
+	u32 address;
+	int i, ordinal = 0;
+
+	/* These instruction layouts were checked in every supported map overlay.
+	 * Refuse an unfamiliar/modified constructor instead of touching its pool. */
+	if (!remote || !create || !getter || !scratch || remote[0x3c / 4] != 0x24044dc0 || remote[0x44 / 4] != 0x8c740054 ||
+	    (remote[0x40 / 4] & 0xffff0000) != 0x3c020000 || (remote[0x48 / 4] & 0xffff0000) != 0x24420000 ||
+	    create[1] != 0x24024500 || (create[3] & 0xffff0000) != 0x3c030000 || (create[7] & 0xffff0000) != 0x24630000 ||
+	    net[0] != 0x24030090 || (net[1] & 0xffff0000) != 0x3c020000 || (net[4] & 0xffff0000) != 0x24420000 ||
+	    (net[16] & 0xffff0000) != 0x24e30000)
+		return 0;
+	address = (remote[0x40 / 4] << 16) + (s16)remote[0x48 / 4] + id * BOT_REMOTE_STRIDE;
+	player = (Player*)address;
+	if (!getterHook) {
+		if (getter[0] != 0x24034500 || (getter[1] & 0xffff0000) != 0x3c020000)
+			return 0;
+		localHeroes = playerGetFromSlot(0);
+		getterOriginal[0] = getter[0];
+		getterOriginal[1] = getter[1];
+		getterHook = (u32)getter;
+		HOOK_J(getterHook, botGetFromSlot);
+		getter[1] = 0;
+	}
+
+	/* Reuse a valid local controller/profile ordinal, never index their
+	 * four-entry arrays with a network player ID (4-7). Restore the roster
+	 * and camera before returning to the game's normal frame. */
+	memcpy(clients, settings->PlayerClients, sizeof(clients));
+	for (i = 0; i < id; ++i) {
+		if (settings->PlayerClients[i] == GAME_CLIENT_ID && ordinal++ >= BOT_SCRATCH_SLOT)
+			settings->PlayerClients[i] = -1;
+	}
+	memcpy(&camera, scratch, sizeof(camera));
+	original[0] = create[1];
+	original[1] = create[3];
+	original[2] = create[7];
+	create[1] = 0x24020000;
+	create[3] = 0x3c030000 | ((address + 0x8000) >> 16);
+	create[7] = 0x24630000 | (address & 0xffff);
+	/* The Local Play net-data array also has only four entries. Redirect
+	 * this copy for the constructor call; the eight-entry tNW_Player table
+	 * keeps the resulting pointer after the original instructions return. */
+	netOriginal[0] = net[1];
+	netOriginal[1] = net[4];
+	netOriginal[2] = net[16];
+	net[1] = 0x3c020000 | ((netAddress + 0x8000) >> 16);
+	net[4] = 0x24420000 | (netAddress & 0xffff);
+	net[16] = 0x24e30000 | (netAddress & 0xffff);
+	scopedPlayer = player;
+	flushCode();
+	((void (*)(int))create)(BOT_SCRATCH_SLOT);
+	scopedPlayer = 0;
+	create[1] = original[0];
+	create[3] = original[1];
+	create[7] = original[2];
+	net[1] = netOriginal[0];
+	net[4] = netOriginal[1];
+	net[16] = netOriginal[2];
+	flushCode();
+	memcpy(settings->PlayerClients, clients, sizeof(clients));
+	memcpy(&extraCameras[id - 4], scratch, sizeof(camera));
+	memcpy(scratch, &camera, sizeof(camera));
+	player->camera = &extraCameras[id - 4];
+	return playerGetAll()[id] == player ? player : 0;
+}
 
 void createSimPlayer(simulatedPlayer_t* sPlayer, int idx)
 {
@@ -197,13 +337,15 @@ void createSimPlayer(simulatedPlayer_t* sPlayer, int idx)
 		if (gameSettings->PlayerClients[j] == GAME_CLIENT_ID)
 			++localSlot;
 	}
-	/* Humans and bots together must fit the retail four-local-hero limit. */
-	if (localSlot >= 4) {
+	int extra = localSlot >= 4;
+	if (extra && BotsOnline) {
 		gameSettings->PlayerClients[id] = saved->client;
 		gameSettings->PlayerSkins[id] = saved->skin;
 		gameSettings->PlayerTeams[id] = saved->team;
 		return;
 	}
+	if (extra)
+		localSlot = BOT_SCRATCH_SLOT;
 	sPlayer->Pad.id = localSlot;
 	u32 savedPad = *(u32*)(BOT_PAD_LOCATION + (4 * localSlot));
 	POKE_U32(BOT_PAD_LOCATION + (4 * localSlot), (u32)&sPlayer->Pad);
@@ -217,7 +359,10 @@ void createSimPlayer(simulatedPlayer_t* sPlayer, int idx)
 	int onlyLocal = GAME_NET_INFO->onlyLocalPlayers;
 	if (BotsOnline)
 		GAME_NET_INFO->onlyLocalPlayers = 1;
-	((void (*)(int))GetAddress(&vaCreateHero))(localSlot);
+	if (extra)
+		createExtraPlayer(id);
+	else
+		((void (*)(int))GetAddress(&vaCreateHero))(localSlot);
 	GAME_NET_INFO->onlyLocalPlayers = onlyLocal;
 
 	Player* newPlayer = players[id];
@@ -247,6 +392,7 @@ void createSimPlayer(simulatedPlayer_t* sPlayer, int idx)
 
 	sPlayer->Active = 0;
 	sPlayer->Created = 1;
+	sPlayer->Extra = extra;
 }
 
 void targetUpdate(simulatedPlayer_t* sPlayer)
@@ -293,8 +439,11 @@ void spawnTarget(simulatedPlayer_t* sPlayer)
 	if (sPlayer->Active)
 		playerSetHealth(sPlayer->Player, 0);
 
+	if (sPlayer->Extra)
+		scopedPlayer = sPlayer->Player;
 	playerRespawn(sPlayer->Player);
 	modeInitTarget(sPlayer);
+	scopedPlayer = 0;
 }
 
 void onSimulateHeros(void)
@@ -327,8 +476,12 @@ void onSimulateHeros(void)
 			((void (*)(struct PAD*, void*, int))GetAddress(&vaPAD_PadUpdate))(
 			    &SimPlayers[i].Pad, SimPlayers[i].Pad.rdata, 0x14);
 
-			// run game's hero update
-			// pVTable->Update(SimPlayers[i].Player);
+			/* Extra objects are outside the native four-hero update loop. */
+			if (SimPlayers[i].Extra && SimPlayers[i].Active) {
+				scopedPlayer = SimPlayers[i].Player;
+				SimPlayers[i].vtable->Update(SimPlayers[i].Player);
+				scopedPlayer = 0;
+			}
 		}
 	}
 }
@@ -441,6 +594,8 @@ void botsReset(int multiplayer)
 	 * Its SDK stubs and old player objects are no longer callable then. */
 	if (!multiplayer) {
 		savedSettings = 0;
+		getterHook = 0;
+		scopedPlayer = 0;
 		updateHook = 0;
 		Initialized = 0;
 		startDelay = 15;
@@ -455,7 +610,7 @@ void botsReset(int multiplayer)
 	GameSettings* settings = gameGetSettings();
 	if (settings && settings == savedSettings && settings->GameLoadStartTime == savedLoadTime) {
 		int i;
-		for (i = 0; i < 3; ++i) {
+		for (i = 0; i < TRAINING_MAX_BOTS; ++i) {
 			botSlot_t* saved = &savedSlots[i];
 			if (!SimPlayers[i].Created)
 				continue;
@@ -466,10 +621,17 @@ void botsReset(int multiplayer)
 		}
 	}
 	savedSettings = 0;
+	if (getterHook && *(u32*)getterHook == (0x08000000 | (((u32)botGetFromSlot >> 2) & 0x03ffffff)) &&
+	    *(u32*)(getterHook + 4) == 0) {
+		memcpy((void*)getterHook, getterOriginal, sizeof(getterOriginal));
+		flushCode();
+	}
+	getterHook = 0;
+	scopedPlayer = 0;
 	updateHook = 0;
 	Initialized = 0;
 	startDelay = 15;
-	memset(SimPlayers, 0, sizeof(simulatedPlayer_t) * 3);
+	memset(SimPlayers, 0, sizeof(simulatedPlayer_t) * TRAINING_MAX_BOTS);
 }
 
 int botsLevelChanged(void)

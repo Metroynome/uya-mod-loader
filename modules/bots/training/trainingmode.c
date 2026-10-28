@@ -22,7 +22,7 @@
 #include <libuya/interop.h>
 #include "training.h"
 
-#define MAX_SPAWNED_TARGETS    (3)
+#define MAX_SPAWNED_TARGETS    (TRAINING_MAX_BOTS)
 #define TARGET_IDLE            (State.AggroMode == TRAINING_AGGRESSION_IDLE)
 #define TARGET_SPAWN_DISTANCE  (6.0f)
 #define TARGET_HEALTH          (15)
