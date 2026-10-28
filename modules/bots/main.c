@@ -19,9 +19,12 @@ static void refreshBotList(void);
 static const moduleApi_t* loader;
 static const modMenuApi_t* menu;
 static int tab;
-/* These belong to the module, not the level. No configuration file is needed. */
-static int count;
+/* The saved default applies only when starting a Local Play game. */
+static int defaultCount;
 static int behavior;
+static int configLoaded;
+static u32 menuContext;
+static const moduleConfigField_t configFields[] = {{"defaultBotsSpawned", &defaultCount, 0, TRAINING_MAX_BOTS}};
 static int lastTime = -1;
 static int lastMap = -1;
 static int loadTime = -1;
@@ -36,10 +39,25 @@ static int canManageBots(void)
 	return running && isInGame() && gameGetSettings() && (!BotsOnline || gameAmIHost());
 }
 
+static int hasVacantPlayerSlot(void)
+{
+	GameSettings* settings = gameGetSettings();
+	Player** players = playerGetAll();
+	int i;
+	if (!settings || !players)
+		return 0;
+	/* Check the complete player roster, including humans and online slots
+	 * reserved for clients whose actors haven't appeared yet. */
+	for (i = 1; i < GAME_MAX_PLAYERS; ++i)
+		if (!players[i] && (!BotsOnline || settings->PlayerClients[i] < 0))
+			return 1;
+	return 0;
+}
+
 static void spawnBot(void* context)
 {
 	(void)context;
-	if (canManageBots())
+	if (canManageBots() && hasVacantPlayerSlot())
 		pendingSpawn = 1;
 }
 
@@ -49,23 +67,26 @@ static void kickBot(void* context)
 		pendingRemove = (int)context;
 }
 
+static void configAction(void* saving)
+{
+	if (loader->context != UYA_CONTEXT_LOCAL)
+		return;
+	int result = saving ? loader->saveConfig("bots", configFields, 1) : loader->loadConfig("bots", configFields, 1);
+	loader->print("bots: %s settings result=%d\n", saving ? "save" : "load", result);
+}
+
 static void refreshBotList(void)
 {
-	int i, mask = 0, vacant = 0;
+	int i, mask = 0;
 	if (!menu || menu != modmenuFind(loader) || tab <= 0)
 		return;
 	int enabled = canManageBots();
 	if (enabled) {
-		GameSettings* settings = gameGetSettings();
-		Player** players = playerGetAll();
-		for (i = 1; i < GAME_MAX_PLAYERS; ++i)
-			if (!players[i] && (!BotsOnline || settings->PlayerClients[i] < 0))
-				vacant = 1;
 		for (i = 0; i < SimPlayerCount; ++i)
 			if (SimPlayers[i].Created && SimPlayers[i].Player)
 				mask |= 1 << i;
 	}
-	menu->setItemEnabled(spawnItem, enabled && vacant);
+	menu->setItemEnabled(spawnItem, enabled && hasVacantPlayerSlot());
 	for (i = 0; i < TRAINING_MAX_BOTS; ++i)
 		menu->setItemEnabled(botItems[i], enabled);
 	if (mask == listMask)
@@ -107,9 +128,13 @@ static void deactivate(void)
 
 static void registerMenu(void)
 {
-	static const modMenuItem_t amount = {"Bots", MODMENU_RANGE, &count, 0, TRAINING_MAX_BOTS, 1, 0, 0};
+	static const modMenuItem_t amount = {
+	    "Default Bots Spawned", MODMENU_RANGE, &defaultCount, 0, TRAINING_MAX_BOTS, 1, 0, 0};
 	static const modMenuItem_t style = {"Behavior", MODMENU_RANGE, &behavior, 0, 2, 1, 0, 0};
-	static const modMenuItem_t help = {"Bot count applies on the next game or reload", MODMENU_LABEL, 0, 0, 0, 0, 0, 0};
+	static const modMenuItem_t help = {
+	    "Applies to the next Local Play game or reload", MODMENU_LABEL, 0, 0, 0, 0, 0, 0};
+	static const modMenuItem_t save = {"Save Settings", MODMENU_ACTION, 0, 0, 0, 0, configAction, (void*)1};
+	static const modMenuItem_t load = {"Load Settings", MODMENU_ACTION, 0, 0, 0, 0, configAction, 0};
 	static const modMenuItem_t spawn = {"Spawn Bot", MODMENU_ACTION, 0, 0, 0, 0, spawnBot, 0};
 	static const modMenuItem_t list = {"Bot List", MODMENU_HEADER, 0, 0, 0, 0, 0, 0};
 	const modMenuApi_t* current = modmenuFind(loader);
@@ -119,15 +144,26 @@ static void registerMenu(void)
 		menu = current;
 		tab = 0;
 	}
+	/* Rebuild only this tab when crossing the online boundary. Other mods'
+	 * controls and their configuration actions remain untouched. */
+	if (tab > 0 && menuContext != loader->context) {
+		menu->removeTab(tab);
+		tab = 0;
+	}
 	if (!menu || tab > 0)
 		return;
 	tab = menu->addTab("bots", "Bots", UYA_MODE_MULTIPLAYER);
 	if (tab <= 0)
 		return;
 	menu->setTabContexts(tab, UYA_CONTEXT_LOCAL | UYA_CONTEXT_ONLINE);
-	menu->addItem(tab, &amount);
+	menuContext = loader->context;
+	if (menuContext == UYA_CONTEXT_LOCAL) {
+		menu->addItem(tab, &amount);
+		menu->addItem(tab, &help);
+		menu->addItem(tab, &save);
+		menu->addItem(tab, &load);
+	}
 	menu->setItemValueLabel(menu->addItem(tab, &style), behaviorLabel);
-	menu->addItem(tab, &help);
 	spawnItem = menu->addItem(tab, &spawn);
 	menu->addItem(tab, &list);
 	int i;
@@ -170,6 +206,10 @@ void moduleUpdate(void)
 {
 	GameSettings* settings;
 	int time, map;
+	if (loader->context == UYA_CONTEXT_LOCAL && !configLoaded) {
+		loader->loadConfig("bots", configFields, 1);
+		configLoaded = 1;
+	}
 	BotsOnline = loader->context == UYA_CONTEXT_ONLINE;
 	registerMenu();
 	refreshBotList();
@@ -187,7 +227,15 @@ void moduleUpdate(void)
 	if (running && (map != lastMap || settings->GameLoadStartTime != loadTime || botsLevelChanged()))
 		resetGame();
 	if (!running) {
-		SimPlayerCount = count;
+		/* Scene flags can switch before native hero construction finishes.
+		 * Wait for its body, pad and net record before installing bot hooks. */
+		Player** players = playerGetAll();
+		Player* human = players ? players[0] : 0;
+		if (!human || !human->pMoby || !human->pPad || !human->pNetPlayer)
+			return;
+		/* Online games always begin without automatic bots, regardless of
+		 * saved Local Play defaults or manual changes in a previous game. */
+		SimPlayerCount = BotsOnline ? 0 : defaultCount;
 		lastMap = map;
 		loadTime = settings->GameLoadStartTime;
 		running = 1;
@@ -202,16 +250,13 @@ void moduleUpdate(void)
 	uyaPreUpdate();
 	startBots();
 	if (pendingRemove) {
-		if (botsRemove(pendingRemove - 1) && count > 0)
-			--count;
+		botsRemove(pendingRemove - 1);
 		pendingRemove = 0;
 	}
 	if (pendingSpawn) {
 		int result = botsSpawn();
 		if (result >= 0)
 			pendingSpawn = 0;
-		if (result > 0 && count < TRAINING_MAX_BOTS)
-			++count;
 	}
 	refreshBotList();
 	uyaPostUpdate();

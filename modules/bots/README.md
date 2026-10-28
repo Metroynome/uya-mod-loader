@@ -8,21 +8,32 @@ modmenu campaign,local,online
 bots local,online
 ```
 
-In **Mod Menu / Bots**, choose **0-7 bots** and **Idle**, **Passive**, or
-**Aggressive** behavior. Defaults are 0 bots and Idle. Bot count applies to the
-next game or reload; behavior changes apply immediately. Choices stay in module
-memory between games, reloads, and online/local transitions, without an INI or
-Save button. Restarting emulation restores defaults.
+In **Mod Menu / Bots**, **Default Bots Spawned** chooses 0-7 automatic bots for
+the next Local Play game or reload. It defaults to 0. **Save Settings** and
+**Load Settings** use `uya/config/bots.<region>.ini` with the integer key
+`defaultBotsSpawned`. Saved defaults load automatically on entering Local Play.
+The default and save/load controls are hidden online, where every game starts
+without automatic bots regardless of the saved value.
+
+Choose **Idle**, **Passive**, or **Aggressive** behavior; Idle is the default.
+Behavior changes apply immediately and stay in module memory between games
+and online/local transitions. Behavior is not written to the configuration.
 
 During a game, **Spawn Bot** adds a bot to a vacant player slot. **Bot List**
 shows normal rows with the bot name on the left and a **Kick** button on the
 right. Highlight Kick and press X to make that bot leave. Spawning displays
 "<bot name> joined the game." in the native notification feed.
-These actions update the remembered bot
-count for subsequent games. Online controls are available to the host only.
+These actions do not change the Local Play default. Spawn Bot is disabled
+when all eight player slots are occupied, counting humans and bots; reserved
+online human slots are also protected. Online controls are host-only.
 Removal uses the native per-player leave callback to clean up the hero,
 equipment and player slot. Its client-wide ownership cleanup is skipped so
 the shared human host and its objects remain intact.
+
+Recreating a bot reuses its native weapon, timer and state-table entries.
+This prevents kick/spawn cycles from exhausting those tables and corrupting
+the human player's quickselect or weapon HUD. Bots do not increase the native
+local-player count or receive their own HUD drawing pass.
 
 `bots.c` handles simulated players and controller pads. `training/` holds the
 original training structures and movement/aiming routines. The experimental
@@ -56,20 +67,24 @@ With Mod Menu enabled online, the separate MOD MENU pause row provides the
 Bots tab. Selections also remain available when Mod Menu is disabled; Bots
 does not depend on an active menu.
 
-NTSC-U Local Play: the user confirmed seven Idle bots in Hoven Deathmatch,
-eight scoreboard entries, controls and HUD. Reload checks retained the seven
-active records without changing the game mode or local-player count.
-Changing the count to zero and reloading restored the native lookup hook;
-selecting seven and reloading created all seven again.
-NTSC-U Hoven also loaded online with Horizon with three bots; debugger
-reads confirmed all three bots active and the online session flag restored.
-The user also confirmed Marcadia loading online and the online Bots tab.
-Other maps and PAL gameplay
-still need live verification.
-NTSC-U Bakisi Deathmatch also ran online with Horizon and all seven bot
-records active. Debugger checks confirmed Deathmatch settings, restored
-constructor instructions and the online session flag. The extra four actors
-used native remote-player objects; their private camera/network-data buffers
-total 5,056 bytes. The user confirmed all eight players were present and
-spectating every bot worked after refreshing the extra actors' FPS-camera
-positions with the native camera routine.
+## Verification
+
+NTSC-U Local Play: saved/default loading was verified with three automatic
+bots. Filling the roster to eight players disabled Spawn Bot; removing a bot
+re-enabled it without changing the saved default. Earlier seven-bot tests
+confirmed scoreboard entries, HUD/controls, reloads and slot reuse.
+The allocation-reuse fix also passed normal-speed kick/spawn checks in both
+standard and extra slots with seven bots active: all four table counts stayed
+unchanged and the host's weapon HUD continued updating. Online visual
+verification of this fix remains pending.
+
+NTSC-U online with Horizon: a saved Local Play default of three produced zero
+automatic bots. The default and Save/Load controls were absent. Manual spawning,
+kicking, named join/leave notifications and the eight-player limit passed
+debugger checks while preserving the host and online session. Seven-bot Bakisi
+spectating, Hoven/Marcadia loading and the online menu were also user-verified.
+The extra four actors reuse native remote-player objects; private camera and
+network-data buffers total 5,056 bytes.
+
+Both NTSC-U and PAL build and relocation checks pass. PAL gameplay and other
+maps still need live verification.

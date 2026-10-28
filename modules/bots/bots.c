@@ -232,6 +232,7 @@ static u32 getterHook;
 static u32 getterOriginal[2];
 static Player* localHeroes;
 static Player* scopedPlayer;
+static void (*renewPlayer)(Player*);
 static GameCamera extraCameras[TRAINING_MAX_BOTS - 3];
 static u8 extraNetData[TRAINING_MAX_BOTS - 3][0x90] __attribute__((aligned(16)));
 
@@ -259,6 +260,65 @@ static Player* botGetFromSlot(int slot)
 	if (scopedPlayer && slot == BOT_SCRATCH_SLOT)
 		return scopedPlayer;
 	return (Player*)((u32)localHeroes + slot * BOT_LOCAL_STRIDE);
+}
+
+static void renewBotPlayer(Player* player)
+{
+	/* The native renewal clears the hero, including its weapon-table keys.
+	 * Reconstructing a kicked bot would then allocate those entries again.
+	 * Eight heroes fit the table; leaking another set corrupts the host HUD.
+	 * Keep each object's existing keys, with fresh zero values, instead. */
+	/* Native quickselect has eight entries; ammo is indexed by gadget ID
+	 * across 0x1a52-0x1a61. Weapon meters use a separate encoding table. */
+	u8 keys[26];
+	static const u16 stateOffsets[] = {
+		0x19e4, 0x19e5, 0x19e6, 0x19e7, 0x19e8, 0x19e9, 0x19ea, 0x19eb,
+		0x1a04, 0x2476, 0x2554};
+	static const u16 timerOffsets[] = {
+		0x0311, 0x0312, 0x0313, 0x0314, 0x0316, 0x0318, 0x0319, 0x031a, 0x031b, 0x031c,
+		0x1a17, 0x1a18, 0x1a31};
+	u8 states[sizeof(stateOffsets) / sizeof(stateOffsets[0])];
+	u8 timers[sizeof(timerOffsets) / sizeof(timerOffsets[0])];
+	u8 history[24];
+	u8 meters[16];
+	u8* fields = (u8*)player;
+	int i, offset;
+	for (i = 0; i < 26; ++i) {
+		offset = i < 8 ? 0x1a32 + i : i < 10 ? 0x1a40 + i - 8 : 0x1a52 + i - 10;
+		keys[i] = fields[offset];
+	}
+	/* The state/history tables use the same allocation scheme. History has
+	 * its own encoding; retain those keys/data and reset its length below. */
+	for (i = 0; i < (int)sizeof(states); ++i)
+		states[i] = fields[stateOffsets[i]];
+	for (i = 0; i < (int)sizeof(timers); ++i)
+		timers[i] = fields[timerOffsets[i]];
+	memcpy(history, fields + 0x19ec, sizeof(history));
+	memcpy(meters, fields + 0x1a62, sizeof(meters));
+	renewPlayer(player);
+	memcpy(fields + 0x19ec, history, sizeof(history));
+	memcpy(fields + 0x1a62, meters, sizeof(meters));
+	for (i = 0; i < (int)sizeof(timers); ++i) {
+		if (timers[i]) {
+			offset = timerOffsets[i];
+			fields[offset] = timers[i];
+			playerObfuscate((u32)&fields[offset], 0, OBFUSCATE_MODE_TIMER);
+		}
+	}
+	for (i = 0; i < (int)sizeof(states); ++i) {
+		if (states[i]) {
+			offset = stateOffsets[i];
+			fields[offset] = states[i];
+			playerObfuscate((u32)&fields[offset], 0, OBFUSCATE_MODE_STATE);
+		}
+	}
+	for (i = 0; i < 26; ++i) {
+		offset = i < 8 ? 0x1a32 + i : i < 10 ? 0x1a40 + i - 8 : 0x1a52 + i - 10;
+		if (keys[i]) {
+			fields[offset] = keys[i];
+			playerObfuscate((u32)&fields[offset], 0, OBFUSCATE_MODE_GADGET);
+		}
+	}
 }
 
 static Player* createExtraPlayer(int id)
@@ -412,6 +472,9 @@ void createSimPlayer(simulatedPlayer_t* sPlayer, int idx)
 	 * startBots runs inside the loader's re-entry guard: nested SDK syncs must
 	 * not dispatch offline modules while this scoped flag is set. */
 	int onlyLocal = GAME_NET_INFO->onlyLocalPlayers;
+	PlayerVTable* vtable = playerGetVTable(players[0]);
+	renewPlayer = (void (*)(Player*))vtable->FUNC_20;
+	vtable->FUNC_20 = renewBotPlayer;
 	if (BotsOnline)
 		GAME_NET_INFO->onlyLocalPlayers = 1;
 	if (extra)
@@ -419,6 +482,7 @@ void createSimPlayer(simulatedPlayer_t* sPlayer, int idx)
 	else
 		((void (*)(int))GetAddress(&vaCreateHero))(localSlot);
 	GAME_NET_INFO->onlyLocalPlayers = onlyLocal;
+	vtable->FUNC_20 = renewPlayer;
 
 	Player* newPlayer = players[id];
 	POKE_U32(BOT_PAD_LOCATION + (4 * localSlot), savedPad);
