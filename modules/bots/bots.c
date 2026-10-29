@@ -24,9 +24,19 @@
 #define BOT_REMOTE_STRIDE (0x4dc0)
 #define BOT_SCRATCH_SLOT  (3)
 #if UYA_PAL
-#define BOT_NET_DATA_COPY (0x0019a39c)
+#define BOT_NET_DATA_COPY    (0x0019a39c)
+#define BOT_NET_CLASS_NAME   (0x00241678)
+#define BOT_NET_CLASS_INDEX  (0x0024063c)
+#define BOT_NET_WORLD        (0x001d8788)
+#define BOT_NET_OBJECT_FLAGS (0x001d87b0)
+#define BOT_NET_REPORT       (0x00196468)
 #else
-#define BOT_NET_DATA_COPY (0x0019a4dc)
+#define BOT_NET_DATA_COPY    (0x0019a4dc)
+#define BOT_NET_CLASS_NAME   (0x002417f8)
+#define BOT_NET_CLASS_INDEX  (0x002407bc)
+#define BOT_NET_WORLD        (0x001d8908)
+#define BOT_NET_OBJECT_FLAGS (0x001d8930)
+#define BOT_NET_REPORT       (0x00196558)
 #endif
 
 typedef struct botSlot {
@@ -792,7 +802,6 @@ int botsNetworkActive(void)
 
 static void publishBotRoster(int id)
 {
-#if !UYA_PAL
 	GameSettings* settings = gameGetSettings();
 	int (*sendObject)(int, u32) = (void*)0x0016ef40;
 	/* Publish directly to each human connection. The native broadcast path
@@ -813,19 +822,13 @@ static void publishBotRoster(int id)
 		networkError = rosterResult ? rosterResult : playerResult;
 		printf("bots: publish to client %d roster=%d player=%d\n", client, rosterResult, playerResult);
 	}
-	((void (*)(void))0x00196558)();
-#else
-	(void)id;
-#endif
+	((void (*)(void))BOT_NET_REPORT)();
 }
 
 static int publishNetworkBot(Player* player)
 {
-#if UYA_PAL
-	(void)player;
-	return 0;
-#else
-	/* NTSC-U resident networking functions, traced from nwCreateLocalNetPlayer.
+	/* Resident networking routines match at the same code addresses in NTSC-U
+	 * and PAL; class/report/world data references above are region-specific.
 	 * The last two arguments are passed on the EE stack, not in registers.
 	 * Do not call NetSetMyClientObject: the host keeps its original player. */
 	int (*createObject)(u32*, int, int, int, int, int, int, const void*, const char*, u32) = (void*)0x0016ec18;
@@ -848,14 +851,14 @@ static int publishNetworkBot(Player* player)
 	*(int*)(data + 0x1c) = gameGetTime();
 	*(int*)(data + 0x34) = -1; /* Guest account, as in native host split-screen. */
 	*(int*)(data + 0x54) = player->mpIndex;
-	networkError = createObject(&id, 1, 2, 0, 0, 0, 0, data, (const char*)0x002417f8, *(u32*)0x002407bc);
+	networkError = createObject(&id, 1, 2, 0, 0, 0, 0, data, (const char*)BOT_NET_CLASS_NAME, *(u32*)BOT_NET_CLASS_INDEX);
 	/* Native clients reserve only three object IDs: settings plus two heroes.
 	 * The session master can reserve another unused ID with the same allocator
 	 * used when accepting a client. Do not enlarge into another client's range.
 	 * Keep the reservation and creation under the native network mutex, and
 	 * restore the host's normal range before releasing it. */
 	if (networkError == 0x13 && ((int (*)(void))0x00150550)() == 0) {
-		void* world = *(void**)0x001d8908;
+		void* world = *(void**)BOT_NET_WORLD;
 		u32* client = ((void* (*)(void*, int))0x0014a490)(world, GAME_CLIENT_ID);
 		int extraId = client ? ((int (*)(int))0x00173ed8)(1) : -1;
 		if (extraId >= 0 && extraId < 0x1000) {
@@ -865,11 +868,11 @@ static int publishNetworkBot(Player* player)
 			client[3] = 1;
 			/* Call the unlocked implementation while holding the mutex. */
 			createObject = (void*)0x0016fd68;
-			networkError = createObject(&id, 1, 2, 0, 0, 0, 0, data, (const char*)0x002417f8, *(u32*)0x002407bc);
+			networkError = createObject(&id, 1, 2, 0, 0, 0, 0, data, (const char*)BOT_NET_CLASS_NAME, *(u32*)BOT_NET_CLASS_INDEX);
 			client[2] = first;
 			client[3] = count;
 			if (networkError)
-				((u8*)0x001d8930)[extraId] = 0;
+				((u8*)BOT_NET_OBJECT_FLAGS)[extraId] = 0;
 		}
 		((int (*)(void))0x00150590)();
 	}
@@ -899,7 +902,6 @@ static int publishNetworkBot(Player* player)
 	publishBotRoster(id);
 	printf("bots: player %d published as host-owned object %d\n", slot, networkBot);
 	return 1;
-#endif
 }
 
 int botsSpawn(void)
@@ -973,7 +975,6 @@ int botsRemove(int index)
 		bot->Active = 1;
 		return 0;
 	}
-#if !UYA_PAL
 	if (published) {
 		/* Delete only this owned object. The native path broadcasts its ID and
 		 * runs the registered data-deletion callback on each receiving client. */
@@ -989,7 +990,6 @@ int botsRemove(int index)
 		networkObjects[index] = 0;
 		networkBotCount -= 1;
 	}
-#endif
 	/* Release the local slot after native object/hero cleanup. */
 	net[0] = (u32)-1;
 	net[1] = 0;

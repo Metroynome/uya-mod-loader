@@ -140,11 +140,14 @@ static void registerMenu(void)
 	static const modMenuItem_t load = {"Load Settings", MODMENU_ACTION, 0, 0, 0, 0, configAction, 0};
 	static const modMenuItem_t spawn = {"Spawn Bot", MODMENU_ACTION, 0, 0, 0, 0, spawnBot, 0};
 	static const modMenuItem_t list = {"Bot List", MODMENU_HEADER, 0, 0, 0, 0, 0, 0};
-#if !UYA_PAL
 	static const modMenuItem_t network = {"Network Bot Prototype", MODMENU_TOGGLE, &BotsNetwork, 0, 1, 1, 0, 0};
 	static const modMenuItem_t networkHelp = {
-	    "Uses vacant player slots", MODMENU_LABEL, 0, 0, 0, 0, 0, 0};
+#if UYA_PAL
+	    "PAL online support is untested",
+#else
+	    "Uses vacant player slots",
 #endif
+	    MODMENU_LABEL, 0, 0, 0, 0, 0, 0};
 	const modMenuApi_t* current = modmenuFind(loader);
 	if (!current)
 		return;
@@ -172,12 +175,10 @@ static void registerMenu(void)
 		menu->addItem(tab, &save);
 		menu->addItem(tab, &load);
 	}
-#if !UYA_PAL
 	if (menuContext == UYA_CONTEXT_ONLINE) {
 		networkItem = menu->addItem(tab, &network);
 		menu->addItem(tab, &networkHelp);
 	}
-#endif
 	menu->setItemValueLabel(menu->addItem(tab, &style), behaviorLabel);
 	spawnItem = menu->addItem(tab, &spawn);
 	menu->addItem(tab, &list);

@@ -51,12 +51,16 @@ when the game ends or reloads.
 
 ## Online
 
-### Network bot prototype (NTSC-U)
+### Network bot prototype
 
-In an NTSC-U online game you host, enable **Network Bot Prototype** before
+In an online game you host, enable **Network Bot Prototype** before
 spawning any bots. Choose **Spawn Bot** to fill vacant player slots, up to
 seven bots when only the human host is present.
 The option is not saved; online games never spawn bots automatically.
+
+NTSC-U has live host/PS2 coverage. PAL networking addresses are matched to the
+regional memory dumps and the PAL build is enabled, but **PAL online is untested**.
+Its menu help marks that status. No PAL online gameplay or kick/respawn was tested.
 
 Bots use native player network objects and the shared roster. Horizon's
 `feature/moosebot` receiver completes their creation during gameplay, using
@@ -70,7 +74,8 @@ Network bots reuse Horizon's existing player-index synchronization packets.
 Only host-owned guest bots use this path when New Player Sync is off; humans
 keep native synchronization. Bot native pad packets are suppressed to avoid
 sharing the native protocol's single guest-input channel. No new server-plugin
-message is required. Two-bot Idle and movement were verified on the host and PS2 client.
+message is required. NTSC-U Idle/movement was verified with six bots and two
+human players on the host and PS2 client.
 
 One Idle bot was verified on both the host and PS2 in Blackwater Docks, with
 its own body and in-game roster entry. Its simulated pad feeds the registered
@@ -78,9 +83,11 @@ raw-input callback so native input starts neutral rather than empty.
 
 Kick deletes only the selected bot's native object and republishes the roster.
 The receiver retains native per-player cleanup while skipping shared-client
-cleanup for tracked bots. Online kick/respawn is pending live verification.
-Humans and bots share the eight-player limit. Larger synchronized groups still
-need live verification; occupied human slots are never replaced.
+cleanup for tracked bots. NTSC-U removal of both the body and scoreboard entry was verified on the PS2;
+respawning the removed slot also succeeded. Client join/leave feed messages
+remain a follow-up.
+Humans and bots share the eight-player limit; occupied human slots are never
+replaced. Seven synchronized bots with only the host has not been tested.
 
 ### Host-side training bots
 
@@ -122,3 +129,9 @@ network-data buffers total 5,056 bytes.
 
 Both NTSC-U and PAL build and relocation checks pass. PAL gameplay and other
 maps still need live verification.
+
+PAL address verification: the networking routines and class-name literal match
+across all eleven PAL multiplayer dumps (lobby and ten retail maps). The native
+creation call references class index `0x0024063c` and name `0x00241678`; its
+world pointer/ID flags use `0x001d8788`/`0x001d87b0`, and player reporting uses
+`0x00196468`. Every PAL leave entry matches the scoped cleanup-call layout.
