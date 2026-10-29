@@ -33,7 +33,8 @@ the shared human host and its objects remain intact.
 Recreating a bot reuses its native weapon, timer and state-table entries.
 This prevents kick/spawn cycles from exhausting those tables and corrupting
 the human player's quickselect or weapon HUD. Bots do not increase the native
-local-player count or receive their own HUD drawing pass.
+local-player count or receive their own HUD drawing pass. Simulated Triangle
+weapon switches use the equipment API instead of opening a quickselect canvas.
 
 `bots.c` handles simulated players and controller pads. `training/` holds the
 original training structures and movement/aiming routines. The experimental
@@ -49,6 +50,39 @@ patches are scoped to each creation, and the player-lookup hook is restored
 when the game ends or reloads.
 
 ## Online
+
+### Network bot prototype (NTSC-U)
+
+In an NTSC-U online game you host, enable **Network Bot Prototype** before
+spawning any bots. Choose **Spawn Bot** to fill vacant player slots, up to
+seven bots when only the human host is present.
+The option is not saved; online games never spawn bots automatically.
+
+Bots use native player network objects and the shared roster. Horizon's
+`feature/moosebot` receiver completes their creation during gameplay, using
+remote actors without additional local controllers, viewports or HUDs.
+Both systems must reconnect to download the updated local Horizon patch.
+
+Extra guests reserve an unused network-object ID through the native session
+allocator; the host's normal range and other clients' reservations stay intact.
+
+Network bots reuse Horizon's existing player-index synchronization packets.
+Only host-owned guest bots use this path when New Player Sync is off; humans
+keep native synchronization. Bot native pad packets are suppressed to avoid
+sharing the native protocol's single guest-input channel. No new server-plugin
+message is required. Two-bot Idle and movement were verified on the host and PS2 client.
+
+One Idle bot was verified on both the host and PS2 in Blackwater Docks, with
+its own body and in-game roster entry. Its simulated pad feeds the registered
+raw-input callback so native input starts neutral rather than empty.
+
+Kick deletes only the selected bot's native object and republishes the roster.
+The receiver retains native per-player cleanup while skipping shared-client
+cleanup for tracked bots. Online kick/respawn is pending live verification.
+Humans and bots share the eight-player limit. Larger synchronized groups still
+need live verification; occupied human slots are never replaced.
+
+### Host-side training bots
 
 The module runs online as host-side training AI and only uses vacant player
 slots. It does not add network clients or synchronize new bot players to other

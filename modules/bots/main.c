@@ -30,6 +30,7 @@ static int lastMap = -1;
 static int loadTime = -1;
 static int running;
 static int spawnItem;
+static int networkItem;
 static int pendingSpawn, pendingRemove;
 static int listMask = -1;
 static int botItems[TRAINING_MAX_BOTS];
@@ -87,6 +88,8 @@ static void refreshBotList(void)
 				mask |= 1 << i;
 	}
 	menu->setItemEnabled(spawnItem, enabled && hasVacantPlayerSlot());
+	if (networkItem)
+		menu->setItemEnabled(networkItem, enabled && !mask);
 	for (i = 0; i < TRAINING_MAX_BOTS; ++i)
 		menu->setItemEnabled(botItems[i], enabled);
 	if (mask == listMask)
@@ -137,6 +140,11 @@ static void registerMenu(void)
 	static const modMenuItem_t load = {"Load Settings", MODMENU_ACTION, 0, 0, 0, 0, configAction, 0};
 	static const modMenuItem_t spawn = {"Spawn Bot", MODMENU_ACTION, 0, 0, 0, 0, spawnBot, 0};
 	static const modMenuItem_t list = {"Bot List", MODMENU_HEADER, 0, 0, 0, 0, 0, 0};
+#if !UYA_PAL
+	static const modMenuItem_t network = {"Network Bot Prototype", MODMENU_TOGGLE, &BotsNetwork, 0, 1, 1, 0, 0};
+	static const modMenuItem_t networkHelp = {
+	    "Uses vacant player slots", MODMENU_LABEL, 0, 0, 0, 0, 0, 0};
+#endif
 	const modMenuApi_t* current = modmenuFind(loader);
 	if (!current)
 		return;
@@ -157,12 +165,19 @@ static void registerMenu(void)
 		return;
 	menu->setTabContexts(tab, UYA_CONTEXT_LOCAL | UYA_CONTEXT_ONLINE);
 	menuContext = loader->context;
+	networkItem = 0;
 	if (menuContext == UYA_CONTEXT_LOCAL) {
 		menu->addItem(tab, &amount);
 		menu->addItem(tab, &help);
 		menu->addItem(tab, &save);
 		menu->addItem(tab, &load);
 	}
+#if !UYA_PAL
+	if (menuContext == UYA_CONTEXT_ONLINE) {
+		networkItem = menu->addItem(tab, &network);
+		menu->addItem(tab, &networkHelp);
+	}
+#endif
 	menu->setItemValueLabel(menu->addItem(tab, &style), behaviorLabel);
 	spawnItem = menu->addItem(tab, &spawn);
 	menu->addItem(tab, &list);
