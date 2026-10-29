@@ -36,7 +36,10 @@ the human player's quickselect or weapon HUD. Bots do not increase the native
 local-player count or receive their own HUD drawing pass. Simulated Triangle
 weapon switches use the equipment API instead of opening a quickselect canvas.
 
-`bots.c` handles simulated players and controller pads. `training/` holds the
+`bots.c` handles shared player creation, simulation, controller pads and cleanup.
+`online.c` owns synchronized network objects, ownership, roster publication and
+network pad callbacks; `online.h` is its private interface. `main.c` owns the
+module lifecycle and menu. `training/` holds the
 original training structures and movement/aiming routines. The experimental
 five-bot timer and flyby patches are excluded. Local Play supports up to seven
 bots, with humans and bots sharing the eight roster slots. Occupied human
@@ -48,6 +51,19 @@ network data. Controller/profile accesses stay within the four local slots;
 the native local-player count and session type are unchanged. Constructor
 patches are scoped to each creation, and the player-lookup hook is restored
 when the game ends or reloads.
+
+## Build options
+
+Synchronized online bots are included by this line in `Makefile.defs`:
+
+```make
+EE_DEFS += -DONLINE_BOTS
+```
+
+Comment it out to omit `online.c` and the Network Bot Prototype controls.
+Local Play and the original host-only online training behavior remain available.
+After changing the define, run `make clean && make` from `modules/bots/` inside
+the build container.
 
 ## Online
 

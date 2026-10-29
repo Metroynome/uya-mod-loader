@@ -5,6 +5,7 @@
 #include <libuya/uya.h>
 #include <libuya/stdio.h>
 #include "training/training.h"
+#include "online.h"
 
 #define HORIZON_ARENA_START (0x000c8000)
 
@@ -30,7 +31,9 @@ static int lastMap = -1;
 static int loadTime = -1;
 static int running;
 static int spawnItem;
+#ifdef ONLINE_BOTS
 static int networkItem;
+#endif
 static int pendingSpawn, pendingRemove;
 static int listMask = -1;
 static int botItems[TRAINING_MAX_BOTS];
@@ -88,8 +91,10 @@ static void refreshBotList(void)
 				mask |= 1 << i;
 	}
 	menu->setItemEnabled(spawnItem, enabled && hasVacantPlayerSlot());
+#ifdef ONLINE_BOTS
 	if (networkItem)
 		menu->setItemEnabled(networkItem, enabled && !mask);
+#endif
 	for (i = 0; i < TRAINING_MAX_BOTS; ++i)
 		menu->setItemEnabled(botItems[i], enabled);
 	if (mask == listMask)
@@ -140,6 +145,7 @@ static void registerMenu(void)
 	static const modMenuItem_t load = {"Load Settings", MODMENU_ACTION, 0, 0, 0, 0, configAction, 0};
 	static const modMenuItem_t spawn = {"Spawn Bot", MODMENU_ACTION, 0, 0, 0, 0, spawnBot, 0};
 	static const modMenuItem_t list = {"Bot List", MODMENU_HEADER, 0, 0, 0, 0, 0, 0};
+#ifdef ONLINE_BOTS
 	static const modMenuItem_t network = {"Network Bot Prototype", MODMENU_TOGGLE, &BotsNetwork, 0, 1, 1, 0, 0};
 	static const modMenuItem_t networkHelp = {
 #if UYA_PAL
@@ -148,6 +154,7 @@ static void registerMenu(void)
 	    "Uses vacant player slots",
 #endif
 	    MODMENU_LABEL, 0, 0, 0, 0, 0, 0};
+#endif
 	const modMenuApi_t* current = modmenuFind(loader);
 	if (!current)
 		return;
@@ -168,17 +175,21 @@ static void registerMenu(void)
 		return;
 	menu->setTabContexts(tab, UYA_CONTEXT_LOCAL | UYA_CONTEXT_ONLINE);
 	menuContext = loader->context;
+#ifdef ONLINE_BOTS
 	networkItem = 0;
+#endif
 	if (menuContext == UYA_CONTEXT_LOCAL) {
 		menu->addItem(tab, &amount);
 		menu->addItem(tab, &help);
 		menu->addItem(tab, &save);
 		menu->addItem(tab, &load);
 	}
+#ifdef ONLINE_BOTS
 	if (menuContext == UYA_CONTEXT_ONLINE) {
 		networkItem = menu->addItem(tab, &network);
 		menu->addItem(tab, &networkHelp);
 	}
+#endif
 	menu->setItemValueLabel(menu->addItem(tab, &style), behaviorLabel);
 	spawnItem = menu->addItem(tab, &spawn);
 	menu->addItem(tab, &list);

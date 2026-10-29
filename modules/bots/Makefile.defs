@@ -1,3 +1,11 @@
 LIBRARY = libuya
 REGIONS = ntscu pal
 EE_OBJS = main.o bots.o training/trainingmode.o
+
+# Comment out this define to omit synchronized online bots.
+EE_DEFS += -DONLINE_BOTS
+EE_CFLAGS += $(EE_DEFS)
+
+ifneq (,$(filter -DONLINE_BOTS,$(EE_DEFS)))
+EE_OBJS += online.o
+endif

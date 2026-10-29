@@ -203,7 +203,6 @@ typedef struct trainingGameData {
 
 extern trainingState_t State;
 extern int BotsOnline;
-extern int BotsNetwork;
 
 extern const float TARGET_MIN_SPAWN_DISTANCE[TRAINING_TYPE_MAX];
 extern const float TARGET_IDEAL_SPAWN_DISTANCE[TRAINING_TYPE_MAX];
@@ -222,6 +221,5 @@ void botsReset(int multiplayer);
 int botsLevelChanged(void);
 int botsSpawn(void);
 int botsRemove(int index);
-int botsNetworkActive(void);
 
 #endif // TRAINING_GAME_H
