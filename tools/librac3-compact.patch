@@ -1,16 +1,19 @@
 --- a/include/interop.h
 +++ b/include/interop.h
-@@ -48,7 +48,59 @@
+@@ -48,7 +48,100 @@
  	u32 VidComic6;
  } VariableAddress_t;
  
 -u32 GetAddress(VariableAddress_t* address);
 -u32 GetAddressImmediate(VariableAddress_t* address);
-+/* Veldin is the absolute base and its high bit tags compact tables.
-+ * Other fields are signed word offsets biased by 0x8000; zero is unavailable.
-+ * These tables describe low EE addresses, not cached/kernel aliases.
++/* The first word tags the layout: BASE selects the fixed map base,
++ * CUSTOM_BASE selects an explicit Base followed by offsets for every map.
++ * Lobby/MainMenu, when present, is an ordinary address at byte 4.
++ * Full tables keep their original layout. Rebuild unpublished compact users.
++ * Offsets are signed words biased by 0x8000; zero means unavailable.
 + */
 +#define RAC3_VA_COMPACT_BASE(address) ((u32)(address) | (u32)0x80000000)
++#define RAC3_VA_COMPACT_CUSTOM_BASE(address) ((u32)(address) | (u32)0xc0000000)
 +#define RAC3_VA_COMPACT_OFFSET(base, address) ((address) == 0 ? 0 : \
 +	(u16)(((s32)(address) - (s32)(base)) / 4 + 0x8000 + \
 +	0 * sizeof(char[((address) == 0 || (((s32)(address) - (s32)(base)) % 4 == 0 && \
@@ -52,8 +55,46 @@
 +	/* 0x40 */ u16 VidComic3;
 +	/* 0x42 */ u16 VidComic5;
 +	/* 0x44 */ u16 VidComic6;
-+	/* 0x46: two bytes of tail padding on the EE ABI. */
++	/* 0x46: two bytes of EE alignment padding. */
 +} rac3VariableAddressCompact_t;
++
++typedef struct rac3VariableAddressCompactBase {
++	/* 0x00 */ u32 Base;
++	/* 0x04 */ u16 Veldin;
++	/* 0x06 */ u16 Florana;
++	/* 0x08 */ u16 Starship1;
++	/* 0x0a */ u16 Marcadia;
++	/* 0x0c */ u16 Daxx;
++	/* 0x0e */ u16 Starship2;
++	/* 0x10 */ u16 AnniNation;
++	/* 0x12 */ u16 Aquatos;
++	/* 0x14 */ u16 Tyhrranosis;
++	/* 0x16 */ u16 Zeldrin;
++	/* 0x18 */ u16 ObaniMoons;
++	/* 0x1a */ u16 Rilgar;
++	/* 0x1c */ u16 Holostar1;
++	/* 0x1e */ u16 Koros;
++	/* 0x20 */ u16 Kerwan;
++	/* 0x22 */ u16 CrashSite;
++	/* 0x24 */ u16 Aridia;
++	/* 0x26 */ u16 Thran;
++	/* 0x28 */ u16 FinalBoss;
++	/* 0x2a */ u16 ObaniDraco;
++	/* 0x2c */ u16 Mylon;
++	/* 0x2e */ u16 HolostarClank;
++	/* 0x30 */ u16 Museum;
++	/* 0x32 */ u16 KerwanRanger;
++	/* 0x34 */ u16 AquatosBase;
++	/* 0x36 */ u16 AquatosSewers;
++	/* 0x38 */ u16 Ranger2;
++	/* 0x3a */ u16 VidComic0;
++	/* 0x3c */ u16 VidComic1;
++	/* 0x3e */ u16 VidComic4;
++	/* 0x40 */ u16 VidComic2;
++	/* 0x42 */ u16 VidComic3;
++	/* 0x44 */ u16 VidComic5;
++	/* 0x46 */ u16 VidComic6;
++} rac3VariableAddressCompactBase_t;
 +
 +/* Both formats accept campaign IDs 0..33; menu/unknown IDs return zero.
 + * The caller must ensure the campaign overlay is ready before calling a result.
@@ -80,7 +121,7 @@
  
  // fixed address function
  #define FUNCTION(name, address) \
-@@ -57,53 +60,40 @@
+@@ -57,53 +60,47 @@
  // 
  	.set	push;
  	.set	noreorder;
@@ -137,32 +178,39 @@
  	lw $v0, 0($a0);
 -
 -	// return to calling function
-+	bltz $v0, __LocalGetAddress_compact;
++	bgez $v0, __LocalGetAddress_full;
 +	nop;
-+	sll $v1, $v1, 2;
-+	addu $v1, $a0, $v1;
-+	b __LocalGetAddress_exit;
-+	lw $v0, 0($v1);
-+__LocalGetAddress_compact:
-+	sll $v0, $v0, 1;
++	sll $t8, $v0, 1;
++	sll $v0, $v0, 2;
++	srl $v0, $v0, 2;
++	bgez $t8, __LocalGetAddress_offset_load;
++	nop;
++	addiu $v1, $v1, 1;
++__LocalGetAddress_offset_load:
 +	beqz $v1, __LocalGetAddress_exit;
-+	srl $v0, $v0, 1;
++	nop;
 +	sll $v1, $v1, 1;
 +	addu $v1, $a0, $v1;
 +	lhu $v1, 2($v1);
-+	bnez $v1, __LocalGetAddress_offset;
++	beqz $v1, __LocalGetAddress_unavailable;
 +	nop;
-+	b __LocalGetAddress_exit;
-+	move $v0, $zero;
-+__LocalGetAddress_offset:
 +	xori $v1, $v1, 0x8000;
 +	sll $v1, $v1, 16;
 +	sra $v1, $v1, 14;
++	b __LocalGetAddress_exit;
 +	addu $v0, $v0, $v1;
++__LocalGetAddress_unavailable:
++	b __LocalGetAddress_exit;
++	move $v0, $zero;
++__LocalGetAddress_full:
++	sll $v1, $v1, 2;
++	addu $v1, $a0, $v1;
++	lw $v0, 0($v1);
++
  __LocalGetAddress_exit:
  	jr $a1;
  	nop;
-@@ -114,53 +104,40 @@
+@@ -114,53 +111,47 @@
  // 
  	.set	push;
  	.set	noreorder;
@@ -219,32 +267,39 @@
  	lw $v0, 0($a0);
 -
 -	// return to calling function
-+	bltz $v0, GetAddress_compact;
++	bgez $v0, GetAddress_full;
 +	nop;
-+	sll $v1, $v1, 2;
-+	addu $v1, $a0, $v1;
-+	b GetAddress_exit;
-+	lw $v0, 0($v1);
-+GetAddress_compact:
-+	sll $v0, $v0, 1;
++	sll $t8, $v0, 1;
++	sll $v0, $v0, 2;
++	srl $v0, $v0, 2;
++	bgez $t8, GetAddress_offset_load;
++	nop;
++	addiu $v1, $v1, 1;
++GetAddress_offset_load:
 +	beqz $v1, GetAddress_exit;
-+	srl $v0, $v0, 1;
++	nop;
 +	sll $v1, $v1, 1;
 +	addu $v1, $a0, $v1;
 +	lhu $v1, 2($v1);
-+	bnez $v1, GetAddress_offset;
++	beqz $v1, GetAddress_unavailable;
 +	nop;
-+	b GetAddress_exit;
-+	move $v0, $zero;
-+GetAddress_offset:
 +	xori $v1, $v1, 0x8000;
 +	sll $v1, $v1, 16;
 +	sra $v1, $v1, 14;
++	b GetAddress_exit;
 +	addu $v0, $v0, $v1;
++GetAddress_unavailable:
++	b GetAddress_exit;
++	move $v0, $zero;
++GetAddress_full:
++	sll $v1, $v1, 2;
++	addu $v1, $a0, $v1;
++	lw $v0, 0($v1);
++
  GetAddress_exit:
  	jr $ra;
  	nop;
-@@ -171,53 +148,40 @@
+@@ -171,53 +162,47 @@
  // 
  	.set	push;
  	.set	noreorder;
@@ -301,28 +356,35 @@
  	lw $v0, 0($a0);
 -
 -	// return to calling function
-+	bltz $v0, GetAddressImmediate_compact;
++	bgez $v0, GetAddressImmediate_full;
 +	nop;
-+	sll $v1, $v1, 2;
-+	addu $v1, $a0, $v1;
-+	b GetAddressImmediate_exit;
-+	lw $v0, 0($v1);
-+GetAddressImmediate_compact:
-+	sll $v0, $v0, 1;
++	sll $t8, $v0, 1;
++	sll $v0, $v0, 2;
++	srl $v0, $v0, 2;
++	bgez $t8, GetAddressImmediate_offset_load;
++	nop;
++	addiu $v1, $v1, 1;
++GetAddressImmediate_offset_load:
 +	beqz $v1, GetAddressImmediate_exit;
-+	srl $v0, $v0, 1;
++	nop;
 +	sll $v1, $v1, 1;
 +	addu $v1, $a0, $v1;
 +	lhu $v1, 2($v1);
-+	bnez $v1, GetAddressImmediate_offset;
++	beqz $v1, GetAddressImmediate_unavailable;
 +	nop;
-+	b GetAddressImmediate_exit;
-+	move $v0, $zero;
-+GetAddressImmediate_offset:
 +	xori $v1, $v1, 0x8000;
 +	sll $v1, $v1, 16;
 +	sra $v1, $v1, 14;
++	b GetAddressImmediate_exit;
 +	addu $v0, $v0, $v1;
++GetAddressImmediate_unavailable:
++	b GetAddressImmediate_exit;
++	move $v0, $zero;
++GetAddressImmediate_full:
++	sll $v1, $v1, 2;
++	addu $v1, $a0, $v1;
++	lw $v0, 0($v1);
++
  GetAddressImmediate_exit:
  	jr $ra;
  	nop;

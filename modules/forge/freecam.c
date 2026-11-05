@@ -54,8 +54,8 @@ static void hudUpdate(void);
  * Custom maps use the addresses of their retail base through libuya. */
 #if UYA_MODULE_REGION == 2
 static variableAddressCompact_t cameraRender = {
-	.Lobby = VA_COMPACT_LOBBY(0),
-	.Bakisi = 0x447960,
+	.Lobby = 0,
+	.Bakisi = VA_COMPACT_BASE(0x447960),
 	.Hoven = VA_COMPACT_OFFSET(0x00447960, 0x4494e0),
 	.OutpostX12 = VA_COMPACT_OFFSET(0x00447960, 0x4402e0),
 	.KorgonOutpost = VA_COMPACT_OFFSET(0x00447960, 0x43dea0),
@@ -68,8 +68,8 @@ static variableAddressCompact_t cameraRender = {
 };
 #else
 static variableAddressCompact_t cameraRender = {
-	.Lobby = VA_COMPACT_LOBBY(0),
-	.Bakisi = 0x446ab8,
+	.Lobby = 0,
+	.Bakisi = VA_COMPACT_BASE(0x446ab8),
 	.Hoven = VA_COMPACT_OFFSET(0x00446ab8, 0x448578),
 	.OutpostX12 = VA_COMPACT_OFFSET(0x00446ab8, 0x43f3b8),
 	.KorgonOutpost = VA_COMPACT_OFFSET(0x00446ab8, 0x43cff8),
@@ -86,8 +86,8 @@ static variableAddressCompact_t cameraRender = {
 #if UYA_MODULE_REGION == 2
 #define HUD_PROLOGUE (0x27bdff70)
 static variableAddressCompact_t hudUpdateCall = {
-	.Lobby = VA_COMPACT_LOBBY(0),
-	.Bakisi = 0x4eecc4,
+	.Lobby = 0,
+	.Bakisi = VA_COMPACT_BASE(0x4eecc4),
 	.Hoven = VA_COMPACT_OFFSET(0x004eecc4, 0x4f0ddc),
 	.OutpostX12 = VA_COMPACT_OFFSET(0x004eecc4, 0x4e66b4),
 	.KorgonOutpost = VA_COMPACT_OFFSET(0x004eecc4, 0x4e3e4c),
@@ -101,8 +101,8 @@ static variableAddressCompact_t hudUpdateCall = {
 #else
 #define HUD_PROLOGUE (0x27bdff60)
 static variableAddressCompact_t hudUpdateCall = {
-	.Lobby = VA_COMPACT_LOBBY(0),
-	.Bakisi = 0x4ec5a4,
+	.Lobby = 0,
+	.Bakisi = VA_COMPACT_BASE(0x4ec5a4),
 	.Hoven = VA_COMPACT_OFFSET(0x004ec5a4, 0x4ee5fc),
 	.OutpostX12 = VA_COMPACT_OFFSET(0x004ec5a4, 0x4e3f14),
 	.KorgonOutpost = VA_COMPACT_OFFSET(0x004ec5a4, 0x4e172c),

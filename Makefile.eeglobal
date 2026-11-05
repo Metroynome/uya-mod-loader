@@ -109,7 +109,8 @@ $(LIB_ARCHIVE): tools/$(IMAGE_LIBRARY)-compact.patch Makefile.eeglobal $(wildcar
 	mkdir -p $(LIB_WORK) $(WORK)/include/$(IMAGE_LIBRARY)
 	(cd $(LIB_SOURCE) && tar --exclude=.git --exclude=obj --exclude=lib --exclude=test -cf - .) | (cd $(LIB_WORK) && tar -xf -)
 	# Pinned dependencies predate compact tables. Patch only the isolated copy.
-	@if ! grep -q 'define .*VA_COMPACT_' $(LIB_WORK)/include/interop.h; then \
+	@if ! grep -q 'define .*VA_COMPACT_CUSTOM_BASE' $(LIB_WORK)/include/interop.h; then \
+	  if grep -q 'define .*VA_COMPACT_' $(LIB_WORK)/include/interop.h; then echo 'Update $(IMAGE_LIBRARY) to the BASE/CUSTOM_BASE headers and resolver before building.' >&2; exit 1; fi; \
 	  sed -i 's/\r$$//' $(LIB_WORK)/include/interop.h $(LIB_WORK)/src/functions.S; \
 	  cd $(LIB_WORK) && patch -p1 < $(ROOT)/tools/$(IMAGE_LIBRARY)-compact.patch; \
 	fi

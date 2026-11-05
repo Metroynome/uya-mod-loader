@@ -1,17 +1,19 @@
 --- a/include/interop.h
 +++ b/include/interop.h
-@@ -26,7 +26,35 @@
+@@ -26,7 +26,52 @@
    u32 MarcadiaPalace;
  } VariableAddress_t;
  
 -u32 GetAddress(VariableAddress_t* address);
 -u32 GetAddressImmediate(VariableAddress_t* address);
-+/* Compact tables retain absolute Lobby/Bakisi addresses. The Lobby high bit
-+ * identifies the encoding; EE game addresses here are below 0x80000000.
-+ * Offsets are signed words biased by 0x8000: zero means unavailable, while
-+ * 0x8000 means the same address as Bakisi. Omitted fields remain unavailable.
++/* The first word tags the layout: BASE selects the fixed map base,
++ * CUSTOM_BASE selects an explicit Base followed by offsets for every map.
++ * Lobby/MainMenu, when present, is an ordinary address at byte 4.
++ * Full tables keep their original layout. Rebuild unpublished compact users.
++ * Offsets are signed words biased by 0x8000; zero means unavailable.
 + */
-+#define VA_COMPACT_LOBBY(address) ((u32)(address) | (u32)0x80000000)
++#define VA_COMPACT_BASE(address) ((u32)(address) | (u32)0x80000000)
++#define VA_COMPACT_CUSTOM_BASE(address) ((u32)(address) | (u32)0xc0000000)
 +#define VA_COMPACT_OFFSET(base, address) ((address) == 0 ? 0 : \
 +	(u16)(((s32)(address) - (s32)(base)) / 4 + 0x8000 + \
 +	0 * sizeof(char[((address) == 0 || ((s32)(address) - (s32)(base)) % 4 == 0 && \
@@ -19,8 +21,8 @@
 +	((s32)(address) - (s32)(base)) / 4 <= 32767) ? 1 : -1])))
 +
 +typedef struct variableAddressCompact {
-+	/* 0x00 */ u32 Lobby;
-+	/* 0x04 */ u32 Bakisi;
++	/* 0x00 */ u32 Bakisi;
++	/* 0x04 */ u32 Lobby;
 +	/* 0x08 */ u16 Hoven;
 +	/* 0x0a */ u16 OutpostX12;
 +	/* 0x0c */ u16 KorgonOutpost;
@@ -30,17 +32,41 @@
 +	/* 0x14 */ u16 BlackwaterDocks;
 +	/* 0x16 */ u16 AquatosSewers;
 +	/* 0x18 */ u16 MarcadiaPalace;
-+	/* 0x1a: two bytes of tail padding on the EE ABI. */
++	/* 0x1a: two bytes of EE alignment padding. */
 +} variableAddressCompact_t;
 +
-+/* Both full and compact tables are accepted; the entry tag selects decoding. */
++typedef struct variableAddressCompactBase {
++	/* 0x00 */ u32 Base;
++	/* 0x04 */ u32 Lobby;
++	/* 0x08 */ u16 Bakisi;
++	/* 0x0a */ u16 Hoven;
++	/* 0x0c */ u16 OutpostX12;
++	/* 0x0e */ u16 KorgonOutpost;
++	/* 0x10 */ u16 Metropolis;
++	/* 0x12 */ u16 BlackwaterCity;
++	/* 0x14 */ u16 CommandCenter;
++	/* 0x16 */ u16 BlackwaterDocks;
++	/* 0x18 */ u16 AquatosSewers;
++	/* 0x1a */ u16 MarcadiaPalace;
++} variableAddressCompactBase_t;
++
++/* Full, fixed-base compact and custom-base compact tables are accepted. */
 +u32 GetAddress(const void* address);
 +u32 GetAddressImmediate(const void* address);
  
  #endif // _LIBUYA_INTEROP_H_
 --- a/src/functions.S
 +++ b/src/functions.S
-@@ -76,8 +76,12 @@
+@@ -61,7 +61,7 @@
+ // 
+ 	.set	push;
+ 	.set	noreorder;
+-	.section	.text.##__LocalGetAddress,"ax",@progbits;
++	.section	.text.__LocalGetAddress,"ax",@progbits;
+ 	.align 2;
+ 	.globl	__LocalGetAddress;
+ 	.type	__LocalGetAddress,@function;
+@@ -76,8 +76,13 @@
  	// if in menus then return lobby address
  	lw $v0, GAME_MAP_ID;
    li $v1, 39;
@@ -48,14 +74,15 @@
 -	lw $v0, 0($a0)
 +	bne $v0, $v1, __LocalGetAddress_map;
 +	lw $v0, 0($a0);
-+	sll $v0, $v0, 1;
++	bgez $v0, __LocalGetAddress_exit;
++	nop;
 +	b __LocalGetAddress_exit;
-+	srl $v0, $v0, 1;
++	lw $v0, 4($a0);
 +__LocalGetAddress_map:
  
  	// if not in game then no address
  	lw $v0, GAME_ACTIVE;
-@@ -99,13 +103,27 @@
+@@ -99,15 +104,42 @@
  	beqzl $v0, __LocalGetAddress_exit;
  	move $v0, $zero;
  
@@ -65,31 +92,57 @@
 -
 -	// load address from struct
 -	addu $a0, $v0;
-+	// Keep full tables compatible; compact tables have a tagged Lobby word.
++	addiu $v1, $v1, 1;
  	lw $v0, 0($a0);
-+	bltz $v0, __LocalGetAddress_compact;
+-
+-	// return to calling function
++	bgez $v0, __LocalGetAddress_full;
 +	nop;
-+	sll $v1, $v1, 2;
-+	addu $v1, $a0, $v1;
-+	b __LocalGetAddress_exit;
-+	lw $v0, 4($v1);
-+__LocalGetAddress_compact:
++	beqz $v1, __LocalGetAddress_menu;
++	nop;
++	sll $t8, $v0, 1;
++	sll $v0, $v0, 2;
++	srl $v0, $v0, 2;
++	bltz $t8, __LocalGetAddress_offset_load;
++	nop;
++	addiu $v1, $v1, -1;
 +	beqz $v1, __LocalGetAddress_exit;
-+	lw $v0, 4($a0);
++	nop;
++__LocalGetAddress_offset_load:
 +	sll $v1, $v1, 1;
 +	addu $v1, $a0, $v1;
 +	lhu $v1, 6($v1);
-+	beqz $v1, __LocalGetAddress_exit;
-+	move $v0, $zero;
++	beqz $v1, __LocalGetAddress_unavailable;
++	nop;
 +	xori $v1, $v1, 0x8000;
 +	sll $v1, $v1, 16;
 +	sra $v1, $v1, 14;
-+	lw $v0, 4($a0);
++	b __LocalGetAddress_exit;
 +	addu $v0, $v0, $v1;
- 
- 	// return to calling function
++__LocalGetAddress_unavailable:
++	b __LocalGetAddress_exit;
++	move $v0, $zero;
++__LocalGetAddress_menu:
++	b __LocalGetAddress_exit;
++	lw $v0, 4($a0);
++__LocalGetAddress_full:
++	sll $v1, $v1, 2;
++	addu $v1, $a0, $v1;
++	lw $v0, 0($v1);
++
  __LocalGetAddress_exit:
-@@ -133,8 +151,12 @@
+ 	jr $a1;
+ 	nop;
+@@ -118,7 +150,7 @@
+ // 
+ 	.set	push;
+ 	.set	noreorder;
+-	.section	.text.##GetAddress,"ax",@progbits;
++	.section	.text.GetAddress,"ax",@progbits;
+ 	.align 2;
+ 	.globl	GetAddress;
+ 	.type	GetAddress,@function;
+@@ -133,8 +165,13 @@
  	// if in menus then return lobby address
  	lw $v0, GAME_MAP_ID;
    li $v1, 39;
@@ -97,14 +150,15 @@
 -	lw $v0, 0($a0)
 +	bne $v0, $v1, GetAddress_map;
 +	lw $v0, 0($a0);
-+	sll $v0, $v0, 1;
++	bgez $v0, GetAddress_exit;
++	nop;
 +	b GetAddress_exit;
-+	srl $v0, $v0, 1;
++	lw $v0, 4($a0);
 +GetAddress_map:
  
  	// if not in game then no address
  	lw $v0, GAME_ACTIVE;
-@@ -156,13 +178,27 @@
+@@ -156,15 +193,42 @@
  	beqzl $v0, GetAddress_exit;
  	move $v0, $zero;
  
@@ -114,31 +168,57 @@
 -
 -	// load address from struct
 -	addu $a0, $v0;
-+	// Keep full tables compatible; compact tables have a tagged Lobby word.
++	addiu $v1, $v1, 1;
  	lw $v0, 0($a0);
-+	bltz $v0, GetAddress_compact;
+-
+-	// return to calling function
++	bgez $v0, GetAddress_full;
 +	nop;
-+	sll $v1, $v1, 2;
-+	addu $v1, $a0, $v1;
-+	b GetAddress_exit;
-+	lw $v0, 4($v1);
-+GetAddress_compact:
++	beqz $v1, GetAddress_menu;
++	nop;
++	sll $t8, $v0, 1;
++	sll $v0, $v0, 2;
++	srl $v0, $v0, 2;
++	bltz $t8, GetAddress_offset_load;
++	nop;
++	addiu $v1, $v1, -1;
 +	beqz $v1, GetAddress_exit;
-+	lw $v0, 4($a0);
++	nop;
++GetAddress_offset_load:
 +	sll $v1, $v1, 1;
 +	addu $v1, $a0, $v1;
 +	lhu $v1, 6($v1);
-+	beqz $v1, GetAddress_exit;
-+	move $v0, $zero;
++	beqz $v1, GetAddress_unavailable;
++	nop;
 +	xori $v1, $v1, 0x8000;
 +	sll $v1, $v1, 16;
 +	sra $v1, $v1, 14;
-+	lw $v0, 4($a0);
++	b GetAddress_exit;
 +	addu $v0, $v0, $v1;
- 
- 	// return to calling function
++GetAddress_unavailable:
++	b GetAddress_exit;
++	move $v0, $zero;
++GetAddress_menu:
++	b GetAddress_exit;
++	lw $v0, 4($a0);
++GetAddress_full:
++	sll $v1, $v1, 2;
++	addu $v1, $a0, $v1;
++	lw $v0, 0($v1);
++
  GetAddress_exit:
-@@ -190,8 +226,12 @@
+ 	jr $ra;
+ 	nop;
+@@ -175,7 +239,7 @@
+ // 
+ 	.set	push;
+ 	.set	noreorder;
+-	.section	.text.##GetAddress,"ax",@progbits;
++	.section	.text.GetAddress,"ax",@progbits;
+ 	.align 2;
+ 	.globl	GetAddressImmediate;
+ 	.type	GetAddressImmediate,@function;
+@@ -190,8 +254,13 @@
  	// if in menus then return lobby address
  	lw $v0, GAME_MAP_ID;
    li $v1, 39;
@@ -146,14 +226,15 @@
 -	lw $v0, 0($a0)
 +	bne $v0, $v1, GetAddressImmediate_map;
 +	lw $v0, 0($a0);
-+	sll $v0, $v0, 1;
++	bgez $v0, GetAddressImmediate_exit;
++	nop;
 +	b GetAddressImmediate_exit;
-+	srl $v0, $v0, 1;
++	lw $v0, 4($a0);
 +GetAddressImmediate_map:
  
  	// if not in game then no address
  	//lw $v0, GAME_ACTIVE;
-@@ -213,13 +253,27 @@
+@@ -213,15 +282,42 @@
  	beqzl $v0, GetAddressImmediate_exit;
  	move $v0, $zero;
  
@@ -163,27 +244,53 @@
 -
 -	// load address from struct
 -	addu $a0, $v0;
-+	// Keep full tables compatible; compact tables have a tagged Lobby word.
++	addiu $v1, $v1, 1;
  	lw $v0, 0($a0);
-+	bltz $v0, GetAddressImmediate_compact;
+-
+-	// return to calling function
++	bgez $v0, GetAddressImmediate_full;
 +	nop;
-+	sll $v1, $v1, 2;
-+	addu $v1, $a0, $v1;
-+	b GetAddressImmediate_exit;
-+	lw $v0, 4($v1);
-+GetAddressImmediate_compact:
++	beqz $v1, GetAddressImmediate_menu;
++	nop;
++	sll $t8, $v0, 1;
++	sll $v0, $v0, 2;
++	srl $v0, $v0, 2;
++	bltz $t8, GetAddressImmediate_offset_load;
++	nop;
++	addiu $v1, $v1, -1;
 +	beqz $v1, GetAddressImmediate_exit;
-+	lw $v0, 4($a0);
++	nop;
++GetAddressImmediate_offset_load:
 +	sll $v1, $v1, 1;
 +	addu $v1, $a0, $v1;
 +	lhu $v1, 6($v1);
-+	beqz $v1, GetAddressImmediate_exit;
-+	move $v0, $zero;
++	beqz $v1, GetAddressImmediate_unavailable;
++	nop;
 +	xori $v1, $v1, 0x8000;
 +	sll $v1, $v1, 16;
 +	sra $v1, $v1, 14;
-+	lw $v0, 4($a0);
++	b GetAddressImmediate_exit;
 +	addu $v0, $v0, $v1;
- 
- 	// return to calling function
++GetAddressImmediate_unavailable:
++	b GetAddressImmediate_exit;
++	move $v0, $zero;
++GetAddressImmediate_menu:
++	b GetAddressImmediate_exit;
++	lw $v0, 4($a0);
++GetAddressImmediate_full:
++	sll $v1, $v1, 2;
++	addu $v1, $a0, $v1;
++	lw $v0, 0($v1);
++
  GetAddressImmediate_exit:
+ 	jr $ra;
+ 	nop;
+@@ -381,6 +477,8 @@
+ 	FUNCTION(internal_uiChangeTeamSkinDialog, 0x00684dd0)
+ 	FUNCTION(internal_uiInvitePlayersDialog, 0x006848d0)
+ #endif
++VARIABLE_FUNCTION(uiSetImage, vaUiSetImage)
++VARIABLE_FUNCTION(internal_uiPlaySound, vaUiPlaySound)
+ VARIABLE_FUNCTION(internal_uiShowPopup, vaUIShowPopup)
+ FUNCTION(uiShowHelpPopup, 0x00540140) # Not Ported (For in game)
+ VARIABLE_FUNCTION(uiMsgString, vaUiMsgStringFunc)

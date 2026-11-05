@@ -154,11 +154,13 @@ and `EE_PREFIX` overrides. No Python is required.
 
 ### Compact variable addresses
 
-Bots and Forge use compact multiplayer address tables: each stores 28 bytes
-instead of 44. The updated libuya resolvers accept both compact and original
-full-address tables. Keep `VA_COMPACT_LOBBY(...)` on compact tables, including
-when the Lobby address is zero, and use `VA_COMPACT_OFFSET(base, address)` for
-the nine maps after Bakisi. Omitted fields mean unavailable.
+Bots and Forge use fixed-base compact multiplayer address tables: each stores
+28 bytes instead of 44. Keep Lobby as a plain address and tag Bakisi with
+`VA_COMPACT_BASE(...)`; no `.Base` field is used in these modules. The resolver
+also accepts full tables and `variableAddressCompactBase_t` tables tagged with
+`VA_COMPACT_CUSTOM_BASE(...)` in `.Base`. Both compact layouts occupy 28 bytes.
+Pinned library compatibility patches include both encodings. Old unpublished
+Lobby-tagged compact libraries must be updated and rebuilt with their consumers.
 
 The pinned upstream libraries predate compact support. Make applies the focused
 `tools/libuya-compact.patch` and `tools/librac3-compact.patch` to isolated build
