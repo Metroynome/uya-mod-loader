@@ -104,11 +104,16 @@ LIB_SOURCE := $(if $(filter librac3,$(IMAGE_LIBRARY)),$(LIBRAC3_DIR),$(LIBUYA_DI
 LIB_REGION := $(if $(and $(filter libuya,$(IMAGE_LIBRARY)),$(filter ntscu,$(REGION))),ntsc,$(REGION))
 LIB_WORK := $(WORK)/libraries/$(IMAGE_LIBRARY)
 LIB_ARCHIVE := $(LIB_WORK)/lib/$(IMAGE_LIBRARY)$(LIB_REGION).a
-$(LIB_ARCHIVE): $(wildcard $(LIB_SOURCE)/src/* $(LIB_SOURCE)/include/* $(LIB_SOURCE)/Makefile.*)
+$(LIB_ARCHIVE): tools/$(IMAGE_LIBRARY)-compact.patch Makefile.eeglobal $(wildcard $(LIB_SOURCE)/src/* $(LIB_SOURCE)/include/* $(LIB_SOURCE)/Makefile.*)
 	@test -f '$(LIB_SOURCE)/Makefile.$(LIB_REGION)' || { echo '$(IMAGE_LIBRARY) has no $(REGION) support' >&2; exit 1; }
 	mkdir -p $(LIB_WORK) $(WORK)/include/$(IMAGE_LIBRARY)
-	cp -R $(LIB_SOURCE)/include/. $(WORK)/include/$(IMAGE_LIBRARY)/
 	(cd $(LIB_SOURCE) && tar --exclude=.git --exclude=obj --exclude=lib --exclude=test -cf - .) | (cd $(LIB_WORK) && tar -xf -)
+	# Pinned dependencies predate compact tables. Patch only the isolated copy.
+	@if ! grep -q 'define .*VA_COMPACT_' $(LIB_WORK)/include/interop.h; then \
+	  sed -i 's/\r$$//' $(LIB_WORK)/include/interop.h $(LIB_WORK)/src/functions.S; \
+	  cd $(LIB_WORK) && patch -p1 < $(ROOT)/tools/$(IMAGE_LIBRARY)-compact.patch; \
+	fi
+	cp -R $(LIB_WORK)/include/. $(WORK)/include/$(IMAGE_LIBRARY)/
 	$(MAKE) -C $(LIB_WORK) -f Makefile.$(LIB_REGION) clean
 	$(MAKE) -C $(LIB_WORK) -f Makefile.$(LIB_REGION) EE_PREFIX=$(EE_PREFIX)
 endif

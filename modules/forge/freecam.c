@@ -53,40 +53,69 @@ static void hudUpdate(void);
 /* Camera render and update epilogues verified in all ten retail overlays.
  * Custom maps use the addresses of their retail base through libuya. */
 #if UYA_MODULE_REGION == 2
-static VariableAddress_t cameraRender = {
-	.Bakisi = 0x447960, .Hoven = 0x4494e0, .OutpostX12 = 0x4402e0,
-	.KorgonOutpost = 0x43dea0, .Metropolis = 0x43d1e0, .BlackwaterCity = 0x43a9e0,
-	.CommandCenter = 0x43b660, .BlackwaterDocks = 0x43dee0,
-	.AquatosSewers = 0x43d1e0, .MarcadiaPalace = 0x43cb60
+static variableAddressCompact_t cameraRender = {
+	.Lobby = VA_COMPACT_LOBBY(0),
+	.Bakisi = 0x447960,
+	.Hoven = VA_COMPACT_OFFSET(0x00447960, 0x4494e0),
+	.OutpostX12 = VA_COMPACT_OFFSET(0x00447960, 0x4402e0),
+	.KorgonOutpost = VA_COMPACT_OFFSET(0x00447960, 0x43dea0),
+	.Metropolis = VA_COMPACT_OFFSET(0x00447960, 0x43d1e0),
+	.BlackwaterCity = VA_COMPACT_OFFSET(0x00447960, 0x43a9e0),
+	.CommandCenter = VA_COMPACT_OFFSET(0x00447960, 0x43b660),
+	.BlackwaterDocks = VA_COMPACT_OFFSET(0x00447960, 0x43dee0),
+	.AquatosSewers = VA_COMPACT_OFFSET(0x00447960, 0x43d1e0),
+	.MarcadiaPalace = VA_COMPACT_OFFSET(0x00447960, 0x43cb60),
 };
 #else
-static VariableAddress_t cameraRender = {
-	.Bakisi = 0x446ab8, .Hoven = 0x448578, .OutpostX12 = 0x43f3b8,
-	.KorgonOutpost = 0x43cff8, .Metropolis = 0x43c338, .BlackwaterCity = 0x439ab8,
-	.CommandCenter = 0x43a8f8, .BlackwaterDocks = 0x43d138,
-	.AquatosSewers = 0x43c478, .MarcadiaPalace = 0x43bdb8
+static variableAddressCompact_t cameraRender = {
+	.Lobby = VA_COMPACT_LOBBY(0),
+	.Bakisi = 0x446ab8,
+	.Hoven = VA_COMPACT_OFFSET(0x00446ab8, 0x448578),
+	.OutpostX12 = VA_COMPACT_OFFSET(0x00446ab8, 0x43f3b8),
+	.KorgonOutpost = VA_COMPACT_OFFSET(0x00446ab8, 0x43cff8),
+	.Metropolis = VA_COMPACT_OFFSET(0x00446ab8, 0x43c338),
+	.BlackwaterCity = VA_COMPACT_OFFSET(0x00446ab8, 0x439ab8),
+	.CommandCenter = VA_COMPACT_OFFSET(0x00446ab8, 0x43a8f8),
+	.BlackwaterDocks = VA_COMPACT_OFFSET(0x00446ab8, 0x43d138),
+	.AquatosSewers = VA_COMPACT_OFFSET(0x00446ab8, 0x43c478),
+	.MarcadiaPalace = VA_COMPACT_OFFSET(0x00446ab8, 0x43bdb8),
 };
 #endif
 /* The native HUD update has a pause-only path that hides its widgets.
  * These call sites and the pause test were checked in both regional extracts. */
 #if UYA_MODULE_REGION == 2
 #define HUD_PROLOGUE (0x27bdff70)
-static VariableAddress_t hudUpdateCall = {
-	.Bakisi = 0x4eecc4, .Hoven = 0x4f0ddc, .OutpostX12 = 0x4e66b4,
-	.KorgonOutpost = 0x4e3e4c, .Metropolis = 0x4e319c, .BlackwaterCity = 0x4e0a34,
-	.CommandCenter = 0x4e09fc, .BlackwaterDocks = 0x4e327c,
-	.AquatosSewers = 0x4e257c, .MarcadiaPalace = 0x4e1efc
+static variableAddressCompact_t hudUpdateCall = {
+	.Lobby = VA_COMPACT_LOBBY(0),
+	.Bakisi = 0x4eecc4,
+	.Hoven = VA_COMPACT_OFFSET(0x004eecc4, 0x4f0ddc),
+	.OutpostX12 = VA_COMPACT_OFFSET(0x004eecc4, 0x4e66b4),
+	.KorgonOutpost = VA_COMPACT_OFFSET(0x004eecc4, 0x4e3e4c),
+	.Metropolis = VA_COMPACT_OFFSET(0x004eecc4, 0x4e319c),
+	.BlackwaterCity = VA_COMPACT_OFFSET(0x004eecc4, 0x4e0a34),
+	.CommandCenter = VA_COMPACT_OFFSET(0x004eecc4, 0x4e09fc),
+	.BlackwaterDocks = VA_COMPACT_OFFSET(0x004eecc4, 0x4e327c),
+	.AquatosSewers = VA_COMPACT_OFFSET(0x004eecc4, 0x4e257c),
+	.MarcadiaPalace = VA_COMPACT_OFFSET(0x004eecc4, 0x4e1efc),
 };
 #else
 #define HUD_PROLOGUE (0x27bdff60)
-static VariableAddress_t hudUpdateCall = {
-	.Bakisi = 0x4ec5a4, .Hoven = 0x4ee5fc, .OutpostX12 = 0x4e3f14,
-	.KorgonOutpost = 0x4e172c, .Metropolis = 0x4e0a7c, .BlackwaterCity = 0x4de294,
-	.CommandCenter = 0x4de41c, .BlackwaterDocks = 0x4e0c5c,
-	.AquatosSewers = 0x4dff9c, .MarcadiaPalace = 0x4df8dc
+static variableAddressCompact_t hudUpdateCall = {
+	.Lobby = VA_COMPACT_LOBBY(0),
+	.Bakisi = 0x4ec5a4,
+	.Hoven = VA_COMPACT_OFFSET(0x004ec5a4, 0x4ee5fc),
+	.OutpostX12 = VA_COMPACT_OFFSET(0x004ec5a4, 0x4e3f14),
+	.KorgonOutpost = VA_COMPACT_OFFSET(0x004ec5a4, 0x4e172c),
+	.Metropolis = VA_COMPACT_OFFSET(0x004ec5a4, 0x4e0a7c),
+	.BlackwaterCity = VA_COMPACT_OFFSET(0x004ec5a4, 0x4de294),
+	.CommandCenter = VA_COMPACT_OFFSET(0x004ec5a4, 0x4de41c),
+	.BlackwaterDocks = VA_COMPACT_OFFSET(0x004ec5a4, 0x4e0c5c),
+	.AquatosSewers = VA_COMPACT_OFFSET(0x004ec5a4, 0x4dff9c),
+	.MarcadiaPalace = VA_COMPACT_OFFSET(0x004ec5a4, 0x4df8dc),
 };
 #endif
-extern VariableAddress_t vaOcclusionAddr;
+/* Library table format is selected by its resolver tag. */
+extern u8 vaOcclusionAddr[];
 
 freecamSettings_t forgeFreecam;
 static const moduleApi_t* loader;
@@ -210,7 +239,7 @@ static int installHooks(void)
 	if (patched)
 		return WORD(cameraPostAddress) == (0x08000000 | ((u32)cameraPost >> 2));
 	cameraRenderAddress = GetAddress(&cameraRender);
-	occlusionAddress = GetAddress(&vaOcclusionAddr);
+	occlusionAddress = GetAddress(vaOcclusionAddr);
 	if (!cameraRenderAddress || !occlusionAddress)
 		return 0;
 	hudHookAddress = GetAddress(&hudUpdateCall);

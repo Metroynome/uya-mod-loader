@@ -152,6 +152,33 @@ The Dockerfile also provides a reusable initialized image for builds and CI.
 For an existing toolchain, shared Make rules accept `LIBRAC3_DIR`, `LIBUYA_DIR`,
 and `EE_PREFIX` overrides. No Python is required.
 
+### Compact variable addresses
+
+Bots and Forge use compact multiplayer address tables: each stores 28 bytes
+instead of 44. The updated libuya resolvers accept both compact and original
+full-address tables. Keep `VA_COMPACT_LOBBY(...)` on compact tables, including
+when the Lobby address is zero, and use `VA_COMPACT_OFFSET(base, address)` for
+the nine maps after Bakisi. Omitted fields mean unavailable.
+
+The pinned upstream libraries predate compact support. Make applies the focused
+`tools/libuya-compact.patch` and `tools/librac3-compact.patch` to isolated build
+copies before copying their headers. Already-updated local libraries are used
+directly. Source dependency checkouts are never patched. If changing dependency
+paths, remove the generated regional `build/<region>/libraries/` copies first
+so Make cannot reuse an archive from a different source tree.
+
+Campaign tables use a separate Veldin-based layout, 72 bytes instead of 136,
+with `RAC3_VA_COMPACT_BASE` and `RAC3_VA_COMPACT_OFFSET`. No existing campaign
+tables were present to convert. Campaign resolution uses IDs 0..33 and requires
+the caller to ensure the overlay is ready; it no longer uses multiplayer state
+addresses. Full tables remain supported in both libraries.
+
+With the same updated local libuya on both sides of the comparison, the Bots
+module shrank from 34844 to 34748 bytes and Forge from 24544 to 24512 bytes in
+both NTSC-U and PAL. Other module sizes were unchanged. All supported regional
+builds, relocation comparisons, and existing host tests pass. These checks do
+not replace PCSX2 gameplay testing of the loader changes.
+
 ## Create a module
 
 Run from the repository root inside the initialized container:
