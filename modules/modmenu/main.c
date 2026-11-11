@@ -156,7 +156,11 @@ static int addItem(int tab, const modMenuItem_t* d)
 {
 	int i;
 	char label[48];
-	if (tabIndex(tab) < 0 || !d || !copyText(label, d->label, sizeof(label)))
+	if (tabIndex(tab) < 0 || !d || !d->label)
+		return -1;
+	if (d->type == MODMENU_BUTTON_ROW && !*d->label)
+		label[0] = 0;
+	else if (!copyText(label, d->label, sizeof(label)))
 		return -1;
 	if (d->type < MODMENU_ACTION || d->type > MODMENU_BUTTON_ROW)
 		return -1;
@@ -176,7 +180,9 @@ static int addItem(int tab, const modMenuItem_t* d)
 			items[i].definition = *d;
 			items[i].valueLabel = 0;
 			items[i].buttonCount = items[i].buttonCursor = 0;
-			copyText(items[i].label, label, 48);
+			items[i].label[0] = 0;
+			if (*label)
+				copyText(items[i].label, label, 48);
 			items[i].definition.label = items[i].label;
 			return items[i].handle;
 		}
@@ -669,18 +675,33 @@ static void draw(void)
 			if (items[i].definition.type == MODMENU_BUTTON_ROW) {
 				item_t* item = &items[i];
 				float x = .865f;
+				int centered = !item->label[0];
 				int j;
-				menuBackendText(.15f, y, color, item->label);
+				if (centered) {
+					float total = 0;
+					for (j = 0; j < item->buttonCount; ++j) {
+						float width = menuBackendWidth(item->buttons[j].label) + .08f;
+						total += width < .13f ? .13f : width;
+					}
+					if (item->buttonCount > 1)
+						total += .018f * (item->buttonCount - 1);
+					x = .5f + total * .5f;
+				} else {
+					menuBackendText(.15f, y, color, item->label);
+				}
 				for (j = item->buttonCount - 1; j >= 0; --j) {
 					const char* label = item->buttons[j].label;
-					float width = menuBackendWidth(label) + .035f;
+					float textWidth = menuBackendWidth(label);
+					float width = textWidth + (centered ? .08f : .035f);
 					int focused = item->handle == selectedItem && j == item->buttonCursor;
+					if (centered && width < .13f)
+						width = .13f;
 					x -= width;
 					if (focused)
 						menuBackendBox(x - .006f, y - .008f, width + .012f, .052f, 0x8018608f);
 					menuBackendBox(x, y - .004f, width, .044f, 0x80303030);
 					menuBackendBox(x + .004f, y, width - .008f, .036f, 0x80505050);
-					menuBackendText(x + .0175f, y, color, label);
+					menuBackendText(x + (width - textWidth) * .5f, y, color, label);
 					x -= .018f;
 				}
 				continue;
@@ -833,10 +854,14 @@ void moduleUpdate(void)
 	}
 	if (!selectedItem && (tabIndex(selectedTab) < 0 || !tabs[tabIndex(selectedTab)].count))
 		selectItem(1);
-	if (pressed & 0x10)
-		selectItem(-1);
-	else if (pressed & 0x40)
-		selectItem(1);
+	if (pressed & 0x50) {
+		int index = tabIndex(selectedTab);
+		int previousItem = selectedItem;
+		int previousCursor = index >= 0 ? tabs[index].cursor : 0;
+		selectItem(pressed & 0x10 ? -1 : 1);
+		if (selectedItem != previousItem || (index >= 0 && tabs[index].cursor != previousCursor))
+			menuBackendNavigate();
+	}
 	if (pressed & 0x80)
 		activate(-1);
 	else if (pressed & 0x20)

@@ -91,6 +91,10 @@ or replacing binaries.
   Online support preserves the original local training behavior.
 - **BIOS Warning:** optional Mod Menu popup for incompatible expanded-RAM BIOS
   configurations. Cross or Triangle dismisses it.
+- **[Music Player](modules/musicplayer/README.md):** play/pause and skip through
+  level music, the disc soundtrack, or custom MP3/WAV/VAG songs in `uya/music/`.
+  Supports shuffle and automatic advancement; native music stays unchanged
+  until Play is selected. NTSC-U/PAL.
 - **Examples/tests:** `hello`, `menu-example`, `campaign-test`, and
   `multiplayer-test` are available in source, excluded from release packages.
 

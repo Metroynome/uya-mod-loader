@@ -68,6 +68,20 @@ static char* onlineLabel;
 static char onlineLabelOriginal[9];
 #endif
 
+/*
+ * NAME : menuBackendNavigate
+ * DESCRIPTION : Play the native menu navigation sound in the active overlay.
+ * NOTES :
+ * ARGS :
+ * RETURN :
+ * AUTHOR : Troy "Metroynome" Pruitt
+ */
+void menuBackendNavigate(void)
+{
+	if (active && active->navigate && PAUSE_WORD(active->navigate) == 0x27bdffe0)
+		((void (*)(int, int, void*))active->navigate)(3, 0, 0);
+}
+
 /* Regional font differences are verified by the renderer-table generator. */
 static u32 rendererFont(const menuRenderer_t* r)
 {

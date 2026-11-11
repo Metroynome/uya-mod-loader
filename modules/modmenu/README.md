@@ -129,11 +129,14 @@ Ordinary mutation functions return zero on success and negative on failure.
 For a button row, add an item with type `MODMENU_BUTTON_ROW`, then call
 `setItemButtons` with `modMenuButton_t` entries containing a label, callback,
 and context. Button labels allow 23 characters; definitions and labels are
-copied. Keep labels short enough to fit beside the row label. Context pointers
+copied. An empty row label centers the buttons with wider padding. Named rows
+keep their buttons on the right. Keep labels short enough to fit. Context pointers
 must stay valid. Up/down selects rows, left/right moves between buttons, and X
 invokes the focused button. Only that button highlights. Hidden rows do not
 consume visible space or receive focus. This API-1 extension is at EE offset
 `0x58`; older clients can continue using their existing table prefix.
+Up/down movement plays the game's navigation sound when the selection changes,
+including virtual lists. Modules do not need to play it themselves.
 `close`, drawing, and progress functions return no value. `setModal` returns
 zero when another popup owns the slot; see the header for exact signatures.
 

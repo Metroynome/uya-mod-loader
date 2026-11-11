@@ -12,6 +12,7 @@ void menuBackendBox(float x, float y, float width, float height, u32 color);
 void menuBackendText(float x, float y, u32 color, const char* text);
 float menuBackendWidth(const char* text);
 int menuBackendLevel(void);
+void menuBackendNavigate(void);
 int menuBackendPopupReady(u32 mode);
 void menuBackendPause(u32 mode, u32 context, void (*openMenu)(void));
 #endif

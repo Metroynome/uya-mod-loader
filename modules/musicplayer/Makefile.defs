@@ -1,0 +1,4 @@
+LIBRARY = librac3
+MODE = both
+REGIONS = ntscu pal
+EE_OBJS = main.o music.o custom.o decoders/decoder.o decoders/wav.o decoders/vag.o decoders/mp3.o

@@ -48,10 +48,9 @@ static int queued = -1, phase, ticks;
 int mapHopSawLoading;
 int mapHopResult;
 
-/* The retail HUD loader only registers gameplay layers when the previous level
- * was staging (39). Reloads can clear the registrations even on the same base.
- * Run retail setup once after every completed Forge transition; its individual
- * registration routines guard their own initialization. */
+/* Reloads can clear HUD registrations even on the same base. Retail may also
+ * restore them itself. Its setup resets component states before inserting, so
+ * calling it twice duplicates eight entries and fills the pause-menu slots. */
 static int restoreHud(u32 level)
 {
 #if UYA_MODULE_REGION == 2
@@ -72,13 +71,47 @@ static int restoreHud(u32 level)
 	                                         0x0000882d,
 	                                         0x8c620000,
 	                                         0x28420002};
-	u32 a, i;
+	u32 a, i, j, getter, component, wrapper, root, controller;
 	if (level < 40 || level > 49)
 		return 0;
 	a = addresses[level - 40];
 	for (i = 0; i < sizeof(signature) / sizeof(signature[0]); ++i)
 		if (WORD(a + i * 4) != signature[i])
 			return 0;
+	/* Component state alone can survive a reload without a corresponding UI
+	 * entry. Check retail's active and pending lists before registering. */
+	if ((WORD(a + 0x2c) & 0xfc000000) != 0x0c000000 || WORD(a + 0x30) != 0x0002800b)
+		return 0;
+	getter = (WORD(a + 0x2c) & 0x03ffffff) << 2;
+	if (WORD(getter) != 0x27bdffe0)
+		return 0;
+	component = ((u32 (*)(int))getter)(0);
+	if (component < 0x100000 || component > 0x1ffffe0 || (component & 3))
+		return 0;
+	if ((WORD(a + 0x5c) & 0xfc000000) != 0x0c000000)
+		return 0;
+	wrapper = (WORD(a + 0x5c) & 0x03ffffff) << 2;
+	if ((WORD(wrapper + 4) & 0xffff0000) != 0x3c020000 ||
+	    (WORD(wrapper + 0x18) & 0xffff0000) != 0x24440000)
+		return 0;
+	root = (WORD(wrapper + 4) << 16) + (s16)WORD(wrapper + 0x18);
+	if (root < 0x100000 || root > 0x1fffff8)
+		return 0;
+	controller = WORD(root + 4);
+	if (controller < 0x100000 || controller > 0x1ffffe0)
+		return 0;
+	/* Five native layers, each with sixteen active and pending components. */
+	for (i = 0; i < 5; ++i) {
+		u32 layer = WORD(controller + i * 4), data;
+		if (layer < 0x100000 || layer > 0x1fffffc)
+			continue;
+		data = WORD(layer);
+		if (data < 0x100000 || data > 0x1fffe64)
+			continue;
+		for (j = 0; j < 32; ++j)
+			if (WORD(data + 0xdc + j * 4) == component)
+				return 1;
+	}
 	MAP_HOP_HUD_CALL(a);
 	return 1;
 }

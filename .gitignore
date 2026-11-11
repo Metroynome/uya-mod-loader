@@ -73,5 +73,9 @@ Thumbs.db
 /hostfs/uya/mods/utils/mapscan.irx
 /hostfs/uya/mods/mapscan.irx
 
+# User music belongs to the local host filesystem.
+/hostfs/uya/music/*
+!/hostfs/uya/music/README.md
+
 # Local design notes and investigations; not part of releases.
 /ideas/

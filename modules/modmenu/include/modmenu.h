@@ -91,6 +91,7 @@ typedef struct modMenuApi {
 	/* Optional named values for a range selector; EE pointer offset 0x54. */
 	int (*setItemValueLabel)(int item, ModMenuListLabel label);
 	/* Button row: left label, text-width buttons aligned on the right.
+	 * An empty row label centers the buttons with wider padding.
 	 * Definitions/labels are copied. Zero buttons hides the row. Up/down
 	 * selects rows; left/right selects buttons; X invokes the focused one.
 	 * EE function-pointer offset 0x58; labels allow 23 characters each. */

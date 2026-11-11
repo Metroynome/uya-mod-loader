@@ -7,3 +7,4 @@ maploader.pal local
 bios-warning campaign,local // optional expanded-RAM BIOS warning; requires modmenu
 forge campaign,local // normal startup; Boot to Local Play defaults to OFF
 bots local,online // Idle training bots; configure in the Bots tab
+musicplayer campaign,local // optional music controls; normal music until Play
