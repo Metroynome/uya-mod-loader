@@ -92,5 +92,20 @@ uses explicit level IDs, including the gaps in campaign numbering. These
 addresses were checked against the extracted level code, which does not require
 a full RAM dump of every map. Live campaign testing is still required.
 
-Online activation is opt-in through `modules.txt`; it has not been live-tested
-with Horizon. NTSC-J is not enabled by this module.
+## Horizon online play
+
+Add `online` to Music Player's entry in `modules.txt` to keep it active online.
+Use PCSX2's 128 MiB RAM option with a compatible BIOS (the tested setup uses
+BIOS 2.30). Horizon reserves `0x000c8000–0x000fffff`; Music Player's audio and
+decoder buffers must stay outside that range. The normal 32 MiB module layout
+is not qualified for Horizon with Music Player installed.
+
+While Music Player owns playback, its independent disc descriptors and native
+Play/Queue hooks take priority over Horizon's Single Player Music option.
+Default / Base and Return to Level Music leave native track selection to the
+game and Horizon. No Horizon configuration flag is changed.
+
+NTSC-U online testing with Horizon confirmed custom playback starts during the
+panorama and continues in-game with Single Player Music enabled. The tested
+modules used expanded RAM. PAL online testing remains pending; NTSC-J is not
+enabled by this module.
