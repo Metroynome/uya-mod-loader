@@ -327,8 +327,9 @@ static void drawFooter(void)
 	int i = tabIndex(selectedTab);
 	menuBackendText(.12f, .81f, 0x8069cbf2, "\x14 \x15 TAB   \x10 SELECT   \x12 BACK");
 	if (i >= 0 && tabs[i].action) {
-		menuBackendText(.66f, .81f, 0x8069cbf2, "\x13");
-		menuBackendText(.69f, .81f, 0x8069cbf2, tabs[i].actionLabel);
+		float x = .88f - menuBackendWidth(tabs[i].actionLabel);
+		menuBackendText(x - .03f, .81f, 0x8069cbf2, "\x13");
+		menuBackendText(x, .81f, 0x8069cbf2, tabs[i].actionLabel);
 	}
 }
 
@@ -425,6 +426,39 @@ static void selectItem(int direction)
 		}
 	}
 	selectedItem = 0;
+}
+
+/* L2/R2 move five selectable rows, stopping at either end. */
+static void selectPage(int direction)
+{
+	int index = tabIndex(selectedTab), i, count = 0, current = 0, target;
+	if (index >= 0 && tabs[index].count) {
+		tab_t* tab = &tabs[index];
+		target = tab->cursor + direction * 5;
+		tab->cursor = target < 0 ? 0 : target >= tab->count ? tab->count - 1 : target;
+		return;
+	}
+	for (i = 0; i < MODMENU_MAX_ITEMS; ++i) {
+		item_t* item = &items[i];
+		if (!itemShown(item) || item->tab != selectedTab || !item->enabled ||
+		    item->definition.type == MODMENU_LABEL || item->definition.type == MODMENU_HEADER)
+			continue;
+		if (item->handle == selectedItem)
+			current = count;
+		++count;
+	}
+	target = current + direction * 5;
+	target = target < 0 ? 0 : target >= count ? count - 1 : target;
+	for (i = 0; i < MODMENU_MAX_ITEMS; ++i) {
+		item_t* item = &items[i];
+		if (!itemShown(item) || item->tab != selectedTab || !item->enabled ||
+		    item->definition.type == MODMENU_LABEL || item->definition.type == MODMENU_HEADER)
+			continue;
+		if (target-- == 0) {
+			selectedItem = item->handle;
+			return;
+		}
+	}
 }
 
 static void activate(int direction)
@@ -854,11 +888,14 @@ void moduleUpdate(void)
 	}
 	if (!selectedItem && (tabIndex(selectedTab) < 0 || !tabs[tabIndex(selectedTab)].count))
 		selectItem(1);
-	if (pressed & 0x50) {
+	if (pressed & 0x350) {
 		int index = tabIndex(selectedTab);
 		int previousItem = selectedItem;
 		int previousCursor = index >= 0 ? tabs[index].cursor : 0;
-		selectItem(pressed & 0x10 ? -1 : 1);
+		if (pressed & 0x300)
+			selectPage(pressed & 0x100 ? -1 : 1);
+		else
+			selectItem(pressed & 0x10 ? -1 : 1);
 		if (selectedItem != previousItem || (index >= 0 && tabs[index].cursor != previousCursor))
 			menuBackendNavigate();
 	}

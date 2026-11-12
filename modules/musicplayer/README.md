@@ -6,23 +6,29 @@ under the game's control by default.
 
 ## Controls
 
-- **Playlist:** Default / Base, All, or Custom.
+- **Playlist:** Default / Base, All, Custom, All (Shuffle), or Custom (Shuffle).
+  All and Custom advance to the next song in order. Their Shuffle variants
+  choose a different random song when the current song ends.
 - **Track:** follows the currently playing native song, including staging and
   game-end music. Left/Right selects and plays a different song.
 - **Track View:** Simple (default) lists each campaign song once and prebuffers
   its loop behind its intro for a continuous transition. Complex lists intro
   and loop separately. Custom files and multiplayer songs are unchanged.
-  Loop Track uses the game's native looping-body flag after the intro.
 - One centered row of `<<`, `Play/Stop`, `Pause`, and `>>` buttons.
   Left/Right focuses a button; X activates it. Play resumes paused music;
   Stop silences music until you play again or return to level music.
   Dialogue and sound effects continue normally.
-- **Playback Mode:** Normal leaves scripted music unchanged; a manually
-  selected song returns to normal music when it ends. Loop Track repeats the
-  selection, Shuffle chooses a different random song, and Next Track advances
-  through the playlist in order. Normal is the default.
+- **Default Playlists:** choose any playlist separately for Online
+  Lobby, Staging, and In Game. Defaults apply on entry, leaving manual changes
+  alone while you stay on that screen. Base uses the game's normal soundtrack;
+  Plain All/Custom start at the first song. Shuffle chooses a random first song
+  and avoids repeating the previous start when more than one song is available.
+  A same-map reload resumes a plain playlist; Shuffle chooses a new starting song. Campaign is unchanged.
+- **Load Settings / Save Settings:** centered side-by-side buttons. Settings
+  load automatically at startup; Save writes them to the regional config file.
+  Loading settings also reapplies the current multiplayer screen's default.
 - **Return to Level Music:** restore the game's music selection.
-- **Refresh Custom Songs:** rescan the folder; Square does the same while the
+- **Refresh Music:** rescan the folder; Square does the same while the
   Music Player tab is focused.
 
 **Default / Base** contains the current level's music. The multiplayer list
@@ -32,6 +38,11 @@ Complex view distinguishes each campaign song's intro and looping body.
 **All** reads music descriptors from the installed disc. Dialogue entries are
 excluded. Simple view combines campaign intro/body pairs; Complex exposes
 both parts. Labels identify their source rather than official soundtrack titles.
+
+Selected in-game playlists start at the native panoramic music cue, before
+player control. The initial vanilla music stream is suppressed for that cue;
+speech and effects are unchanged. Music files/catalogues needed by the saved
+in-game default are discovered in the multiplayer menus before loading.
 
 ## Custom songs
 
@@ -60,17 +71,21 @@ The loader can optionally read `uya/config/musicplayer.<region>.ini`:
 
 ```ini
 playlist=2
-playback=2
 trackView=0
 autoPlay=1
+defaultLobby=0
+defaultStaging=2
+defaultGame=1
 ```
 
-Playlist values are `0` Base, `1` All, and `2` Custom. Playback values are `0`
-Normal, `1` Loop Track, `2` Shuffle, and `3` Next Track. `autoPlay` defaults to
-off. Track View values are `0` Simple and `1` Complex. When enabled, autoplay
-starts on entering a supported level even without
-Mod Menu. Menu selections otherwise last for the current session; they are
-not automatically written to disk.
+Playlist values are `0` Base, `1` All, `2` Custom, `3` All (Shuffle), and
+`4` Custom (Shuffle). `autoPlay` defaults to off. Track View values are `0` Simple and `1` Complex. When enabled, autoplay
+starts on entering a supported campaign level even without Mod Menu.
+Multiplayer uses `defaultLobby`, `defaultStaging`, and `defaultGame`, each with
+the same five playlist values. All three default to Base.
+Save Settings writes the selected options; changes are not saved implicitly.
+The old `playback` key is no longer used. Loop Track is hidden, with its
+continuation code retained as comments for future use.
 
 Campaign entry points are selected per level and region; the soundtrack lookup
 uses explicit level IDs, including the gaps in campaign numbering. These

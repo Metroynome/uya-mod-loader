@@ -141,8 +141,11 @@ static void registerMenu(void)
 	static const modMenuItem_t style = {"Behavior", MODMENU_RANGE, &behavior, 0, 2, 1, 0, 0};
 	static const modMenuItem_t help = {
 	    "Applies to the next Local Play game or reload", MODMENU_LABEL, 0, 0, 0, 0, 0, 0};
-	static const modMenuItem_t save = {"Save Settings", MODMENU_ACTION, 0, 0, 0, 0, configAction, (void*)1};
-	static const modMenuItem_t load = {"Load Settings", MODMENU_ACTION, 0, 0, 0, 0, configAction, 0};
+	static const modMenuItem_t config = {"", MODMENU_BUTTON_ROW, 0, 0, 0, 0, 0, 0};
+	static const modMenuButton_t configButtons[] = {
+		{"Load Settings", configAction, 0},
+		{"Save Settings", configAction, (void*)1}
+	};
 	static const modMenuItem_t spawn = {"Spawn Bot", MODMENU_ACTION, 0, 0, 0, 0, spawnBot, 0};
 	static const modMenuItem_t list = {"Bot List", MODMENU_HEADER, 0, 0, 0, 0, 0, 0};
 #ifdef ONLINE_BOTS
@@ -181,8 +184,7 @@ static void registerMenu(void)
 	if (menuContext == UYA_CONTEXT_LOCAL) {
 		menu->addItem(tab, &amount);
 		menu->addItem(tab, &help);
-		menu->addItem(tab, &save);
-		menu->addItem(tab, &load);
+		menu->setItemButtons(menu->addItem(tab, &config), configButtons, 2);
 	}
 #ifdef ONLINE_BOTS
 	if (menuContext == UYA_CONTEXT_ONLINE) {

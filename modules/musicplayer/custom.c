@@ -1,4 +1,5 @@
 #include "musicplayer.h"
+#include "modules/forge/include/forge.h"
 #include "decoders/decoder.h"
 #include <sifrpc.h>
 #include <string.h>
@@ -129,7 +130,10 @@ static int bindDirectory(u32 service)
  */
 int musicCustomScan(void)
 {
+	const mapHopApi_t* maps = musicLoader->findService(MAP_HOP_SERVICE_ID, FORGE_API_VERSION);
 	int result;
+	if (maps && maps->state() == FORGE_SCANNING)
+		return 0;
 	if (scanMode != (int)musicLoader->mode) {
 		scanMode = musicLoader->mode;
 		scanState = 0;
@@ -151,6 +155,13 @@ int musicCustomScan(void)
 	}
 	if (scanState == 1) {
 		if (!client.server) {
+			/* Map Loader owns helper startup when present. Loading another
+			 * copy while its first scan binds can strand either RPC client. */
+			if (musicLoader->findService(MAP_HOP_SERVICE_ID, FORGE_API_VERSION)) {
+				scanState = 0;
+				scanRequested = 1;
+				return 0;
+			}
 			if (!bindDirectory(0x80000006))
 				goto failed;
 			scanState = 5;

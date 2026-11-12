@@ -85,7 +85,7 @@ static int chooseRetail(u32 base)
 
 static u32 commandState(void)
 {
-	return jobState;
+	return mapScanActive() ? FORGE_SCANNING : jobState;
 }
 
 static u32 commandError(void)

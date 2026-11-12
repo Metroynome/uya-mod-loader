@@ -1,6 +1,7 @@
 #include "musicplayer.h"
 
 #define WORD(address) (*(volatile u32*)((u32)(address) | 0x20000000))
+#define JAL(address) (0x0c000000 | (((u32)(address) >> 2) & 0x03ffffff))
 #define JUMP(address) (0x08000000 | (((u32)(address) >> 2) & 0x03ffffff))
 
 typedef struct musicOverlay {
@@ -24,6 +25,7 @@ typedef struct musicTransition {
 
 static int ignoreTrack(void);
 static void streamStopped(int result, u64 context);
+static void startupCommand(int command, int size, void* data, void (*callback)(int, u64), u64 context);
 
 #include "addresses.h"
 
@@ -36,6 +38,7 @@ static s16 savedQueuedTrack, savedQueuedType;
 static u32 ownerGeneration;
 static int ownerLevel = -2, stopping;
 static int nativeBlocked;
+static int startupPending, startupLevel = -1;
 
 /*
  * NAME : musicText
@@ -82,6 +85,38 @@ int musicBackendLevel(void)
 #else
 	return *(volatile int*)0x1f8528;
 #endif
+}
+
+/*
+ * NAME : musicBackendContext
+ * DESCRIPTION : Identify multiplayer lobby, staging, or gameplay music.
+ * NOTES : Child menus retain the previous choice; campaign is not overridden.
+ * ARGS :
+ * RETURN : 0 lobby, 1 staging, 2 game, or -1 outside these screens.
+ * AUTHOR : Troy "Metroynome" Pruitt
+ */
+int musicBackendContext(void)
+{
+	int level = musicBackendLevel();
+	u32 i, active = 0;
+	if (musicLoader->mode != UYA_MODE_MULTIPLAYER)
+		return -1;
+	/* Scene readiness is checked by the caller. The panorama precedes GAME_ACTIVE. */
+	if (level >= 40 && level <= 49)
+		return 2;
+	if (level != 39)
+		return -1;
+	/* These menu tables are shared by the NTSC-U and PAL lobby overlays. */
+	for (i = 3; i > 0; --i) {
+		active = WORD(0x1c5c110 + (i - 1) * 4);
+		if (active)
+			break;
+	}
+	if (!active)
+		return -1;
+	if (active == WORD(0x1c5c064 + 23 * 4) || active == WORD(0x1c5c064 + 33 * 4))
+		return 1;
+	return active == WORD(0x1c5c064 + 25 * 4) ? 0 : -1;
 }
 
 /*
@@ -258,6 +293,66 @@ void musicBackendCommand(int command, int size, void* data, void (*callback)(int
 }
 
 /*
+ * NAME : startupCommand
+ * DESCRIPTION : Replace the panoramic native music cue before it becomes audible.
+ * NOTES : Only initial music streams are intercepted; speech and effects pass through.
+ * ARGS : Native sound-client command and callback.
+ * RETURN :
+ * AUTHOR : Troy "Metroynome" Pruitt
+ */
+static void startupCommand(int command, int size, void* data, void (*callback)(int, u64), u64 context)
+{
+	const u32* params = data;
+	int level = musicBackendLevel();
+#if UYA_MODULE_REGION == 2
+	int active = WORD(0x241a50);
+#else
+	int active = WORD(0x241bd0);
+#endif
+	if (command == 0x2c && size == 32 && level >= 40 && level <= 49 && !active &&
+	    (u32)context == (u32)musicBackendStream() && params[4] == 1 && !params[5]) {
+		musicBackendStream()->handle = 0;
+		musicBackendStream()->status = 0;
+		startupPending = 1;
+		startupLevel = level;
+		return;
+	}
+	musicBackendCommand(command, size, data, callback, context);
+}
+
+/*
+ * NAME : musicBackendStartup
+ * DESCRIPTION : Arm a resident cue hook before level loading starts.
+ * NOTES : Restore only our own instruction when disabled or leaving multiplayer.
+ * ARGS : Nonzero when the next gameplay cue should use a manual playlist.
+ * RETURN : Nonzero after intercepting the current level's first music cue.
+ * AUTHOR : Troy "Metroynome" Pruitt
+ */
+int musicBackendStartup(int enabled)
+{
+#if UYA_MODULE_REGION == 2
+	u32 address = 0x194810, original = JAL(0x1941c0);
+#else
+	u32 address = 0x194900, original = JAL(0x1942b0);
+#endif
+	if (enabled && musicLoader->mode == UYA_MODE_MULTIPLAYER) {
+		if (WORD(address) == original && WORD(address + 4) == 0xafa3001c) {
+			WORD(address) = JAL(startupCommand);
+			musicLoader->flushCache(0);
+			musicLoader->flushCache(2);
+		}
+	} else {
+		if (WORD(address) == JAL(startupCommand)) {
+			WORD(address) = original;
+			musicLoader->flushCache(0);
+			musicLoader->flushCache(2);
+		}
+		startupPending = 0;
+	}
+	return startupPending && startupLevel == musicBackendLevel();
+}
+
+/*
  * NAME : musicBackendAcquire
  * DESCRIPTION : Take ownership of music requests until release or a map change.
  * NOTES : Native track descriptors stay unchanged.
@@ -274,6 +369,7 @@ int musicBackendAcquire(void)
 	if (!current)
 		return 0;
 	owner = current;
+	startupPending = 0;
 	++ownerGeneration;
 	ownerMode = musicLoader->mode;
 	ownerLevel = musicBackendLevel();

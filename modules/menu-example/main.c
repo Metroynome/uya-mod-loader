@@ -42,8 +42,12 @@ void moduleUpdate(void)
 	int tab;
 	modMenuItem_t toggle = {"Example toggle", MODMENU_TOGGLE, &enabled, 0, 0, 0, action, 0};
 	modMenuItem_t range = {"Example value", MODMENU_RANGE, &amount, 0, 10, 1, action, 0};
-	modMenuItem_t save = {"Save settings", MODMENU_ACTION, 0, 0, 0, 0, configAction, (void*)1};
-	modMenuItem_t load = {"Load settings", MODMENU_ACTION, 0, 0, 0, 0, configAction, 0};
+	static const modMenuItem_t config = {"", MODMENU_BUTTON_ROW, 0, 0, 0, 0, 0, 0};
+	static const modMenuButton_t configButtons[] = {
+		{"Load Settings", configAction, 0},
+		{"Save Settings", configAction, (void*)1}
+	};
+	int configItem;
 	if (registered)
 		return;
 	menu = modmenuFind(loader);
@@ -52,8 +56,8 @@ void moduleUpdate(void)
 	tab = menu->addTab("menu-example", "Example Mod", UYA_MODE_BOTH);
 	if (tab < 0)
 		return;
-	if (menu->addItem(tab, &toggle) < 0 || menu->addItem(tab, &range) < 0 || menu->addItem(tab, &save) < 0 ||
-	    menu->addItem(tab, &load) < 0) {
+	if (menu->addItem(tab, &toggle) < 0 || menu->addItem(tab, &range) < 0 ||
+	    (configItem = menu->addItem(tab, &config)) < 0 || menu->setItemButtons(configItem, configButtons, 2) < 0) {
 		menu->removeTab(tab);
 		return;
 	}

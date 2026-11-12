@@ -170,7 +170,9 @@ highlight on the right; the optional information callback supplies wrapped text
 on the left. The select callback runs on Cross with the highlighted index.
 Call `close()` after accepting a selection if desired. Callbacks/context must
 remain valid until the tab is removed. Tabs size to their labels and scroll to
-keep the active tab visible.
+keep the active tab visible. L2/R2 move up/down five selectable rows in ordinary
+menus and virtual lists, stopping at either end. Headers and disabled rows are
+skipped in ordinary menus.
 
 ### Popups
 
@@ -182,6 +184,9 @@ label to dismiss it, including during deactivation.
 Draw content with `drawBox` and `drawText`; return zero to dismiss. The owner
 must clear its callback with `setModal(NULL)` during deactivation. The callback
 is retained, not copied. See [bios-warning](../bios-warning/main.c) for an example.
+
+Settings buttons in the bundled module tabs share a centered, padded button row.
+Left/Right selects Save or Load, and X activates only the focused button.
 
 Persistence belongs to the loader and works without a menu. New mods should use
 `moduleConfigField_t` and loader `loadConfig` / `saveConfig` directly; see

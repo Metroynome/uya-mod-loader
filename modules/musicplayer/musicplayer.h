@@ -9,7 +9,9 @@
 typedef enum musicPlaylist {
 	MUSIC_BASE,
 	MUSIC_ALL,
-	MUSIC_CUSTOM
+	MUSIC_CUSTOM,
+	MUSIC_ALL_SHUFFLE,
+	MUSIC_CUSTOM_SHUFFLE
 } musicPlaylist_e;
 
 typedef enum musicTrackPart {
@@ -47,6 +49,8 @@ extern const moduleApi_t* musicLoader;
 
 int musicBackendReady(void);
 int musicBackendLevel(void);
+int musicBackendContext(void);
+int musicBackendStartup(int enabled);
 u32 musicBackendSector(void);
 const u32* musicBackendTable(void);
 musicStream_t* musicBackendStream(void);

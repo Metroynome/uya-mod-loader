@@ -479,8 +479,11 @@ void moduleUpdate(void)
 	static const modMenuItem_t airwalk = {"Free Cam Airwalk", MODMENU_TOGGLE, &forgeFreecam.airwalk, 0, 1, 1, 0, 0};
 	static const modMenuItem_t lockPosition = {"Free Cam Lock Position", MODMENU_TOGGLE, &forgeFreecam.lockPosition, 0, 1, 1, 0, 0};
 	static const modMenuItem_t lockAnimation = {"Free Cam Lock Animation", MODMENU_TOGGLE, &forgeFreecam.lockAnimation, 0, 1, 1, 0, 0};
-	static const modMenuItem_t save = {"Save Settings", MODMENU_ACTION, 0, 0, 0, 0, configAction, (void*)1};
-	static const modMenuItem_t load = {"Load Settings", MODMENU_ACTION, 0, 0, 0, 0, configAction, 0};
+	static const modMenuItem_t config = {"", MODMENU_BUTTON_ROW, 0, 0, 0, 0, 0, 0};
+	static const modMenuButton_t configButtons[] = {
+		{"Load Settings", configAction, 0},
+		{"Save Settings", configAction, (void*)1}
+	};
 	int canRefresh = p && p->context() && p->state() != FORGE_SCANNING && p->state() != FORGE_LOADING;
 	/* Adopt each game's actual mode. In-game edits remain pending until a
 	 * reload/hop calls applyGameMode; staging edits update settings immediately. */
@@ -517,8 +520,7 @@ void moduleUpdate(void)
 		menu->addItem(tab, &airwalk);
 		menu->addItem(tab, &lockPosition);
 		menu->addItem(tab, &lockAnimation);
-		menu->addItem(tab, &save);
-		menu->addItem(tab, &load);
+		menu->setItemButtons(menu->addItem(tab, &config), configButtons, 2);
 		lastReady = lastRefresh = -1;
 	}
 	if (lastRefresh != canRefresh) {
