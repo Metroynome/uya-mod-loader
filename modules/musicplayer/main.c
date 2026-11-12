@@ -20,13 +20,13 @@ const moduleApi_t* musicLoader;
 static const modMenuApi_t* menu;
 static int tab, selected, playlist;
 static int autoPlay;
-static int defaultLobby, defaultStaging, defaultGame, lastContext = -1;
+static int defaultCampaign, defaultLobby, defaultStaging, defaultGame, lastContext = -1;
 static int trackView, previousView;
 static int playing, paused, requested, lastLevel = -2, lastMode;
 static int stopped, buttonState = -1;
 static int customPlaying, customScanned;
 static int resumePlayback, resumePaused, shuffleStart;
-static int lastShuffleStart[2] = {-1, -1};
+static int lastShuffleStart[3] = {-1, -1, -1};
 static int trackItem, controlsItem;
 static int catalogueCount, catalogueGroup, baseCount;
 static u32 randomState = 0x1b873593;
@@ -34,12 +34,13 @@ static u32 header[512] __attribute__((aligned(64)));
 static musicTrack_t catalogue[MUSIC_MAX_TRACKS], base[14];
 static char status[64] = "Native level music";
 static const moduleConfigField_t settings[] = {
-	{"playlist", &playlist, MUSIC_BASE, MUSIC_CUSTOM_SHUFFLE},
+	{"playlist", &playlist, MUSIC_BASE, MUSIC_COMBINED_SHUFFLE},
 	{"trackView", &trackView, 0, 1},
 	{"autoPlay", &autoPlay, 0, 1},
-	{"defaultLobby", &defaultLobby, MUSIC_BASE, MUSIC_CUSTOM_SHUFFLE},
-	{"defaultStaging", &defaultStaging, MUSIC_BASE, MUSIC_CUSTOM_SHUFFLE},
-	{"defaultGame", &defaultGame, MUSIC_BASE, MUSIC_CUSTOM_SHUFFLE}
+	{"defaultCampaign", &defaultCampaign, MUSIC_BASE, MUSIC_COMBINED_SHUFFLE},
+	{"defaultLobby", &defaultLobby, MUSIC_BASE, MUSIC_COMBINED_SHUFFLE},
+	{"defaultStaging", &defaultStaging, MUSIC_BASE, MUSIC_COMBINED_SHUFFLE},
+	{"defaultGame", &defaultGame, MUSIC_BASE, MUSIC_COMBINED_SHUFFLE}
 };
 /* Music-WAD IDs/counts from sp-music-to-mp. Only music, not dialogue.
  * Campaign descriptors alternate intro and looping-body stereo pairs. */
@@ -95,6 +96,34 @@ static int customPlaylist(void)
 }
 
 /*
+ * NAME : includesCustom
+ * DESCRIPTION : Identify playlist choices that include custom files.
+ * NOTES :
+ * ARGS :
+ * RETURN : Nonzero when custom songs are included.
+ * AUTHOR : Troy "Metroynome" Pruitt
+ */
+static int includesCustom(int choice)
+{
+	return choice == MUSIC_CUSTOM || choice == MUSIC_CUSTOM_SHUFFLE ||
+	    choice == MUSIC_COMBINED || choice == MUSIC_COMBINED_SHUFFLE;
+}
+
+/*
+ * NAME : includesGame
+ * DESCRIPTION : Identify playlist choices that include the game catalogue.
+ * NOTES :
+ * ARGS :
+ * RETURN : Nonzero when disc songs are included.
+ * AUTHOR : Troy "Metroynome" Pruitt
+ */
+static int includesGame(int choice)
+{
+	return choice == MUSIC_GAME || choice == MUSIC_GAME_SHUFFLE ||
+	    choice == MUSIC_COMBINED || choice == MUSIC_COMBINED_SHUFFLE;
+}
+
+/*
  * NAME : shufflePlaylist
  * DESCRIPTION : Identify playlists that choose the next song randomly.
  * NOTES :
@@ -104,28 +133,58 @@ static int customPlaylist(void)
  */
 static int shufflePlaylist(void)
 {
-	return playlist == MUSIC_ALL_SHUFFLE || playlist == MUSIC_CUSTOM_SHUFFLE;
+	return playlist == MUSIC_GAME_SHUFFLE || playlist == MUSIC_CUSTOM_SHUFFLE ||
+	    playlist == MUSIC_COMBINED_SHUFFLE;
 }
 
 /*
- * NAME : trackCount
- * DESCRIPTION : Count the tracks in the selected playlist.
+ * NAME : discTrackCount
+ * DESCRIPTION : Count visible game tracks in the selected playlist.
  * NOTES :
  * ARGS :
- * RETURN :
+ * RETURN : Disc song count for the requested view.
  * AUTHOR : Troy "Metroynome" Pruitt
  */
-static int trackCount(void)
+static int discTrackCount(int view)
 {
 	int i, count = 0;
 	int raw = playlist == MUSIC_BASE ? baseCount : catalogueCount;
 	musicTrack_t* tracks = playlist == MUSIC_BASE ? base : catalogue;
 	if (customPlaylist())
-		return musicCustomCount();
+		return 0;
 	for (i = 0; i < raw; ++i)
-		if (trackView || tracks[i].part != MUSIC_BODY)
+		if (view || tracks[i].part != MUSIC_BODY)
 			++count;
 	return count;
+}
+
+/*
+ * NAME : customTrackIndex
+ * DESCRIPTION : Resolve a combined playlist selection to a custom file.
+ * NOTES :
+ * ARGS :
+ * RETURN : Custom file index, or -1 for a disc track.
+ * AUTHOR : Troy "Metroynome" Pruitt
+ */
+static int customTrackIndex(int index)
+{
+	if (!includesCustom(playlist))
+		return -1;
+	index -= discTrackCount(trackView);
+	return index >= 0 && index < musicCustomCount() ? index : -1;
+}
+
+/*
+ * NAME : trackCount
+ * DESCRIPTION : Count all visible songs in the selected playlist.
+ * NOTES :
+ * ARGS :
+ * RETURN : Song count.
+ * AUTHOR : Troy "Metroynome" Pruitt
+ */
+static int trackCount(void)
+{
+	return discTrackCount(trackView) + (includesCustom(playlist) ? musicCustomCount() : 0);
 }
 
 /*
@@ -174,8 +233,11 @@ static const char* viewLabel(void* context, int value)
 static void changeView(void* context)
 {
 	int i;
+	int custom = includesCustom(playlist) ? selected - discTrackCount(previousView) : -1;
 	(void)context;
-	if (!customPlaylist()) {
+	if (custom >= 0) {
+		selected = discTrackCount(trackView) + custom;
+	} else if (!customPlaylist()) {
 		musicTrack_t* track = trackAt(selected, previousView);
 		if (track && !trackView && track->part == MUSIC_BODY)
 			--track;
@@ -198,7 +260,8 @@ static void changeView(void* context)
  */
 static const char* playlistLabel(void* context, int index)
 {
-	static const char* names[] = {"Default / Base", "All", "Custom", "All (Shuffle)", "Custom (Shuffle)"};
+	static const char* names[] = {"Default", "Game", "Custom", "Game (Shuffle)", "Custom (Shuffle)",
+	    "Game + Custom", "Game + Custom (Shuffle)"};
 	(void)context;
 	return names[index];
 }
@@ -218,8 +281,8 @@ static const char* trackLabel(void* context, int index)
 	(void)context;
 	if (index < 0 || index >= trackCount())
 		return "No tracks available";
-	if (customPlaylist())
-		return musicCustomName(index);
+	if (customTrackIndex(index) >= 0)
+		return musicCustomName(customTrackIndex(index));
 	track = trackAt(index, trackView);
 	musicText(label, track->name, 0, !trackView || track->part == MUSIC_STANDALONE ? "" :
 	    track->part == MUSIC_INTRO ? " (intro)" : " (loop)");
@@ -253,7 +316,7 @@ static u32 randomValue(void)
 static void chooseShuffleStart(void)
 {
 	u32 seed;
-	int count = trackCount(), source = customPlaylist() != 0;
+	int count = trackCount(), source = playlist >= MUSIC_COMBINED ? 2 : customPlaylist() != 0;
 	if (!shuffleStart || !count)
 		return;
 	__asm__ volatile("mfc0 %0, $9" : "=r"(seed));
@@ -322,6 +385,10 @@ static void finishTrack(void)
  */
 static void changeSelection(void* changedPlaylist)
 {
+	if (changedPlaylist && playlist == MUSIC_BASE) {
+		nativeMusic((void*)1);
+		return;
+	}
 	if (changedPlaylist) {
 		selected = 0;
 		if (customPlaying) {
@@ -330,7 +397,7 @@ static void changeSelection(void* changedPlaylist)
 		}
 	}
 	if (selected >= trackCount())
-		selected = selected == MUSIC_MAX_TRACKS - 1 && trackCount() ? trackCount() - 1 : 0;
+		selected = selected == MUSIC_MAX_TRACKS * 2 - 1 && trackCount() ? trackCount() - 1 : 0;
 	if (!changedPlaylist)
 		play(0);
 	else if (playing)
@@ -366,7 +433,7 @@ static void play(void* context)
 /*
  * NAME : playback
  * DESCRIPTION : Stop manual playback or play the selected song.
- * NOTES : Stopping keeps scripted music silent until Play or Return to Level Music.
+ * NOTES : Stopping keeps scripted music silent until Play or Default / Base.
  * ARGS :
  * RETURN :
  * AUTHOR : Troy "Metroynome" Pruitt
@@ -456,10 +523,9 @@ static void skipTrack(void* context)
  */
 static void nativeMusic(void* context)
 {
-	(void)context;
 	musicCustomClose();
 	customPlaying = 0;
-	musicBackendRelease();
+	musicBackendRelease(context != 0);
 	playing = paused = requested = stopped = 0;
 	resumePlayback = resumePaused = shuffleStart = 0;
 	musicText(status, "Native level music", 0, "");
@@ -492,6 +558,9 @@ static void addDiscGroup(int index)
 {
 	const musicGroup_t* group = &groups[index];
 	int song, variant, n;
+	/* Museum reuses Vidcomic 1's intro and body; list that song once in All. */
+	if (group->level == 24)
+		return;
 	if (!musicBackendReadWad(group->wad, header))
 		return;
 	for (song = 0; song < group->songs; ++song) {
@@ -575,6 +644,8 @@ static void followNativeTrack(void)
 	source = musicBackendTable() + track * 2;
 	for (i = 0; i < trackCount(); ++i) {
 		musicTrack_t* track = trackAt(i, trackView);
+		if (!track)
+			continue;
 		int part, parts = !trackView && track->part == MUSIC_INTRO ? 2 : 1;
 		for (part = 0; part < parts; ++part) {
 			for (n = 0; n < 4; ++n) {
@@ -593,7 +664,7 @@ static void followNativeTrack(void)
 /*
  * NAME : configAction
  * DESCRIPTION : Save or load Music Player settings through the loader.
- * NOTES : Loaded defaults take effect on the current multiplayer screen.
+ * NOTES : Loaded defaults take effect on the current screen.
  * ARGS : Nonzero to save.
  * RETURN :
  * AUTHOR : Troy "Metroynome" Pruitt
@@ -629,7 +700,8 @@ static void applyDefaultPlaylist(void)
 	if (context < 0 || context == lastContext)
 		return;
 	lastContext = context;
-	choice = context == 0 ? defaultLobby : context == 1 ? defaultStaging : defaultGame;
+	choice = context == 0 ? defaultLobby : context == 1 ? defaultStaging :
+	    context == 3 ? defaultCampaign : defaultGame;
 	nativeMusic(0);
 	playlist = choice;
 	selected = 0;
@@ -650,15 +722,15 @@ static void registerMenu(void)
 {
 	modMenuItem_t items[] = {
 		{"Playlist", MODMENU_RANGE, &playlist, MUSIC_BASE, MUSIC_CUSTOM_SHUFFLE, 1, changeSelection, (void*)1},
-		{"Track", MODMENU_RANGE, &selected, 0, MUSIC_MAX_TRACKS - 1, 1, changeSelection, 0},
+		{"Track", MODMENU_RANGE, &selected, 0, MUSIC_MAX_TRACKS * 2 - 1, 1, changeSelection, 0},
 		{"", MODMENU_BUTTON_ROW, 0, 0, 0, 0, 0, 0},
 		{"Track View", MODMENU_RANGE, &trackView, 0, 1, 1, changeView, 0},
-		{"Return to Level Music", MODMENU_ACTION, 0, 0, 0, 0, nativeMusic, 0},
 		{"Refresh Music", MODMENU_ACTION, 0, 0, 0, 0, refreshCustom, 0},
 		{"Default Playlists", MODMENU_HEADER, 0, 0, 0, 0, 0, 0},
-		{"Online Lobby", MODMENU_RANGE, &defaultLobby, MUSIC_BASE, MUSIC_CUSTOM_SHUFFLE, 1, 0, 0},
-		{"Staging", MODMENU_RANGE, &defaultStaging, MUSIC_BASE, MUSIC_CUSTOM_SHUFFLE, 1, 0, 0},
-		{"In Game", MODMENU_RANGE, &defaultGame, MUSIC_BASE, MUSIC_CUSTOM_SHUFFLE, 1, 0, 0},
+		{"Campaign", MODMENU_RANGE, &defaultCampaign, MUSIC_BASE, MUSIC_COMBINED_SHUFFLE, 1, 0, 0},
+		{"Online Lobby", MODMENU_RANGE, &defaultLobby, MUSIC_BASE, MUSIC_COMBINED_SHUFFLE, 1, 0, 0},
+		{"Staging", MODMENU_RANGE, &defaultStaging, MUSIC_BASE, MUSIC_COMBINED_SHUFFLE, 1, 0, 0},
+		{"In Game", MODMENU_RANGE, &defaultGame, MUSIC_BASE, MUSIC_COMBINED_SHUFFLE, 1, 0, 0},
 		{"", MODMENU_BUTTON_ROW, 0, 0, 0, 0, 0, 0}
 	};
 	static const modMenuButton_t configButtons[] = {
@@ -689,7 +761,7 @@ static void registerMenu(void)
 	menu->setItemValueLabel(handles[0], playlistLabel);
 	menu->setItemValueLabel(trackItem, trackLabel);
 	menu->setItemValueLabel(handles[3], viewLabel);
-	for (i = 7; i <= 9; ++i)
+	for (i = 6; i <= 9; ++i)
 		menu->setItemValueLabel(handles[i], playlistLabel);
 	menu->setItemButtons(handles[10], configButtons, 2);
 	menu->setTabAction(tab, "Refresh Music", refreshCustom, 0);
@@ -730,6 +802,9 @@ int moduleInit(const moduleApi_t* api)
 	if (api->version < UYA_API_VERSION || api->size < sizeof(*api))
 		return -1;
 	api->loadConfig("musicplayer", settings, sizeof(settings) / sizeof(settings[0]));
+	/* Older settings used Playlist for campaign playback. */
+	defaultCampaign = playlist;
+	api->loadConfig("musicplayer", &settings[3], 1);
 	previousView = trackView;
 	api->setLifecycle(0, deactivate);
 	return 0;
@@ -745,8 +820,10 @@ int moduleInit(const moduleApi_t* api)
  */
 void moduleUpdate(void)
 {
-	int startup = musicBackendStartup(defaultGame != MUSIC_BASE ||
-	    (lastContext == 2 && playlist != MUSIC_BASE && (playing || requested || resumePlayback)));
+	int context = musicLoader->mode == UYA_MODE_CAMPAIGN ? 3 : 2;
+	int choice = context == 3 ? defaultCampaign : defaultGame;
+	int startup = musicBackendStartup(choice != MUSIC_BASE ||
+	    (lastContext == context && playlist != MUSIC_BASE && (playing || requested || resumePlayback)));
 	int ready = musicBackendReady();
 	if (!ready) {
 		/* Disc/custom playlists survive loading, but their old streams cannot. */
@@ -756,18 +833,18 @@ void moduleUpdate(void)
 		}
 		musicCustomClose();
 		customPlaying = 0;
-		musicBackendRelease();
+		musicBackendRelease(0);
 		playing = paused = requested = stopped = 0;
 		lastLevel = -2;
 		return;
 	}
 	if (lastLevel != musicBackendLevel() || lastMode != (int)musicLoader->mode) {
-		int resume = resumePlayback;
-		int wasPaused = resumePaused;
+		int resume = resumePlayback || (playlist != MUSIC_BASE && (playing || requested));
+		int wasPaused = resumePaused || paused;
 		int track = selected;
 		nativeMusic(0);
 		lastLevel = musicBackendLevel();
-		if (lastMode != (int)musicLoader->mode)
+		if (lastMode != (int)musicLoader->mode || (context == 3 && !resume))
 			lastContext = -1;
 		lastMode = musicLoader->mode;
 		selected = resume ? track : 0;
@@ -775,7 +852,7 @@ void moduleUpdate(void)
 		requested = resume || autoPlay;
 		resumePlayback = resume;
 		resumePaused = resume && wasPaused;
-		shuffleStart = resume && shufflePlaylist() && musicBackendContext() == 2;
+		shuffleStart = resume && shufflePlaylist() && musicBackendContext() >= 2;
 	}
 	if (startup && !requested && !playing && !resumePlayback)
 		lastContext = -1;
@@ -787,10 +864,10 @@ void moduleUpdate(void)
 		musicBackendSilence();
 	/* A saved Custom selection must not start the helper during boot
 	 * unless playback or the open Music Player tab actually needs it. */
-	if (!customScanned && ((customPlaylist() &&
+	if (!customScanned && ((includesCustom(playlist) &&
 	    (requested || playing || (tab && menu->isOpen() && menu->getActiveTab() == tab))) ||
 	    (musicLoader->mode == UYA_MODE_MULTIPLAYER && musicBackendLevel() == 39 &&
-	    (defaultGame == MUSIC_CUSTOM || defaultGame == MUSIC_CUSTOM_SHUFFLE)))) {
+	    includesCustom(defaultGame)))) {
 		int result = musicCustomScan();
 		if (result <= 0)
 			musicText(status, result < 0 ? "Cannot scan uya/music" : "Reading custom songs", 0, "");
@@ -800,16 +877,18 @@ void moduleUpdate(void)
 			musicText(status, "Custom songs ready", 0, "");
 	}
 	if (catalogueGroup < (int)(sizeof(groups) / sizeof(groups[0])) &&
-	    (playlist == MUSIC_ALL || playlist == MUSIC_ALL_SHUFFLE ||
+	    (includesGame(playlist) ||
 	    (musicLoader->mode == UYA_MODE_MULTIPLAYER && musicBackendLevel() == 39 &&
-	    (defaultGame == MUSIC_ALL || defaultGame == MUSIC_ALL_SHUFFLE)))) {
+	    includesGame(defaultGame)))) {
 		musicText(status, "Reading disc music", catalogueGroup + 1, "");
 		addDiscGroup(catalogueGroup++);
 		if (catalogueGroup == (int)(sizeof(groups) / sizeof(groups[0])))
 			musicText(status, "Disc songs ready", 0, "");
-		if (playlist == MUSIC_ALL || playlist == MUSIC_ALL_SHUFFLE)
+		if (includesGame(playlist))
 			return;
 	}
+	if (includesCustom(playlist) && !customScanned)
+		return;
 	chooseShuffleStart();
 	if (selected >= trackCount() && trackCount())
 		selected = 0;
@@ -824,12 +903,12 @@ void moduleUpdate(void)
 			return;
 		resumePlayback = 0;
 	}
-	if (requested && trackCount() && (!customPlaylist() || customScanned) && musicBackendAcquire()) {
+	if (requested && trackCount() && (!includesCustom(playlist) || customScanned) && musicBackendAcquire()) {
 		int result;
 		musicCustomClose();
 		customPlaying = 0;
-		if (customPlaylist())
-			result = musicBackendSilence() ? musicCustomOpen(selected) : 0;
+		if (customTrackIndex(selected) >= 0)
+			result = musicBackendSilence() ? musicCustomOpen(customTrackIndex(selected)) : 0;
 		else {
 			musicTrack_t* track = trackAt(selected, trackView);
 			const musicTrack_t* body = !trackView && track->part == MUSIC_INTRO ? track + 1 : 0;

@@ -93,8 +93,9 @@ or replacing binaries.
   configurations. Cross or Triangle dismisses it.
 - **[Music Player](modules/musicplayer/README.md):** play/pause and skip through
   level music, the disc soundtrack, or custom MP3/WAV/VAG songs in `uya/music/`.
-  Supports shuffle and automatic advancement; native music stays unchanged
-  until Play is selected. NTSC-U/PAL.
+  Supports saved per-screen defaults, Game + Custom playlists, shuffle, and
+  automatic advancement. Bundled but disabled by default; expanded RAM is required.
+  NTSC-U/PAL and NTSC-J campaign (Japanese live testing is pending).
 - **Examples/tests:** `hello`, `menu-example`, `campaign-test`, and
   `multiplayer-test` are available in source, excluded from release packages.
 

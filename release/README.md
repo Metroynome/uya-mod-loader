@@ -20,6 +20,27 @@ without tests/examples. NTSC-J supports campaign only. Forge is bundled for
 NTSC-U/PAL, enabled with `campaign,local`. When upgrading to v2, replace older modules with
 compatible version-4 binaries.
 
+## Optional Music Player
+
+Music Player is bundled but disabled. Before enabling it, turn on PCSX2's
+128 MiB expanded RAM and use a compatible BIOS (tested with BIOS 2.30).
+Remove the leading `#` from your region's `musicplayer` line in
+`uya/config/modules.txt`, then fully restart the game.
+
+Open MOD MENU ? Music Player for play/pause, previous/next, and playlists.
+Default uses the normal campaign intro/loop or multiplayer random music.
+Game plays the disc soundtrack. For Custom, create `uya/music/` and add
+MP3, PCM WAV or VAG files. Save separate defaults for Campaign, Online Lobby, Staging, and
+In Game; these also offer Game + Custom and its shuffle variant. No songs
+are included. Preserve your own music files and settings when upgrading.
+
+NTSC-U Local Play, campaign and Horizon online playback were exercised.
+PAL campaign playback was exercised, but the latest Default-return fix and
+combined playlists still need a live check. NTSC-J is built and its campaign
+addresses verified against extracted code; it has not been tested in-game.
+To use Music Player online on NTSC-U/PAL, add `online` to its contexts and
+Mod Menu's contexts. Keep expanded RAM enabled.
+
 ## Forge map testing
 
 Forge can boot straight to Local Play staging, reload/hop retail or custom maps,

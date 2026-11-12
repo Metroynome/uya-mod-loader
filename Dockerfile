@@ -1,8 +1,8 @@
 FROM dnawrkshp/ps2dev-libdl:latest
 
 # Pin the library revisions used to validate the loader; override to upgrade.
-ARG LIBRAC3_REF=b14f8259e6072d8a770d86b08895ad33fb398dc8
-ARG LIBUYA_REF=737dd562c7ea142de3e708594f74c239f19af4b0
+ARG LIBRAC3_REF=f94863cf16b7d41624ed46655e9d55f67b115c3b
+ARG LIBUYA_REF=20e271da78a37974f354e0dca49dd1fbd60b2c20
 ENV LIBRAC3_DIR=/opt/uya-mod-loader-deps/librac3 \
     LIBUYA_DIR=/opt/uya-mod-loader-deps/horizon-uya-patch/libuya
 COPY docker-init.sh /usr/local/bin/uya-docker-init

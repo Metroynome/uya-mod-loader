@@ -2,16 +2,19 @@
 #define UYA_MUSICPLAYER_H
 
 #include "module.h"
+#include <librac3/music.h>
 
 #define MUSIC_MAX_TRACKS (160)
 #define MUSIC_CUSTOM_PATH ("host0:uya/music/")
 
 typedef enum musicPlaylist {
 	MUSIC_BASE,
-	MUSIC_ALL,
+	MUSIC_GAME,
 	MUSIC_CUSTOM,
-	MUSIC_ALL_SHUFFLE,
-	MUSIC_CUSTOM_SHUFFLE
+	MUSIC_GAME_SHUFFLE,
+	MUSIC_CUSTOM_SHUFFLE,
+	MUSIC_COMBINED,
+	MUSIC_COMBINED_SHUFFLE
 } musicPlaylist_e;
 
 typedef enum musicTrackPart {
@@ -27,24 +30,6 @@ typedef struct musicTrack {
 	/* 0x50 */ musicTrackPart_e part;
 } musicTrack_t;
 
-/* Native music_Playing layout shared by campaign and multiplayer. */
-typedef struct musicStream {
-	/* 0x00 */ u32 handle;
-	/* 0x04 */ s16 track;
-	/* 0x06 */ s16 volume;
-	/* 0x08 */ s16 flags;
-	/* 0x0a */ s16 status;
-	/* 0x0c */ s16 pause;
-	/* 0x0e */ s16 unpause;
-	/* 0x10 */ s16 transition;
-	/* 0x12 */ s16 fade;
-	/* 0x14 */ int queueLength;
-	/* 0x18 */ int remaining;
-	/* 0x1c */ void* moby;
-	/* 0x20 */ int channel;
-	/* 0x24 */ int timer;
-} musicStream_t;
-
 extern const moduleApi_t* musicLoader;
 
 int musicBackendReady(void);
@@ -57,7 +42,7 @@ musicStream_t* musicBackendStream(void);
 int musicBackendAcquire(void);
 void musicBackendControl(void);
 int musicBackendSilence(void);
-void musicBackendRelease(void);
+void musicBackendRelease(int restore);
 void musicBackendPause(int paused);
 int musicBackendReadWad(int wad, u32* buffer);
 void musicBackendCommand(int command, int size, void* data, void (*callback)(int, u64), u64 context);

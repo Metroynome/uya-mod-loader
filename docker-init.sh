@@ -8,8 +8,8 @@ command -v "${EE_PREFIX:-ee-}gcc" >/dev/null
 
 LIBRAC3_DIR=${LIBRAC3_DIR:-/opt/uya-mod-loader-deps/librac3}
 LIBUYA_DIR=${LIBUYA_DIR:-/opt/uya-mod-loader-deps/horizon-uya-patch/libuya}
-LIBRAC3_REF=${LIBRAC3_REF:-b14f8259e6072d8a770d86b08895ad33fb398dc8}
-LIBUYA_REF=${LIBUYA_REF:-737dd562c7ea142de3e708594f74c239f19af4b0}
+LIBRAC3_REF=${LIBRAC3_REF:-f94863cf16b7d41624ed46655e9d55f67b115c3b}
+LIBUYA_REF=${LIBUYA_REF:-20e271da78a37974f354e0dca49dd1fbd60b2c20}
 export LIBRAC3_DIR LIBUYA_DIR
 
 # Same converter used by rac-cheats/uya-cheats; only the loader emits PNACH.

@@ -4,9 +4,12 @@ modmenu.ntscu campaign,local
 bios-warning.ntscu campaign,local
 maploader.ntscu local
 forge.ntscu campaign,local
+# musicplayer.ntscu campaign,local
 modmenu.pal campaign,local
 bios-warning.pal campaign,local
 maploader.pal local
 forge.pal campaign,local
+# musicplayer.pal campaign,local
 modmenu.ntscj campaign
 bios-warning.ntscj campaign
+# musicplayer.ntscj campaign

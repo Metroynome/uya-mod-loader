@@ -41,15 +41,16 @@ for label in ntscu pal ntscj all; do
     cp tools/horizon/horizon_unix_update_cmaps.sh tools/horizon/horizon_windows_update_cmaps.ps1 "$bundle/"
     printf '0\n' > "$bundle/uya/maploader-online.txt"
     printf '# Release defaults: no test/example modules.\n# Restart the game after editing. See README.md.\n' > "$bundle/uya/config/modules.txt"
-    if [ "$label" != ntscj ]; then cp hostfs/uya/mods/utils/mapscan.irx "$bundle/uya/mods/utils/"; fi
+    cp hostfs/uya/mods/utils/mapscan.irx "$bundle/uya/mods/utils/"
     for region in $regions; do
         case "$region" in ntscu) id=1;; pal) id=2;; ntscj) id=3;; esac
         while read -r r serial crc mode supported; do
             [ "$r" = "$region" ] && [ "$supported" = yes ] || continue
             { printf '[UYA Mod Loader]\nauthor=Metroynome\n'; cat "build/dist/mod-loader.$region.pnach"; } > "$bundle/${serial}_${crc}.pnach"
         done < release/crcs.txt
-        while read -r name contexts; do
+        while read -r name contexts option; do
             case "$name" in ''|'#'*) continue;; hello|menu-example|campaign-test|multiplayer-test) echo 'Test modules cannot be release defaults' >&2; exit 1;; esac
+            case "$option" in ''|optional) ;; *) echo 'Unknown release module option' >&2; exit 1;; esac
             case "$contexts" in campaign|local|campaign,local) ;; *) echo 'Release defaults must stay offline' >&2; exit 1;; esac
             row=$(awk -F'|' -v n="$name" '$2==n' build/catalog.txt)
             [ -n "$row" ] || { echo "Unknown release module: $name" >&2; exit 1; }
@@ -57,6 +58,7 @@ for label in ntscu pal ntscj all; do
             case " $supported " in *" $region "*) ;; *) continue;; esac
             cp "hostfs/uya/mods/$name.$region.bin" "$bundle/uya/mods/"
             [ "$region" != ntscj ] || contexts=campaign
+            [ "$option" != optional ] || printf '# ' >> "$bundle/uya/config/modules.txt"
             printf '%s.%s %s\n' "$name" "$region" "$contexts" >> "$bundle/uya/config/modules.txt"
         done < release/modules.txt
     done

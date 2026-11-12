@@ -8,29 +8,29 @@ static const musicDecoder_t* active;
 /*
  * NAME : musicInputPeek
  * DESCRIPTION : Refill the bounded input buffer without discarding unread bytes.
- * NOTES :
+ * NOTES : Batch reads instead of refilling after each compressed frame.
  * ARGS :
  * RETURN :
  * AUTHOR : Troy "Metroynome" Pruitt
  */
 int musicInputPeek(const u8** bytes)
 {
-	int i, count;
-	if (position) {
-		for (i = position; i < length; ++i)
-			input[i - position] = input[i];
-		length -= position;
-		position = 0;
-	}
-	if (!ended && length < (int)sizeof(input)) {
+	int i, count, remaining = length - position;
+	if (!ended && remaining < (int)sizeof(input) / 2) {
+		if (position) {
+			for (i = 0; i < remaining; ++i)
+				input[i] = input[position + i];
+			length = remaining;
+			position = 0;
+		}
 		count = musicLoader->read(descriptor, input + length, sizeof(input) - length);
 		if (count < 0)
 			return -1;
 		length += count;
 		ended = count == 0;
 	}
-	*bytes = input;
-	return length;
+	*bytes = input + position;
+	return length - position;
 }
 
 /*

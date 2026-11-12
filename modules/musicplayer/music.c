@@ -1,4 +1,5 @@
 #include "musicplayer.h"
+#include <string.h>
 
 #define WORD(address) (*(volatile u32*)((u32)(address) | 0x20000000))
 #define JAL(address) (0x0c000000 | (((u32)(address) >> 2) & 0x03ffffff))
@@ -27,8 +28,16 @@ static int ignoreTrack(void);
 static void streamStopped(int result, u64 context);
 static void startupCommand(int command, int size, void* data, void (*callback)(int, u64), u64 context);
 
-#include "addresses.h"
+#if UYA_MODULE_REGION != 3
+extern u32 multiplayer_musicGetPlayAddress(void);
+extern u32 multiplayer_musicGetQueueAddress(void);
+extern u32 multiplayer_musicGetTransitionAddress(void);
+extern int multiplayer_musicGetSector(void);
+extern u32* multiplayer_musicGetTrackTable(void);
+extern void* multiplayer_musicGetGlobals(void);
+#endif
 
+static musicOverlay_t overlay;
 static const musicOverlay_t* current;
 static const musicOverlay_t* owner;
 static u32 ownerMode;
@@ -38,7 +47,8 @@ static s16 savedQueuedTrack, savedQueuedType;
 static u32 ownerGeneration;
 static int ownerLevel = -2, stopping;
 static int nativeBlocked;
-static int startupPending, startupLevel = -1;
+static int startupPending, startupLevel = -1, startupSeenLevel = -1;
+static u32 startupAddress, startupOriginal;
 
 /*
  * NAME : musicText
@@ -79,7 +89,7 @@ void musicText(char* output, const char* name, int number, const char* suffix)
 int musicBackendLevel(void)
 {
 	if (musicLoader->mode == UYA_MODE_CAMPAIGN)
-		return *(volatile int*)0x1d545c;
+		return musicGetLevel();
 #if UYA_MODULE_REGION == 2
 	return *(volatile int*)0x1f83a8;
 #else
@@ -89,18 +99,18 @@ int musicBackendLevel(void)
 
 /*
  * NAME : musicBackendContext
- * DESCRIPTION : Identify multiplayer lobby, staging, or gameplay music.
- * NOTES : Child menus retain the previous choice; campaign is not overridden.
+ * DESCRIPTION : Identify campaign, multiplayer lobby, staging, or gameplay music.
+ * NOTES : Child menus retain the previous choice.
  * ARGS :
- * RETURN : 0 lobby, 1 staging, 2 game, or -1 outside these screens.
+ * RETURN : 0 lobby, 1 staging, 2 game, 3 campaign, or -1 outside these screens.
  * AUTHOR : Troy "Metroynome" Pruitt
  */
 int musicBackendContext(void)
 {
 	int level = musicBackendLevel();
 	u32 i, active = 0;
-	if (musicLoader->mode != UYA_MODE_MULTIPLAYER)
-		return -1;
+	if (musicLoader->mode == UYA_MODE_CAMPAIGN)
+		return level >= 1 && level <= 36 ? 3 : -1;
 	/* Scene readiness is checked by the caller. The panorama precedes GAME_ACTIVE. */
 	if (level >= 40 && level <= 49)
 		return 2;
@@ -130,11 +140,11 @@ int musicBackendContext(void)
 u32 musicBackendSector(void)
 {
 	if (musicLoader->mode == UYA_MODE_CAMPAIGN)
-		return WORD(0x168644);
-#if UYA_MODULE_REGION == 2
-	return WORD(0x1f8404);
+		return musicGetSector();
+#if UYA_MODULE_REGION != 3
+	return multiplayer_musicGetSector();
 #else
-	return WORD(0x1f8584);
+	return 0;
 #endif
 }
 
@@ -149,11 +159,11 @@ u32 musicBackendSector(void)
 const u32* musicBackendTable(void)
 {
 	if (musicLoader->mode == UYA_MODE_CAMPAIGN)
-		return (u32*)0x168648;
-#if UYA_MODULE_REGION == 2
-	return (u32*)0x1f8408;
+		return musicGetTable();
+#if UYA_MODULE_REGION != 3
+	return multiplayer_musicGetTrackTable();
 #else
-	return (u32*)0x1f8588;
+	return 0;
 #endif
 }
 
@@ -168,11 +178,11 @@ const u32* musicBackendTable(void)
 musicStream_t* musicBackendStream(void)
 {
 	if (musicLoader->mode == UYA_MODE_CAMPAIGN)
-		return (musicStream_t*)(0x1ccfd0 + 0x44);
-#if UYA_MODULE_REGION == 2
-	return (musicStream_t*)(0x225660 + 0x44);
+		return musicGetStream();
+#if UYA_MODULE_REGION != 3
+	return (musicStream_t*)((u8*)multiplayer_musicGetGlobals() + 0x44);
 #else
-	return (musicStream_t*)(0x2257e0 + 0x44);
+	return 0;
 #endif
 }
 
@@ -186,32 +196,44 @@ musicStream_t* musicBackendStream(void)
  */
 int musicBackendReady(void)
 {
-	u32 i;
+	const musicOverlay_t* entry = &overlay;
 	int level = musicBackendLevel();
 	current = 0;
-	for (i = 0; i < sizeof(overlays) / sizeof(overlays[0]); ++i) {
-		const musicOverlay_t* entry = &overlays[i];
-		if (entry->level != level)
-			continue;
-		if (musicLoader->mode == UYA_MODE_MULTIPLAYER) {
-#if UYA_MODULE_REGION == 2
-			if (WORD(0x245848) != 1)
-#else
-			if (WORD(0x2459c8) != 1)
-#endif
-				return 0;
-		}
-		/* A same-map reload can finish between module updates. A restored
-		 * retail entry point means our old stream/callbacks no longer own it. */
-		if (owner == entry && ownerMode == musicLoader->mode && WORD(entry->play) != JUMP(ignoreTrack))
-			return 0;
-		if ((owner == entry && ownerMode == musicLoader->mode && WORD(entry->play) == JUMP(ignoreTrack)) ||
-		    (WORD(entry->play) == 0x27bdffd0 && WORD(entry->play + 4) == 0x0080582d)) {
-			current = entry;
-			return musicBackendSector() != 0;
-		}
-		return 0;
+	overlay.level = level;
+	if (musicLoader->mode == UYA_MODE_CAMPAIGN) {
+		overlay.play = musicGetPlayAddress();
+		overlay.queue = level > 0 && overlay.play ? overlay.play + 0x2f8 : 0;
+		overlay.transition = level > 0 && overlay.play ? overlay.play + 0x210 : 0;
 	}
+#if UYA_MODULE_REGION != 3
+	else {
+		overlay.play = multiplayer_musicGetPlayAddress();
+		overlay.queue = multiplayer_musicGetQueueAddress();
+		overlay.transition = multiplayer_musicGetTransitionAddress();
+	}
+#endif
+	if (!entry->play)
+		goto unavailable;
+	if (musicLoader->mode == UYA_MODE_MULTIPLAYER) {
+#if UYA_MODULE_REGION == 2
+		if (WORD(0x245848) != 1)
+#else
+		if (WORD(0x2459c8) != 1)
+#endif
+			goto unavailable;
+	}
+	/* A same-map reload can finish between module updates. A restored
+	 * retail entry point means our old stream/callbacks no longer own it. */
+	if (owner == entry && ownerMode == musicLoader->mode && WORD(entry->play) != JUMP(ignoreTrack))
+		goto unavailable;
+	if ((owner == entry && ownerMode == musicLoader->mode && WORD(entry->play) == JUMP(ignoreTrack)) ||
+	    (WORD(entry->play) == 0x27bdffd0 && WORD(entry->play + 4) == 0x0080582d)) {
+		current = entry;
+		return musicBackendSector() != 0;
+	}
+
+unavailable:
+	startupSeenLevel = -1;
 	return 0;
 }
 
@@ -283,7 +305,7 @@ static void streamStopped(int result, u64 context)
  */
 void musicBackendCommand(int command, int size, void* data, void (*callback)(int, u64), u64 context)
 {
-	u32 address = musicLoader->mode == UYA_MODE_CAMPAIGN ? 0x13c578 :
+	u32 address = musicLoader->mode == UYA_MODE_CAMPAIGN ? MUSIC_COMMAND_ADDRESS :
 #if UYA_MODULE_REGION == 2
 	    0x1941c0;
 #else
@@ -294,7 +316,7 @@ void musicBackendCommand(int command, int size, void* data, void (*callback)(int
 
 /*
  * NAME : startupCommand
- * DESCRIPTION : Replace the panoramic native music cue before it becomes audible.
+ * DESCRIPTION : Replace the initial native music cue before it becomes audible.
  * NOTES : Only initial music streams are intercepted; speech and effects pass through.
  * ARGS : Native sound-client command and callback.
  * RETURN :
@@ -305,16 +327,19 @@ static void startupCommand(int command, int size, void* data, void (*callback)(i
 	const u32* params = data;
 	int level = musicBackendLevel();
 #if UYA_MODULE_REGION == 2
-	int active = WORD(0x241a50);
+	int active = musicLoader->mode == UYA_MODE_MULTIPLAYER ? WORD(0x241a50) : 0;
 #else
-	int active = WORD(0x241bd0);
+	int active = musicLoader->mode == UYA_MODE_MULTIPLAYER ? WORD(0x241bd0) : 0;
 #endif
-	if (command == 0x2c && size == 32 && level >= 40 && level <= 49 && !active &&
+	int initial = musicLoader->mode == UYA_MODE_CAMPAIGN ?
+	    level >= 1 && level <= 36 && startupSeenLevel != level :
+	    level >= 40 && level <= 49 && !active;
+	if (command == 0x2c && size == 32 && initial &&
 	    (u32)context == (u32)musicBackendStream() && params[4] == 1 && !params[5]) {
 		musicBackendStream()->handle = 0;
 		musicBackendStream()->status = 0;
 		startupPending = 1;
-		startupLevel = level;
+		startupLevel = startupSeenLevel = level;
 		return;
 	}
 	musicBackendCommand(command, size, data, callback, context);
@@ -323,7 +348,7 @@ static void startupCommand(int command, int size, void* data, void (*callback)(i
 /*
  * NAME : musicBackendStartup
  * DESCRIPTION : Arm a resident cue hook before level loading starts.
- * NOTES : Restore only our own instruction when disabled or leaving multiplayer.
+ * NOTES : Restore only our own instruction when disabled or changing ELF.
  * ARGS : Nonzero when the next gameplay cue should use a manual playlist.
  * RETURN : Nonzero after intercepting the current level's first music cue.
  * AUTHOR : Troy "Metroynome" Pruitt
@@ -335,8 +360,24 @@ int musicBackendStartup(int enabled)
 #else
 	u32 address = 0x194900, original = JAL(0x1942b0);
 #endif
-	if (enabled && musicLoader->mode == UYA_MODE_MULTIPLAYER) {
+	if (musicLoader->mode == UYA_MODE_CAMPAIGN) {
+		address = MUSIC_COMMAND_HOOK;
+		original = JAL(MUSIC_COMMAND_ADDRESS);
+	}
+	if (startupAddress && (!enabled || startupAddress != address)) {
+		if (WORD(startupAddress) == JAL(startupCommand)) {
+			WORD(startupAddress) = startupOriginal;
+			musicLoader->flushCache(0);
+			musicLoader->flushCache(2);
+		}
+		startupAddress = 0;
+		startupPending = 0;
+		startupSeenLevel = -1;
+	}
+	if (enabled) {
 		if (WORD(address) == original && WORD(address + 4) == 0xafa3001c) {
+			startupAddress = address;
+			startupOriginal = original;
 			WORD(address) = JAL(startupCommand);
 			musicLoader->flushCache(0);
 			musicLoader->flushCache(2);
@@ -400,11 +441,11 @@ int musicBackendAcquire(void)
  * NAME : musicBackendRelease
  * DESCRIPTION : Restore native music requests and release the scheduler guard.
  * NOTES : Never write into an overlay that has already been replaced.
- * ARGS :
+ * ARGS : Nonzero to restart native playback in the current overlay.
  * RETURN :
  * AUTHOR : Troy "Metroynome" Pruitt
  */
-void musicBackendRelease(void)
+void musicBackendRelease(int restore)
 {
 	u32 i;
 	if (owner && ownerMode == musicLoader->mode) {
@@ -442,6 +483,13 @@ void musicBackendRelease(void)
 			}
 			musicLoader->flushCache(0);
 			musicLoader->flushCache(2);
+			/* Restoring fields alone leaves a stopped native stream silent. */
+			if (restore && current == owner && !stream->handle) {
+				int track = savedTrack >= 0 ? savedTrack : 0;
+				stream->status = 0;
+				stream->track = -1;
+				((void (*)(int, int, int))owner->play)(track, savedFlags, 1024);
+			}
 		}
 	}
 	owner = 0;
@@ -482,14 +530,14 @@ int musicBackendSilence(void)
 }
 
 /*
- * NAME : memcpy
+ * NAME : __wrap_memcpy
  * DESCRIPTION : Copy module data without binding to one ELF's resident libc.
  * NOTES : Also used by the third-party decoder.
  * ARGS : Destination, source, byte count.
  * RETURN : Destination.
  * AUTHOR : Troy "Metroynome" Pruitt
  */
-void* memcpy(void* dest, const void* source, u32 size)
+void* __wrap_memcpy(void* dest, const void* source, u32 size)
 {
 	u8* out = dest;
 	const u8* in = source;
@@ -521,14 +569,14 @@ void* memmove(void* dest, const void* source, u32 size)
 }
 
 /*
- * NAME : memset
+ * NAME : __wrap_memset
  * DESCRIPTION : Clear module state without using a campaign-only libc address.
  * NOTES :
  * ARGS : Destination, value, byte count.
  * RETURN : Destination.
  * AUTHOR : Troy "Metroynome" Pruitt
  */
-void* memset(void* dest, int value, u32 size)
+void* __wrap_memset(void* dest, int value, u32 size)
 {
 	u8* out = dest;
 	u32 i;
@@ -567,7 +615,7 @@ void musicBackendPause(int paused)
  */
 int musicBackendReadWad(int wad, u32* buffer)
 {
-	u32 address = musicLoader->mode == UYA_MODE_CAMPAIGN ? 0x13d290 :
+	u32 address = musicLoader->mode == UYA_MODE_CAMPAIGN ? MUSIC_READ_WAD_ADDRESS :
 #if UYA_MODULE_REGION == 2
 	    0x194ed8;
 #else

@@ -1,4 +1,16 @@
 LIBRARY = librac3
-MODE = both
-REGIONS = ntscu pal
+MODE = $(if $(filter ntscj,$(REGION)),campaign,both)
+REGIONS = ntscu pal ntscj
 EE_OBJS = main.o music.o custom.o decoders/decoder.o decoders/wav.o decoders/vag.o decoders/mp3.o
+
+# Keep memory operations safe across campaign and multiplayer ELF changes.
+EE_LDFLAGS += -Wl,--wrap=memcpy,--wrap=memset
+
+ifneq ($(REGION),ntscj)
+EE_OBJS += multiplayer-music.o multiplayer-functions.o
+
+# Namespace the multiplayer library while this module crosses ELF boundaries.
+build/$(REGION)/modules/musicplayer/multiplayer-music.o build/$(REGION)/modules/musicplayer/multiplayer-functions.o: build/$(REGION)/modules/musicplayer/multiplayer-%.o: modules/musicplayer/Makefile.defs FORCE
+	$(MAKE) -f Makefile.eeglobal MODULE=modules/musicplayer REGION=$(REGION) IMAGE_LIBRARY=libuya build/$(REGION)/libraries/libuya/lib/libuya$(if $(filter ntscu,$(REGION)),ntsc,pal).a
+	$(EE_OBJCOPY) --prefix-symbols=multiplayer_ build/$(REGION)/libraries/libuya/obj/$*.o $@
+endif

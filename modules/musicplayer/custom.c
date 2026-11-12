@@ -5,6 +5,8 @@
 #include <string.h>
 
 #define MUSIC_RING_BYTES (65536)
+#define MUSIC_CAMPAIGN_RING_BYTES (131072)
+#define MUSIC_REFILL_BYTES (1024)
 #define MUSIC_EE_STREAM (0x4000)
 #define MUSIC_STREAM_LENGTH (0x10000000)
 #define UNCACHED(pointer) ((void*)((u32)(pointer) | 0x20000000))
@@ -23,7 +25,8 @@ static u8 reply[320] __attribute__((aligned(64)));
 static char filenames[MUSIC_MAX_TRACKS][96];
 static int fileCount, scanState, directory = -1, scanMode, scanRequested = 1;
 static musicMonitor_t monitors[2] __attribute__((aligned(64)));
-static u8 rings[2][MUSIC_RING_BYTES] __attribute__((aligned(64)));
+static u8 rings[2][MUSIC_CAMPAIGN_RING_BYTES] __attribute__((aligned(64)));
+static u32 ringBytes;
 static musicFormat_t format;
 static u32 handle, produced, framesDecoded, initialRemaining, elapsed;
 static int streamPending, opened, ending, remainingSet, paused, closing, openedMode;
@@ -382,7 +385,7 @@ static int pump(u32 bytes)
 				pcm[i] = 0;
 		}
 		for (channel = 0; channel < (int)format.channels; ++channel) {
-			u8* target = (u8*)UNCACHED(rings[channel]) + (produced % MUSIC_RING_BYTES);
+			u8* target = (u8*)UNCACHED(rings[channel]) + (produced % ringBytes);
 			encodeBlock(target, pcm + channel, format.channels, ending);
 		}
 		produced += 16;
@@ -417,6 +420,7 @@ int musicCustomOpen(int index)
 	path[i] = 0;
 	if (!musicDecodeOpen(path, &format))
 		return -1;
+	ringBytes = musicLoader->mode == UYA_MODE_CAMPAIGN ? MUSIC_CAMPAIGN_RING_BYTES : MUSIC_RING_BYTES;
 	discStream = discEnded = 0;
 	ending = paused = remainingSet = 0;
 	framesDecoded = elapsed = 0;
@@ -424,8 +428,7 @@ int musicCustomOpen(int index)
 	musicLoader->flushCache(0);
 	for (channel = 0; channel < (int)format.channels; ++channel) {
 		u8* bytes = UNCACHED(rings[channel]);
-		for (i = 0; i < MUSIC_RING_BYTES; ++i)
-			bytes[i] = 0;
+		memset(bytes, 0, ringBytes);
 		bytes[0] = 'V';
 		bytes[1] = 'A';
 		bytes[2] = 'G';
@@ -434,12 +437,12 @@ int musicCustomOpen(int index)
 		writeBig(bytes + 12, MUSIC_STREAM_LENGTH);
 		writeBig(bytes + 16, format.rate);
 		musicMonitor_t* monitor = UNCACHED(&monitors[channel]);
-		monitor->bufferSize = MUSIC_RING_BYTES;
+		monitor->bufferSize = ringBytes;
 		monitor->start = (u32)rings[channel];
 		monitor->next = (u32)rings[channel];
 		monitor->consumed = 0;
 	}
-	if (!pump(MUSIC_RING_BYTES - 48)) {
+	if (!pump(ringBytes - 48)) {
 		musicDecodeClose();
 		return -1;
 	}
@@ -518,6 +521,22 @@ int musicCustomTick(void)
 	int channel;
 	if (!opened)
 		return -1;
+	/* Startup and timing-query callbacks must not stall the EE producer. */
+	if (!discStream) {
+		consumed = ((volatile musicMonitor_t*)UNCACHED(&monitors[0]))->consumed;
+		for (channel = 1; channel < (int)format.channels; ++channel) {
+			u32 other = ((volatile musicMonitor_t*)UNCACHED(&monitors[channel]))->consumed;
+			if (other < consumed)
+				consumed = other;
+		}
+		freeBytes = consumed - (produced - ringBytes);
+		if (freeBytes > ringBytes)
+			return -1; /* Stop on underrun rather than replay overwritten audio. */
+		if (freeBytes > MUSIC_REFILL_BYTES)
+			freeBytes = MUSIC_REFILL_BYTES;
+		if (!pump(freeBytes))
+			return -1;
+	}
 	if (streamPending)
 		return 0;
 	if (!handle)
@@ -541,19 +560,6 @@ int musicCustomTick(void)
 		}
 		return 0;
 	}
-	consumed = ((volatile musicMonitor_t*)UNCACHED(&monitors[0]))->consumed;
-	for (channel = 1; channel < (int)format.channels; ++channel) {
-		u32 other = ((volatile musicMonitor_t*)UNCACHED(&monitors[channel]))->consumed;
-		if (other < consumed)
-			consumed = other;
-	}
-	freeBytes = consumed - (produced - MUSIC_RING_BYTES);
-	if (freeBytes > MUSIC_RING_BYTES)
-		return -1; /* Stop on underrun rather than replay overwritten audio. */
-	if (freeBytes > 4096)
-		freeBytes = 4096;
-	if (!pump(freeBytes))
-		return -1;
 	if (ending && remainingSet && elapsed >= ((u64)framesDecoded * 1000) / format.rate)
 		return 1;
 	if (!paused) {

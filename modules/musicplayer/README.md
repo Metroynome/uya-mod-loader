@@ -1,13 +1,13 @@
 # Music Player
 
 Enable `musicplayer campaign,local` in `uya/config/modules.txt`, with `modmenu`
-enabled for its controls. Builds for NTSC-U and PAL. Normal level music stays
+enabled for its controls. Builds for NTSC-U and PAL, plus NTSC-J campaign. Normal level music stays
 under the game's control by default.
 
 ## Controls
 
-- **Playlist:** Default / Base, All, Custom, All (Shuffle), or Custom (Shuffle).
-  All and Custom advance to the next song in order. Their Shuffle variants
+- **Playlist:** Default, Game, Custom, Game (Shuffle), or Custom (Shuffle).
+  Game and Custom advance to the next song in order. Their Shuffle variants
   choose a different random song when the current song ends.
 - **Track:** follows the currently playing native song, including staging and
   game-end music. Left/Right selects and plays a different song.
@@ -16,33 +16,42 @@ under the game's control by default.
   and loop separately. Custom files and multiplayer songs are unchanged.
 - One centered row of `<<`, `Play/Stop`, `Pause`, and `>>` buttons.
   Left/Right focuses a button; X activates it. Play resumes paused music;
-  Stop silences music until you play again or return to level music.
+  Stop silences music until you play again or choose Default.
   Dialogue and sound effects continue normally.
-- **Default Playlists:** choose any playlist separately for Online
+- **Default Playlists:** choose any playlist separately for Campaign, Online
   Lobby, Staging, and In Game. Defaults apply on entry, leaving manual changes
-  alone while you stay on that screen. Base uses the game's normal soundtrack;
-  Plain All/Custom start at the first song. Shuffle chooses a random first song
+  alone while you stay on that screen. Default uses the game's normal soundtrack;
+  Plain Game/Custom start at the first song. Shuffle chooses a random first song
   and avoids repeating the previous start when more than one song is available.
-  A same-map reload resumes a plain playlist; Shuffle chooses a new starting song. Campaign is unchanged.
+  A same-map reload resumes a plain playlist; Shuffle chooses a new starting song. Campaign defaults apply when loading a save;
+  manual playback continues across planet transitions.
+  Saved defaults also offer **Game + Custom** (game songs, then custom files)
+  and **Game + Custom (Shuffle)** (shuffle across both sources). These two
+  choices are not added to the main Playlist selector.
 - **Load Settings / Save Settings:** centered side-by-side buttons. Settings
   load automatically at startup; Save writes them to the regional config file.
-  Loading settings also reapplies the current multiplayer screen's default.
-- **Return to Level Music:** restore the game's music selection.
+  Loading settings also reapplies the current screen's default.
 - **Refresh Music:** rescan the folder; Square does the same while the
   Music Player tab is focused.
 
-**Default / Base** contains the current level's music. The multiplayer list
+**Default** returns playback to the game, including campaign intro-to-loop
+behavior. Its Track list contains the current level's music. The multiplayer list
 includes all 14 stereo tracks: four menu/result tracks and ten game tracks.
 Complex view distinguishes each campaign song's intro and looping body.
 
-**All** reads music descriptors from the installed disc. Dialogue entries are
+**Game** reads music descriptors from the installed disc. Dialogue entries are
 excluded. Simple view combines campaign intro/body pairs; Complex exposes
 both parts. Labels identify their source rather than official soundtrack titles.
+The Museum's copy of Vidcomic 1 is listed once, under Vidcomic 1. Holostar's
+Backlot and Grav-Boot recordings remain separate tracks.
 
 Selected in-game playlists start at the native panoramic music cue, before
 player control. The initial vanilla music stream is suppressed for that cue;
 speech and effects are unchanged. Music files/catalogues needed by the saved
 in-game default are discovered in the multiplayer menus before loading.
+
+The saved `defaultCampaign` choice controls music when loading a campaign save.
+Older settings initially use the saved Playlist choice for this default.
 
 ## Custom songs
 
@@ -59,9 +68,17 @@ stereo VAG variants, and complete music WAD archives are not supported.
 The catalogue holds up to 160 files; filenames must fit 95 bytes.
 
 Custom audio is decoded in C and fed to the existing sound driver through two
-64 KiB EE ring buffers. Songs are not loaded entirely into memory. The
+module-owned EE ring buffers. Multiplayer uses 64 KiB per channel; campaign
+uses 128 KiB to accommodate its larger startup read. Refilling continues while
+sound callbacks are pending, with small decode batches spread across updates.
+Compressed input is read in batches instead of one file read per MP3 frame.
+Songs are not loaded entirely into memory. The
 shared `uya/mods/utils/mapscan.irx` must be from this build; it provides
 independent map and music directory services and is loaded when needed.
+
+Use expanded RAM with the bundled module set: the campaign-capable Music Player
+currently reserves about 354 KiB at runtime, including both rings. The full
+menu/module setup does not fit the normal low-memory pool with these buffers.
 
 See [decoders/README.md](decoders/README.md) for adding audio formats.
 
@@ -78,7 +95,7 @@ defaultStaging=2
 defaultGame=1
 ```
 
-Playlist values are `0` Base, `1` All, `2` Custom, `3` All (Shuffle), and
+Playlist values are `0` Base, `1` All, `2` Custom, `3` Game (Shuffle), and
 `4` Custom (Shuffle). `autoPlay` defaults to off. Track View values are `0` Simple and `1` Complex. When enabled, autoplay
 starts on entering a supported campaign level even without Mod Menu.
 Multiplayer uses `defaultLobby`, `defaultStaging`, and `defaultGame`, each with
@@ -90,7 +107,7 @@ continuation code retained as comments for future use.
 Campaign entry points are selected per level and region; the soundtrack lookup
 uses explicit level IDs, including the gaps in campaign numbering. These
 addresses were checked against the extracted level code, which does not require
-a full RAM dump of every map. Live campaign testing is still required.
+a full RAM dump of every map. NTSC-U campaign playback has been tested; PAL and NTSC-J live checks are pending.
 
 ## Horizon online play
 
@@ -102,10 +119,13 @@ is not qualified for Horizon with Music Player installed.
 
 While Music Player owns playback, its independent disc descriptors and native
 Play/Queue hooks take priority over Horizon's Single Player Music option.
-Default / Base and Return to Level Music leave native track selection to the
-game and Horizon. No Horizon configuration flag is changed.
+Selecting Default restores native track selection to the game and Horizon. No Horizon configuration flag is changed.
 
 NTSC-U online testing with Horizon confirmed custom playback starts during the
 panorama and continues in-game with Single Player Music enabled. The tested
-modules used expanded RAM. PAL online testing remains pending; NTSC-J is not
+modules used expanded RAM. PAL online testing remains pending; NTSC-J multiplayer is not
 enabled by this module.
+
+The campaign backend uses librac3 music helpers, and multiplayer uses libuya
+compact music tables. Run `docker-init.sh` in a fresh container, or rebuild the
+Docker image, to fetch the pinned library revisions used by this module.
