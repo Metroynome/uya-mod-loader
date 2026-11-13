@@ -1,0 +1,8 @@
+LIBRARY = none
+REGIONS = pal
+EE_OBJS = main.o payload.o
+
+build/$(REGION)/modules/racdoor-dnas-test/payload.o: ../racdoor/samples/uya-dnas-pal/uya-dnas-pal.bin
+
+../racdoor/samples/uya-dnas-pal/uya-dnas-pal.bin: ../racdoor/samples/uya-dnas-pal/payload.c ../racdoor/samples/uya-dnas-pal/payload.h ../racdoor/samples/uya-dnas-pal/payload.ld
+	$(MAKE) -C ../racdoor/samples/uya-dnas-pal TARGET=ee ee
