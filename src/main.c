@@ -9,6 +9,7 @@
 #include "exception.h"
 #include "platform.h"
 #include "strings.h"
+#include "requirements.h"
 
 #ifndef MODULE_START
 #define MODULE_START (((u32)_loader_end + 63) & ~63)
@@ -32,11 +33,14 @@
 /* Named list values carry a tag so legacy numeric modes retain their ABI. */
 #define NAMED_CONTEXTS (0x100)
 
+/* Internal EE layout; function pointers are wider in host test builds. */
 typedef struct loadedModule {
 	u32 address, size;
 	ModuleUpdate update;
 	ModuleInit init;
 	u32 modes, initialized, contexts, policy, active;
+	/* 0x24 */ u32 requirements;
+	/* 0x28 */ u32 missing;
 	ModuleLifecycle activate, deactivate;
 } loadedModule_t;
 
@@ -99,7 +103,7 @@ static u32 modeContexts(u32 mode)
 
 static int moduleAllowed(const loadedModule_t* m)
 {
-	return (m->modes & STATE->mode) && (m->contexts & m->policy & loaderApi.context);
+	return !m->missing && (m->modes & STATE->mode) && (m->contexts & m->policy & loaderApi.context);
 }
 
 static int setLifecycle(ModuleLifecycle activate, ModuleLifecycle deactivate)
@@ -271,11 +275,10 @@ static u32 nextModuleAddress(u32 size)
 
 static int validHeader(const moduleHeader_t* h)
 {
-	u32 address = nextModuleAddress(h->memorySize);
 	return h->magic == UYA_MODULE_MAGIC && h->version == UYA_MODULE_VERSION &&
-	       (!h->region || h->region == UYA_MODULE_REGION) && h->address == 0x000f0000 && h->modes &&
-	       !(h->modes & ~3U) && h->imageSize >= sizeof(moduleDiscovery_t) && !(h->imageSize & 3) &&
-	       h->imageSize <= h->memorySize && address < STATE->poolEnd && h->memorySize <= STATE->poolEnd - address &&
+	       (!h->region || h->region == UYA_MODULE_REGION) && h->address == 0x000f0000 && (h->modes & UYA_MODE_BOTH) &&
+	       !(h->modes & ~(UYA_MODE_BOTH | UYA_REQUIRE_ALL)) && h->imageSize >= sizeof(moduleDiscovery_t) && !(h->imageSize & 3) &&
+	       h->imageSize <= h->memorySize &&
 	       h->relocationCount <= (h->imageSize - sizeof(moduleDiscovery_t)) / 4 &&
 	       validEntry(h->initOffset, h->imageSize) && validEntry(h->updateOffset, h->imageSize);
 }
@@ -426,7 +429,7 @@ static void loadModule(const char* name, u32 modes, char names[MODULE_LIMIT][112
 		return;
 	}
 	if (!readExact(fd, &header, sizeof(header)) || !validHeader(&header)) {
-		printf("loader: invalid module header/region or no free space: %s\n", name);
+		printf("loader: invalid module header/region: %s\n", name);
 		fileClose(fd);
 		return;
 	}
@@ -436,7 +439,18 @@ static void loadModule(const char* name, u32 modes, char names[MODULE_LIMIT][112
 		fileClose(fd);
 		return;
 	}
+	/* Reject RAM requirements before reserving or writing a large image. */
+	if ((header.modes & UYA_REQUIRE_EXTRA_RAM) && STATE->poolStart != EXTRA_RAM_START) {
+		moduleRequirementsNotice(filename, header.modes & UYA_REQUIRE_ALL);
+		fileClose(fd);
+		return;
+	}
 	address = nextModuleAddress(header.memorySize);
+	if (address >= STATE->poolEnd || header.memorySize > STATE->poolEnd - address) {
+		printf("loader: no free space: %s\n", name);
+		fileClose(fd);
+		return;
+	}
 	memset((void*)address, 0, header.memorySize);
 	valid = readExact(fd, (void*)address, header.imageSize) && relocateModule(fd, &header, address);
 	if (fileClose(fd) < 0)
@@ -452,6 +466,8 @@ static void loadModule(const char* name, u32 modes, char names[MODULE_LIMIT][112
 	module->size = header.memorySize;
 	module->update = 0;
 	module->modes = modes;
+	module->requirements = header.modes & UYA_REQUIRE_ALL;
+	module->missing = 0;
 	module->contexts = contexts;
 	module->policy = UYA_CONTEXT_ALL;
 	module->initialized = 0;
@@ -610,6 +626,7 @@ void loaderTick(u32 layout)
 		MODULE_TABLE->entrySize = sizeof(moduleInfo_t);
 		MODULE_TABLE->magic = UYA_MODULE_TABLE_MAGIC;
 		selectModulePool(platformMemorySize());
+		moduleRequirementsReset(STATE->poolStart == EXTRA_RAM_START);
 		STATE->magic = LOADER_MAGIC;
 	}
 	if (!platformReady(layout))
@@ -659,6 +676,18 @@ void loaderTick(u32 layout)
 	}
 	for (i = 0; i < STATE->count; ++i) {
 		loadedModule_t* module = &STATE->modules[i];
+		if (!(module->modes & STATE->mode) || !(module->contexts & module->policy & loaderApi.context))
+			continue;
+		module->missing = moduleRequirementsMissing(module->requirements);
+		if (module->missing) {
+			moduleRequirementsNotice(MODULE_TABLE->entries[i].name, module->requirements);
+			if (module->active) {
+				STATE->currentModule = i + 1;
+				if (module->deactivate)
+					module->deactivate();
+				module->active = 0;
+			}
+		}
 		if (!moduleAllowed(module))
 			continue;
 		STATE->currentModule = i + 1;
@@ -696,5 +725,6 @@ void loaderTick(u32 layout)
 		}
 	}
 	STATE->currentModule = 0;
+	moduleRequirementsTick();
 	STATE->busy = 0;
 }

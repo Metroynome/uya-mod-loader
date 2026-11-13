@@ -21,6 +21,10 @@
 #define UYA_MODULE_EXPORTS           __attribute__((section(".module.exports"), used))
 #define UYA_MODULE_TABLE_MAGIC       (0x554d5442)
 #define UYA_MODULE_LIMIT             (8)
+/* Optional requirement bits in moduleHeader.modes; low bits remain ELF modes. */
+#define UYA_REQUIRE_MODMENU          (0x100)
+#define UYA_REQUIRE_EXTRA_RAM        (0x200)
+#define UYA_REQUIRE_ALL              (UYA_REQUIRE_MODMENU | UYA_REQUIRE_EXTRA_RAM)
 
 /* Read only. Loaded does not imply active in the current execution context.
  * Entries remain valid until restart; do not call unknown code via address. */

@@ -1,11 +1,12 @@
 ENTRY(moduleInit)
+PROVIDE(MODULE_REQUIREMENTS = 0);
 SECTIONS {
     . = MODULE_ADDRESS - 40;
     .module : {
         LONG(0x4d415955) LONG(4) LONG(MODULE_REGION) LONG(MODULE_ADDRESS)
         LONG(_image_end - MODULE_ADDRESS) LONG(_memory_end - MODULE_ADDRESS)
         LONG(moduleInit - MODULE_ADDRESS) LONG(moduleUpdate - MODULE_ADDRESS)
-        LONG(MODULE_MODES) LONG(0)
+        LONG(MODULE_MODES | MODULE_REQUIREMENTS) LONG(0)
     }
     /* The runtime rebases this linker-generated exports pointer explicitly. */
     .discovery : {

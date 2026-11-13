@@ -1,6 +1,7 @@
 LIBRARY = librac3
 MODE = $(if $(filter ntscj,$(REGION)),campaign,both)
 REGIONS = ntscu pal ntscj
+REQUIRES = modmenu extra-ram
 EE_OBJS = main.o music.o custom.o decoders/decoder.o decoders/wav.o decoders/vag.o decoders/mp3.o
 
 # Keep memory operations safe across campaign and multiplayer ELF changes.

@@ -27,12 +27,17 @@ Music Player is bundled but disabled. Before enabling it, turn on PCSX2's
 Remove the leading `#` from your region's `musicplayer` line in
 `uya/config/modules.txt`, then fully restart the game.
 
-Open MOD MENU ? Music Player for play/pause, previous/next, and playlists.
+Open the Music Player tab in MOD MENU for play/pause, previous/next, and playlists.
 Default uses the normal campaign intro/loop or multiplayer random music.
 Game plays the disc soundtrack. For Custom, create `uya/music/` and add
 MP3, PCM WAV or VAG files. Save separate defaults for Campaign, Online Lobby, Staging, and
 In Game; these also offer Game + Custom and its shuffle variant. No songs
 are included. Preserve your own music files and settings when upgrading.
+
+If Music Player is enabled without Mod Menu or usable expanded RAM, a popup
+lists only the missing requirements. Press X (Okay) to continue without Music
+Player. Each module's warning appears once per game boot. Missing RAM prevents
+its audio buffers from being allocated.
 
 NTSC-U Local Play, campaign and Horizon online playback were exercised.
 PAL campaign playback was exercised, but the latest Default-return fix and

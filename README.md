@@ -221,6 +221,22 @@ REGIONS = ntscu pal ntscj
 EE_OBJS = main.o settings.o
 ```
 
+Optional requirements are declared in the same file:
+
+```make
+REQUIRES = modmenu extra-ram
+```
+
+List either or both. The loader starts the module only when its requirements
+are available. A BIOS-warning-style popup lists only missing items and can be
+dismissed with X (Okay) to continue without starting the blocked module.
+Each module's warning appears at most once per game boot, including across
+level and menu changes. It also works with Mod Menu disabled. Expanded
+RAM means the loader selected its compatible 128 MiB pool; a checked emulator
+setting with an incompatible BIOS is insufficient. Music Player declares both
+requirements. Install the updated loader with requirement-aware modules; older
+loaders safely reject their header flags.
+
 Use `CAMPAIGN_OBJS` and `MULTIPLAYER_OBJS` for `LIBRARY=both`. Shared rules in
 `Makefile.eeglobal` compile, link, and package relocation data. The loader picks
 addresses at runtime; creators do not need fixed memory locations. Older

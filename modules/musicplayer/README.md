@@ -4,6 +4,11 @@ Enable `musicplayer campaign,local` in `uya/config/modules.txt`, with `modmenu`
 enabled for its controls. Builds for NTSC-U and PAL, plus NTSC-J campaign. Normal level music stays
 under the game's control by default.
 
+Music Player requires Mod Menu and usable expanded RAM. The loader leaves it
+inactive and displays a BIOS-warning-style popup listing only missing
+requirements. If RAM is unavailable, its audio buffers are not allocated.
+Enable Mod Menu in the same contexts as Music Player, then restart.
+
 ## Controls
 
 - **Playlist:** Default, Game, Custom, Game (Shuffle), or Custom (Shuffle).
