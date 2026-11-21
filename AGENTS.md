@@ -8,6 +8,7 @@ These rules apply throughout this repository. Follow the user's current instruct
 - Follow `.clang-format`: function opening braces on the next line, control-flow opening braces on the same line, and no compressed one-line functions or control flow.
 - Wrap numeric `#define` values/expressions in parentheses and omit unsigned `U`/`u` suffixes. Preserve required type semantics with existing fixed-width casts when necessary.
 - Use lowercase hexadecimal notation in code and struct-offset comments.
+- For all variable-address tables (original/full, compact, and explicit-base compact), declare each table once and place regional `#if`/`#ifdef`, `#elif`, `#else`, and `#endif` branches inside its initializer braces, matching libuya. Do not duplicate declarations per region or group multiple table declarations inside a regional block. Put each designated initializer on its own line with a literal tab; keep preprocessor directives at column zero. Preserve region conditions, addresses, and compact base/offset macros.
 - Keep code readable with descriptive names, blank lines between functions and logical sections, and comments explaining hooks, addresses, and non-obvious behavior.
 - C file order: includes, defines, types/structs, function prototypes, global variables, functions.
 - Header order: includes, defines, types/structs, global variables, function prototypes/external functions. Keep include guards around the contents.
